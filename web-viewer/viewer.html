@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Life Simulator Map Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .status-item {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        #connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .connected { color: #4ade80; }
+        .disconnected { color: #f87171; }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        .map-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            background: #2a4a2a;
+            cursor: crosshair;
+        }
+
+        .controls {
+            margin-bottom: 1.5rem;
+        }
+
+        .controls h2 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.9;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 0.25rem;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .legend {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .legend h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🗺️ Life Simulator Map Viewer</h1>
+        <div class="status">
+            <div id="connection-status" class="status-item disconnected">
+                <span class="status-dot">⚫</span>
+                <span>Disconnected</span>
+            </div>
+            <div class="status-item">
+                <span>FPS: <span id="fps">0</span></span>
+            </div>
+            <div class="status-item">
+                <span>Chunks: <span id="chunk-count">0</span></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="controls">
+                <h2>🎮 View Controls</h2>
+                <button onclick="zoomIn()">🔍+ Zoom In</button>
+                <button onclick="zoomOut()">🔍- Zoom Out</button>
+                <button onclick="resetView()">🔄 Reset View</button>
+                <button onclick="regenerateWorld()">🌍 New World</button>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-tiles">0</div>
+                    <div class="stat-label">🗺️ Total Tiles</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="walkable-percentage">0%</div>
+                    <div class="stat-label">🚶 Walkable</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="water-percentage">0%</div>
+                    <div class="stat-label">💧 Water</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="forest-percentage">0%</div>
+                    <div class="stat-label">🌲 Forest</div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <h3>📋 Terrain Legend</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #33cc33;"></div>
+                    <span>🌱 Grass</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066cc;"></div>
+                    <span>💧 Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #003366;"></div>
+                    <span>🌊 Deep Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #cccccc;"></div>
+                    <span>🏖️ Sand</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #666666;"></div>
+                    <span>🪨 Stone</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #006600;"></div>
+                    <span>🌲 Forest</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #999999;"></div>
+                    <span>🏔️ Mountain</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffffff;"></div>
+                    <span>❄️ Snow</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #cc9966;"></div>
+                    <span>🏜️ Desert</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4d6633;"></div>
+                    <span>🐊 Swamp</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8b4513;"></div>
+                    <span>🟫 Dirt</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <canvas id="mapCanvas"></canvas>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+    </div>
+
+    <script>
+        console.log('Loading Life Simulator Viewer v1.0.0');
+
+        // Configuration
+        const TILE_SIZE = 8;
+        const VIEW_SIZE = 100; // Show 100x100 tiles
+        const MAX_ZOOM = 4.0;
+        const MIN_ZOOM = 0.25;
+
+        // Terrain colors matching our Rust enum
+        const TERRAIN_COLORS = {
+            'Grass': '#33cc33',
+            'Stone': '#666666',
+            'Sand': '#cccccc',
+            'Water': '#0066cc',
+            'Dirt': '#8b4513',
+            'Snow': '#ffffff',
+            'Forest': '#006600',
+            'Mountain': '#999999',
+            'DeepWater': '#003366',
+            'ShallowWater': '#3399cc',
+            'Swamp': '#4d6633',
+            'Desert': '#cc9966'
+        };
+
+        // Canvas setup
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = VIEW_SIZE * TILE_SIZE;
+        canvas.height = VIEW_SIZE * TILE_SIZE;
+
+        // State
+        let ws = null;
+        let worldData = {
+            chunks: {},
+            centerChunk: { x: 0, y: 0 },
+            worldStats: {
+                total_chunks: 0,
+                total_tiles: 0,
+                walkable_tiles: 0,
+                terrain_distribution: {}
+            }
+        };
+        let zoom = 1.0;
+        let offsetX = 0;
+        let offsetY = 0;
+        let centerCoord = { x: 0, y: 0 };
+
+        // HTTP-based data fetching
+        function fetchData(endpoint) {
+            return fetch(`http://localhost:8080${endpoint}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    updateConnectionStatus(false);
+                    return null;
+                });
+        }
+
+        function handleMessage(msg) {
+            switch(msg.type) {
+                case 'world_info':
+                    updateWorldInfo(msg.data);
+                    break;
+                case 'chunk_data':
+                    updateChunkData(msg.data);
+                    break;
+                case 'world_stats':
+                    updateWorldStats(msg.data);
+                    break;
+                case 'error':
+                    console.error('Server error:', msg.message);
+                    break;
+                default:
+                    console.log('Unhandled message type:', msg.type);
+                    break;
+            }
+        }
+
+        function updateWorldInfo(data) {
+            if (data.center_chunk) {
+                centerCoord = data.center_chunk;
+                centerCoord.x = data.center_chunk.x || 0;
+                centerCoord.y = data.center_chunk.y || 0;
+            }
+
+            // Request new chunks around the new center
+            requestChunks();
+        }
+
+        function updateChunkData(data) {
+            if (data.chunk_data) {
+                worldData.chunks = data.chunk_data;
+                updateStats();
+            }
+        }
+
+        function updateWorldStats(data) {
+            worldData.worldStats = data;
+            updateStats();
+        }
+
+        async function requestChunks() {
+            // Request chunks in a 3x3 grid around our center
+            let coords = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    coords.push(`${centerCoord.x + dx},${centerCoord.y + dy}`);
+                }
+            }
+
+            const coordsQuery = coords.map(c => `coords=${c}`).join('&');
+            const data = await fetchData(`/api/chunks?${coordsQuery}`);
+
+            if (data && data.chunk_data) {
+                worldData.chunks = data.chunk_data;
+                updateStats();
+                updateConnectionStatus(true);
+            }
+        }
+
+        async function regenerateWorld() {
+            // Generate new world with different seed
+            centerCoord.x = Math.floor(Math.random() * 20) - 10;
+            centerCoord.y = Math.floor(Math.random() * 20) - 10;
+            await requestChunks();
+        }
+
+        function render() {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply zoom and offset
+            ctx.save();
+            ctx.scale(zoom, zoom);
+            ctx.translate(offsetX, offsetY);
+
+            // Render visible chunks
+            const startX = Math.max(0, Math.floor(-offsetX / zoom / TILE_SIZE));
+            const startY = Math.max(0, Math.floor(-offsetY / zoom / TILE_SIZE));
+            const endX = Math.min(VIEW_SIZE, Math.ceil((canvas.width / zoom - offsetX) / TILE_SIZE));
+            const endY = Math.min(VIEW_SIZE, Math.ceil((canvas.height / zoom - offsetY) / TILE_SIZE));
+
+            // Track terrain statistics for display
+            let totalTiles = 0;
+            let walkableTiles = 0;
+            let waterTiles = 0;
+            let forestTiles = 0;
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    // Convert pixel coordinates to world coordinates
+                    const worldX = Math.floor((x - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.x * 16;
+                    const worldY = Math.floor((y - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.y * 16;
+
+                    // Get chunk coordinates
+                    const chunkX = Math.floor(worldX / 16);
+                    const chunkY = Math.floor(worldY / 16);
+                    const localX = ((worldX % 16) + 16) % 16;
+                    const localY = ((worldY % 16) + 16) % 16;
+
+                    const chunkKey = `${chunkX},${chunkY}`;
+                    let terrainType = 'Grass'; // Default fallback
+
+                    if (worldData.chunks[chunkKey] &&
+                        worldData.chunks[chunkKey][localY] &&
+                        worldData.chunks[chunkKey][localY][localX]) {
+                        terrainType = worldData.chunks[chunkKey][localY][localX];
+                    }
+
+                    // Draw tile
+                    const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS['Grass'];
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Draw grid lines
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Count terrain types for statistics
+                    totalTiles++;
+                    if (terrainType !== 'Water' && terrainType !== 'DeepWater' && terrainType !== 'Mountain') {
+                        walkableTiles++;
+                    }
+                    if (terrainType === 'Water' || terrainType === 'DeepWater' || terrainType === 'ShallowWater') {
+                        waterTiles++;
+                    }
+                    if (terrainType === 'Forest') {
+                        forestTiles++;
+                    }
+                }
+            }
+
+            ctx.restore(); // Restore zoom/offset
+            ctx.restore(); // Restore canvas state
+
+            // Update statistics display
+            if (totalTiles > 0) {
+                document.getElementById('total-tiles').textContent = totalTiles;
+                document.getElementById('walkable-percentage').textContent =
+                    Math.round((walkableTiles / totalTiles) * 100) + '%';
+                document.getElementById('water-percentage').textContent =
+                    Math.round((waterTiles / totalTiles) * 100) + '%';
+                document.getElementById('forest-percentage').textContent =
+                    Math.round((forestTiles / totalTiles) * 100) + '%';
+            }
+        }
+
+        function updateStats() {
+            if (worldData.worldStats) {
+                document.getElementById('chunk-count').textContent =
+                    Object.keys(worldData.chunks).length + '/' + worldData.worldStats.total_chunks;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connection-status');
+            if (connected) {
+                status.className = 'status-item connected';
+                status.innerHTML = '<span class="status-dot">🟢</span><span>Connected</span>';
+            } else {
+                status.className = 'status-item disconnected';
+                status.innerHTML = '<span class="status-dot">🔴</span><span>Disconnected</span>';
+            }
+        }
+
+        function zoomIn() {
+            zoom = Math.min(zoom * 1.2, MAX_ZOOM);
+            canvas.style.transform = `scale(${zoom})`;
+        }
+
+        function zoomOut() {
+            zoom = Math.max(zoom / 1.2, MIN_ZOOM);
+            canvas.style.transform = `scale(${zoom})`;
+        }
+
+        function resetView() {
+            zoom = 1.0;
+            offsetX = 0;
+            offsetY = 0;
+            canvas.style.transform = `scale(${zoom})`;
+        }
+
+        // Mouse interaction
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / (TILE_SIZE * zoom));
+            const y = Math.floor((e.clientY - rect.top) / (TILE_SIZE * zoom));
+
+            if (x >= 0 && x < VIEW_SIZE && y >= 0 && y < VIEW_SIZE) {
+                const tooltip = document.getElementById('tooltip');
+                tooltip.style.display = 'block';
+                tooltip.style.left = e.clientX + 10 + 'px';
+                tooltip.style.top = e.clientY + 10 + 'px';
+
+                // Convert to world coordinates
+                const worldX = Math.floor((x - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.x * 16;
+                const worldY = Math.floor((y - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.y * 16;
+
+                // Get chunk coordinates
+                const chunkX = Math.floor(worldX / 16);
+                const chunkY = Math.floor(worldY / 16);
+                const localX = ((worldX % 16) + 16) % 16;
+                const localY = ((worldY % 16) + 16) % 16;
+
+                const chunkKey = `${chunkX},${chunkY}`;
+                let terrainType = 'Grass';
+
+                if (worldData.chunks[chunkKey] &&
+                    worldData.chunks[chunkKey][localY] &&
+                    worldData.chunks[chunkKey][localY][localX]) {
+                    terrainType = worldData.chunks[chunkKey][localY][localX];
+                }
+
+                tooltip.innerHTML = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
+            }
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            document.getElementById('tooltip').style.display = 'none';
+        });
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            const moveSpeed = 2;
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                    offsetY += moveSpeed;
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    offsetY -= moveSpeed;
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    offsetX += moveSpeed;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    offsetX -= moveSpeed;
+                    break;
+                case '+':
+                case '=':
+                    zoomIn();
+                    break;
+                case '-':
+                case '_':
+                    zoomOut();
+                    break;
+                case 'r':
+                    regenerateWorld();
+                    break;
+            }
+        });
+
+        // Animation loop with FPS limiting
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTime = 0;
+        const targetFPS = 30;
+        const frameDelay = 1000 / targetFPS;
+
+        function animate(currentTime) {
+            if (!currentTime) currentTime = 0;
+            const deltaTime = currentTime - lastTime;
+
+            if (deltaTime >= frameDelay) {
+                lastTime = currentTime - (deltaTime % frameDelay);
+
+                // Update FPS counter
+                frameCount++;
+                if (currentTime - fpsTime >= 1000) {
+                    document.getElementById('fps').textContent = frameCount;
+                    frameCount = 0;
+                    fpsTime = currentTime;
+                }
+
+                // Render the map
+                render();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Initialize
+        initializeViewer();
+        animate();
+
+        async function initializeViewer() {
+            // Load initial world info
+            const worldInfo = await fetchData('/api/world_info');
+            if (worldInfo) {
+                updateWorldInfo(worldInfo);
+            }
+            // Load initial chunks
+            await requestChunks();
+        }
+    </script>
+</body>
+</html>
