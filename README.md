@@ -1,32 +1,39 @@
 # Life Simulator
 
-A life simulation game built with Bevy 0.16, drawing inspiration from advanced AI systems and simulation engines.
+A headless life simulation game with procedural world generation and web-based visualization, built with Bevy 0.16.
 
 ## Overview
 
-This project demonstrates various game development and simulation concepts using the Bevy game engine. It incorporates ideas from:
-
-- **[Big Brain](https://github.com/zkat/big-brain)** - Utility AI library for Bevy
-- **[World Simulator](https://github.com/jeanfbrito/world-simulator)** - Medieval economy simulation engine
-- **[DOGOAP](https://github.com/victorb/dogoap)** - Referenced for GOAP implementation examples
+This project demonstrates procedural terrain generation and web-based visualization using the Bevy game engine in headless mode. It creates circular island worlds with realistic terrain patterns and provides an interactive HTML viewer for exploration.
 
 ## Features
 
-- **Bevy 0.16**: Built with the latest version of the Bevy game engine
-- **AI Systems**: Integration examples for Utility AI with GOAP demonstration
+- **Bevy 0.16**: Built with the latest version of the Bevy game engine in headless mode
+- **Procedural Terrain Generation**: Circular island generation with realistic beach edges and terrain zones
+- **Web-Based Visualization**: Interactive HTML viewer with zoom and pan capabilities
+- **HTTP API Server**: RESTful API for terrain data access
 - **ECS Architecture**: Entity-Component-System based design
 - **Performance Optimized**: Configured for both development and release builds
+
+### Terrain Generation
+
+- **Circular Islands**: Mathematical distance-based island generation
+- **Realistic Beaches**: Proper water transitions (Deep Water → Shallow Water → Sand → Land)
+- **Natural Variations**: Controlled irregularity using sine/cosine functions
+- **Terrain Types**: Deep water, shallow water, sand, grass, forest, desert, dirt, mountains, snow, stone, swamps
 
 ## Project Structure
 
 ```
 life-simulator/
 ├── src/
-│   ├── main.rs              # Main application entry point
+│   ├── main.rs              # Main application entry point (headless)
 │   ├── lib.rs               # Library exports
-│   ├── ai/                  # AI-related systems and components
-│   ├── simulation/          # Core simulation logic
-│   └── components/          # Bevy components and resources
+│   ├── web_server_simple.rs # HTTP server and terrain generation
+│   ├── tilemap/             # Chunk-based terrain system
+│   └── web/                 # WebSocket and web components
+├── web-viewer/
+│   └── viewer.html          # Interactive terrain visualization
 ├── Cargo.toml               # Project configuration
 └── README.md               # This file
 ```
@@ -37,6 +44,7 @@ life-simulator/
 
 - Rust 1.70+ (recommended to use [rustup](https://rustup.rs/))
 - Git
+- A modern web browser
 
 ### Installation
 
@@ -51,10 +59,19 @@ cd life-simulator
 cargo run
 ```
 
-3. For development with faster compilation:
+3. Open the web viewer:
 ```bash
-cargo run --features dynamic_linking
+# The server starts on http://127.0.0.1:54321
+# Open http://127.0.0.1:54321/viewer.html in your browser
 ```
+
+### Web Viewer Features
+
+- **Interactive Map**: Click and drag to pan around the island
+- **Zoom**: Mouse wheel to zoom in/out
+- **Terrain Display**: 12 different terrain types with distinct colors
+- **Real-time Generation**: Terrain is generated procedurally as you explore
+- **Dark Theme**: Optimized for comfortable viewing
 
 
 ## Development
@@ -85,24 +102,32 @@ cargo clippy
 
 ## Architecture
 
-The project is organized around Bevy's ECS architecture:
+The project is organized around Bevy's ECS architecture in headless mode:
 
 - **Components**: Data attached to entities
 - **Systems**: Logic that operates on components
 - **Resources**: Global data and configuration
-- **Plugins**: Bundled systems and components
+- **Headless Operation**: No graphics rendering, all visualization via web interface
 
-### AI Integration
+### Terrain Generation System
 
-The project will include AI approaches:
+The terrain generation uses mathematical algorithms to create realistic islands:
 
-1. **Utility AI**
-   - Score-based decision making
-   - Inspired by the Big Brain library
+1. **Circular Island Base**
+   - Distance-based calculations from center point
+   - Controlled irregularity using sine/cosine functions
+   - Distinct terrain zones with smooth transitions
 
-2. **GOAP (Goal-Oriented Action Planning)**
-   - Planning-based AI for complex, multi-step behaviors
-   - Demonstrated as an example system
+2. **Terrain Zones**
+   - Deep Water: Outer ocean (#003366)
+   - Shallow Water: Coastal transition zone (#4a7ba7)
+   - Sand Beach: Island border (#f4e4bc)
+   - Land Interior: Various biomes with grass center
+
+3. **Chunk-Based Architecture**
+   - 16x16 tile chunks for efficient memory usage
+   - Procedural generation on-demand
+   - HTTP API for terrain data access
 
 ## Dependencies
 
@@ -132,12 +157,29 @@ This project is dual-licensed under either:
 - MIT License ([LICENSE-MIT](LICENSE-MIT))
 - Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 
+## API Endpoints
+
+The HTTP server provides the following endpoints:
+
+- `GET /viewer.html` - Main terrain viewer interface
+- `GET /api/world_info` - World metadata (center chunk, world size)
+- `GET /api/chunks?coords=x1,y1&coords=x2,y2` - Terrain data for specified chunks
+
 ## References and Inspiration
 
 - [Bevy Game Engine](https://bevyengine.org/) - The game engine powering this project
-- [DOGOAP](https://github.com/victorb/dogoap) - Data-Oriented GOAP library
-- [Big Brain](https://github.com/zkat/big-brain) - Utility AI for Bevy
-- [World Simulator](https://github.com/jeanfbrito/world-simulator) - Medieval economy simulation
+- [World Simulator](https://github.com/jeanfbrito/world-simulator) - Terrain generation inspiration
+- Procedural content generation techniques for realistic island formation
+
+## Future Development
+
+This project serves as a foundation for:
+
+- Advanced life simulation mechanics
+- AI-driven entity behavior
+- Complex ecosystem interactions
+- Multi-user web-based simulation
+- Real-time terrain modification
 
 ## Documentation
 
@@ -145,3 +187,5 @@ For detailed documentation on specific topics:
 
 - Check inline documentation in the source code
 - Refer to Bevy's official documentation for engine-specific questions
+- Examine `web_server_simple.rs` for terrain generation algorithms
+- Review `web-viewer/viewer.html` for visualization implementation
