@@ -346,6 +346,40 @@
             'Flower': '🌸'
         };
 
+        // Resource rendering configuration with size and positioning
+        const RESOURCE_CONFIG = {
+            'TreeOak': {
+                sizeMultiplier: 0.7,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'TreePine': {
+                sizeMultiplier: 1.6, // Double size (0.8 * 2.0 = 1.6)
+                offsetX: 0,
+                offsetY: 0 // Perfectly centered
+            },
+            'TreeBirch': {
+                sizeMultiplier: 0.7,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'Rock': {
+                sizeMultiplier: 0.6,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'Bush': {
+                sizeMultiplier: 0.6,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'Flower': {
+                sizeMultiplier: 0.4,
+                offsetX: 0,
+                offsetY: 0
+            }
+        };
+
         // Canvas setup
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
@@ -553,7 +587,10 @@
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Render visible chunks
+            // Collect resource data for second pass rendering
+            const resourcesToRender = [];
+
+            // First pass: Render terrain layers
             const startX = 0;
             const startY = 0;
             const endX = VIEW_SIZE;
@@ -594,7 +631,7 @@
                     ctx.fillStyle = color;
                     ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-                    // Draw resource on top if exists
+                    // Collect resource data for later rendering
                     let resourceType = '';
                     if (worldData.resources[chunkKey] &&
                         worldData.resources[chunkKey][localY] &&
@@ -603,23 +640,11 @@
                     }
 
                     if (resourceType && resourceType !== '') {
-                        // Draw resource emoji directly without background
-                        const centerX = x * TILE_SIZE + TILE_SIZE / 2;
-                        const centerY = y * TILE_SIZE + TILE_SIZE / 2;
-
-                        // Draw resource emoji
-                        ctx.font = `${TILE_SIZE * 0.8}px Arial`;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-
-                        // Add subtle shadow for better visibility
-                        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-                        ctx.shadowBlur = 1;
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillText(RESOURCE_SYMBOLS[resourceType] || '•', centerX, centerY);
-                        ctx.shadowBlur = 0; // Reset shadow
-
-                        // Debug: count resources
+                        resourcesToRender.push({
+                            type: resourceType,
+                            x: x,
+                            y: y
+                        });
                         resourceCount++;
                     }
 
@@ -641,6 +666,36 @@
                     }
                 }
             }
+
+            // Second pass: Render resources on top (allows overflow beyond tile boundaries)
+            ctx.save(); // Save context state
+            for (const resource of resourcesToRender) {
+                // Get resource configuration or use defaults
+                const config = RESOURCE_CONFIG[resource.type] || {
+                    sizeMultiplier: 0.8,
+                    offsetX: 0,
+                    offsetY: 0
+                };
+
+                // Calculate position with offsets
+                const baseX = resource.x * TILE_SIZE + TILE_SIZE / 2;
+                const baseY = resource.y * TILE_SIZE + TILE_SIZE / 2;
+                const centerX = baseX + (config.offsetX * TILE_SIZE);
+                const centerY = baseY + (config.offsetY * TILE_SIZE);
+
+                // Draw resource emoji with dynamic sizing
+                ctx.font = `${TILE_SIZE * config.sizeMultiplier}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Add subtle shadow for better visibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                ctx.shadowBlur = 1;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(RESOURCE_SYMBOLS[resource.type] || '•', centerX, centerY);
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+            ctx.restore(); // Restore context state
 
             // Update statistics display
             if (totalTiles > 0) {
