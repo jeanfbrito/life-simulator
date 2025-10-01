@@ -442,17 +442,45 @@
         }
 
         async function requestChunks() {
-            // Request chunks in a 3x3 grid initially to avoid overwhelming the server
+            // Request chunks in the saved world area (7x7 grid from -3 to +3)
+            const radius = 3; // Load 7x7 chunks (from -3 to +3) - matches saved world area
+            let allChunkData = {};
+
+            // Split requests into smaller batches to avoid URL length issues
+            const batchSize = 10; // Request 10 chunks at a time
             let coords = [];
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
+
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
                     coords.push(`${centerCoord.x + dx},${centerCoord.y + dy}`);
+
+                    // When we reach batch size, make the request
+                    if (coords.length >= batchSize) {
+                        const coordsQuery = coords.map(c => `coords=${c}`).join('&');
+                        // Request multi-layer data for this batch
+                        const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+
+                        if (data && data.chunk_data) {
+                            // Merge chunk data
+                            Object.assign(allChunkData, data.chunk_data);
+                        }
+
+                        coords = []; // Reset for next batch
+                    }
                 }
             }
 
-            const coordsQuery = coords.map(c => `coords=${c}`).join('&');
-            // Request multi-layer data
-            const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+            // Request remaining chunks
+            if (coords.length > 0) {
+                const coordsQuery = coords.map(c => `coords=${c}`).join('&');
+                const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+
+                if (data && data.chunk_data) {
+                    Object.assign(allChunkData, data.chunk_data);
+                }
+            }
+
+            const data = { chunk_data: allChunkData };
 
             if (data && data.chunk_data) {
                 // Extract terrain and resources from multi-layer data

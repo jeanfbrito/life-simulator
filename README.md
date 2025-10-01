@@ -164,6 +164,57 @@ The HTTP server provides the following endpoints:
 - `GET /viewer.html` - Main terrain viewer interface
 - `GET /api/world_info` - World metadata (center chunk, world size)
 - `GET /api/chunks?coords=x1,y1&coords=x2,y2` - Terrain data for specified chunks
+- `GET /api/chunks?center_x=0&center_y=0&radius=3&layers=true` - Multi-layer terrain data with batched requests
+
+### URL Length Limitations and Batched Requests
+
+When requesting large numbers of chunks (e.g., 7x7 grid = 49 chunks), the URL can become too long and cause `net::ERR_CONNECTION_RESET` errors. The web viewer automatically handles this by:
+
+- **Batch Size**: Requests are split into batches of 10 chunks maximum
+- **Automatic Batching**: The viewer splits large requests into multiple smaller requests
+- **Data Merging**: Responses from multiple batches are merged before rendering
+
+#### Implementation Details
+
+The chunk request system supports two URL parameter formats:
+
+1. **Legacy Format**: `coords=x,y&coords=x+1,y` (individual chunk coordinates)
+2. **Center Format**: `center_x=0&center_y=0&radius=3` (center point and radius)
+
+The server automatically detects and handles both formats for backward compatibility.
+
+### Testing Checklist
+
+Before considering map viewer functionality complete, verify the following:
+
+#### Basic Functionality
+- [ ] Server starts successfully on `http://127.0.0.1:54321`
+- [ ] Web viewer loads at `http://127.0.0.1:54321/viewer.html`
+- [ ] World info API returns correct center chunk and size
+
+#### Terrain Display
+- [ ] Complete 7x7 grid loads correctly (49 chunks total)
+- [ ] Both terrain and resources layers display properly
+- [ ] Chunk boundaries render without artifacts
+- [ ] Terrain colors match expected types (water, sand, grass, forest, etc.)
+
+#### Performance and Reliability
+- [ ] Batched requests work without connection reset errors
+- [ ] Map loads within reasonable time (< 5 seconds)
+- [ ] No JavaScript console errors during map loading
+- [ ] Edge chunks (outside saved world) show deep water correctly
+
+#### Interactive Features
+- [ ] Pan functionality works (click and drag)
+- [ ] Zoom functionality works (mouse wheel)
+- [ ] Layer toggle (if implemented) works correctly
+- [ ] Coordinate display updates correctly during navigation
+
+#### Data Integrity
+- [ ] Saved world data matches displayed terrain
+- [ ] Resources layer data loads correctly when `layers=true` parameter is used
+- [ ] Chunk coordinates are calculated correctly from center point
+- [ ] No missing or corrupted chunks in the displayed area
 
 ## References and Inspiration
 

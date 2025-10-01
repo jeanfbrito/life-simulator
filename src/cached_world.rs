@@ -215,10 +215,34 @@ impl CachedWorld {
 
     fn parse_chunk_coords(&self, path: &str) -> Vec<(i32, i32)> {
         // Extract coordinates from path like /api/chunks?coords=0,0&coords=1,0
+        // or /api/chunks?center_x=0&center_y=0&radius=1
         if let Some(query_part) = path.split('?').nth(1) {
             let mut coords = Vec::new();
+
+            // Check for center_x/center_y/radius format first
+            let mut center_x = 0i32;
+            let mut center_y = 0i32;
+            let mut radius = 1i32;
+            let mut has_center_format = false;
+
             for param in query_part.split('&') {
-                if let Some(coord_part) = param.strip_prefix("coords=") {
+                if let Some(x_str) = param.strip_prefix("center_x=") {
+                    if let Ok(x) = x_str.parse::<i32>() {
+                        center_x = x;
+                        has_center_format = true;
+                    }
+                } else if let Some(y_str) = param.strip_prefix("center_y=") {
+                    if let Ok(y) = y_str.parse::<i32>() {
+                        center_y = y;
+                        has_center_format = true;
+                    }
+                } else if let Some(r_str) = param.strip_prefix("radius=") {
+                    if let Ok(r) = r_str.parse::<i32>() {
+                        radius = r;
+                        has_center_format = true;
+                    }
+                } else if let Some(coord_part) = param.strip_prefix("coords=") {
+                    // Handle explicit coords format
                     if let Some((x_str, y_str)) = coord_part.split_once(',') {
                         if let (Ok(x), Ok(y)) = (x_str.parse::<i32>(), y_str.parse::<i32>()) {
                             coords.push((x, y));
@@ -226,7 +250,19 @@ impl CachedWorld {
                     }
                 }
             }
-            return coords;
+
+            // If center/radius format was used, generate coords in a square
+            if has_center_format {
+                for x in (center_x - radius)..=(center_x + radius) {
+                    for y in (center_y - radius)..=(center_y + radius) {
+                        coords.push((x, y));
+                    }
+                }
+                return coords;
+            } else if !coords.is_empty() {
+                // Return explicit coords if they were provided
+                return coords;
+            }
         }
         // Default to center chunk (0, 0)
         vec![(0, 0)]

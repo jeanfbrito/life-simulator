@@ -252,12 +252,26 @@ fn handle_map_save(mut stream: &mut TcpStream, world_generator: &Arc<RwLock<Worl
 
             for chunk_x in (center_x - radius)..=(center_x + radius) {
                 for chunk_y in (center_y - radius)..=(center_y + radius) {
-                    let chunk_tiles = world_generator.read().unwrap().generate_procedural_chunk(chunk_x, chunk_y);
-                    chunks.insert((chunk_x, chunk_y), chunk_tiles);
+                    let terrain_tiles = world_generator.read().unwrap().generate_procedural_chunk(chunk_x, chunk_y);
+
+                    // Generate resources layer using the existing resource generation system
+                    let resources_tiles = crate::resources::ResourceGenerator::create_resources_for_chunk(
+                        &terrain_tiles,
+                        chunk_x,
+                        chunk_y,
+                        world_generator.read().unwrap().get_seed()
+                    );
+
+                    // Create multi-layer chunk with both terrain and resources
+                    let mut multi_layer_chunk = std::collections::HashMap::new();
+                    multi_layer_chunk.insert("terrain".to_string(), terrain_tiles);
+                    multi_layer_chunk.insert("resources".to_string(), resources_tiles);
+
+                    chunks.insert((chunk_x, chunk_y), multi_layer_chunk);
                 }
             }
 
-            let serialized_world = crate::serialization::WorldSerializer::create_serialized_world(
+            let serialized_world = crate::serialization::WorldSerializer::create_serialized_world_from_layers(
                 map_name.clone(),
                 world_generator.read().unwrap().get_seed(),
                 crate::tilemap::WorldConfig::default(),
