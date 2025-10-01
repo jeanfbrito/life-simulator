@@ -214,10 +214,8 @@
 
             <div class="controls">
                 <h2>🎮 View Controls</h2>
-                <button onclick="zoomIn()">🔍+ Zoom In</button>
-                <button onclick="zoomOut()">🔍- Zoom Out</button>
-                <button onclick="resetView()">🔄 Reset View</button>
-              </div>
+                <p style="font-size: 0.9rem; opacity: 0.7;">More controls coming soon...</p>
+            </div>
 
             <div class="stats">
                 <div class="stat-card">
@@ -303,8 +301,6 @@
         // Configuration
         const TILE_SIZE = 8;
         const VIEW_SIZE = 100; // Show 100x100 tiles
-        const MAX_ZOOM = 4.0;
-        const MIN_ZOOM = 0.25;
 
         // Terrain colors with improved visibility and contrast
         const TERRAIN_COLORS = {
@@ -365,9 +361,6 @@
                 terrain_distribution: {}
             }
         };
-        let zoom = 1.0;
-        let offsetX = 0;
-        let offsetY = 0;
         let centerCoord = { x: 0, y: 0 };
 
         // HTTP-based data fetching with CORS workaround
@@ -526,19 +519,13 @@
         }
 
         function render() {
-            ctx.save();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Apply zoom and offset
-            ctx.save();
-            ctx.scale(zoom, zoom);
-            ctx.translate(offsetX, offsetY);
-
             // Render visible chunks
-            const startX = Math.max(0, Math.floor(-offsetX / zoom / TILE_SIZE));
-            const startY = Math.max(0, Math.floor(-offsetY / zoom / TILE_SIZE));
-            const endX = Math.min(VIEW_SIZE, Math.ceil((canvas.width / zoom - offsetX) / TILE_SIZE));
-            const endY = Math.min(VIEW_SIZE, Math.ceil((canvas.height / zoom - offsetY) / TILE_SIZE));
+            const startX = 0;
+            const startY = 0;
+            const endX = VIEW_SIZE;
+            const endY = VIEW_SIZE;
 
             // Track terrain statistics for display
             let totalTiles = 0;
@@ -623,9 +610,6 @@
                 }
             }
 
-            ctx.restore(); // Restore zoom/offset
-            ctx.restore(); // Restore canvas state
-
             // Update statistics display
             if (totalTiles > 0) {
                 document.getElementById('total-tiles').textContent = totalTiles;
@@ -657,91 +641,15 @@
             }
         }
 
-        function zoomIn() {
-            zoom = Math.min(zoom * 1.2, MAX_ZOOM);
-            updateCanvasTransform();
-        }
-
-        function zoomOut() {
-            zoom = Math.max(zoom / 1.2, MIN_ZOOM);
-            updateCanvasTransform();
-        }
-
-        function resetView() {
-            zoom = 1.0;
-            offsetX = 0;
-            offsetY = 0;
-            updateCanvasTransform();
-        }
-
-        function updateCanvasTransform() {
-            canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`;
-            canvas.style.transformOrigin = 'center center';
-        }
-
-        // Mouse interaction with drag to pan and wheel zoom
-        let isDragging = false;
-        let dragStartX = 0;
-        let dragStartY = 0;
-        let dragOffsetX = 0;
-        let dragOffsetY = 0;
-
-        // Mouse wheel zoom
-        canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left - rect.width / 2;
-            const mouseY = e.clientY - rect.top - rect.height / 2;
-
-            // Calculate world position before zoom
-            const worldX = (mouseX - offsetX) / zoom;
-            const worldY = (mouseY - offsetY) / zoom;
-
-            // Update zoom
-            if (e.deltaY < 0) {
-                zoom = Math.min(zoom * 1.1, MAX_ZOOM);
-            } else {
-                zoom = Math.max(zoom / 1.1, MIN_ZOOM);
-            }
-
-            // Adjust offset to zoom towards mouse position
-            offsetX = mouseX - worldX * zoom;
-            offsetY = mouseY - worldY * zoom;
-
-            updateCanvasTransform();
-        });
-
-        // Mouse down for drag panning
-        canvas.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-            dragOffsetX = offsetX;
-            dragOffsetY = offsetY;
-            canvas.style.cursor = 'grabbing';
-        });
-
-        // Mouse move for drag panning and hover info
+        // Mouse move for hover info only
         canvas.addEventListener('mousemove', (e) => {
-            if (isDragging) {
-                const deltaX = e.clientX - dragStartX;
-                const deltaY = e.clientY - dragStartY;
-                offsetX = dragOffsetX + deltaX;
-                offsetY = dragOffsetY + deltaY;
-                updateCanvasTransform();
-                return;
-            }
-
             const rect = canvas.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
 
             // Convert mouse position to canvas coordinates
-            const canvasX = (e.clientX - centerX - offsetX) / zoom;
-            const canvasY = (e.clientY - centerY - offsetY) / zoom;
-            const x = Math.floor(canvasX / TILE_SIZE + VIEW_SIZE / 2);
-            const y = Math.floor(canvasY / TILE_SIZE + VIEW_SIZE / 2);
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+            const x = Math.floor(canvasX / TILE_SIZE);
+            const y = Math.floor(canvasY / TILE_SIZE);
 
             if (x >= 0 && x < VIEW_SIZE && y >= 0 && y < VIEW_SIZE) {
                 const tooltip = document.getElementById('tooltip');
@@ -802,51 +710,12 @@
             }
         });
 
-        // Mouse up to stop dragging
-        canvas.addEventListener('mouseup', () => {
-            isDragging = false;
-            canvas.style.cursor = 'grab';
-        });
-
-        // Mouse leave to stop dragging and hide tooltip
+        // Mouse leave to hide tooltip
         canvas.addEventListener('mouseleave', () => {
-            isDragging = false;
-            canvas.style.cursor = 'grab';
             document.getElementById('tooltip').style.display = 'none';
         });
 
-        // Keyboard controls
-        document.addEventListener('keydown', (e) => {
-            const moveSpeed = 10 * zoom; // Adjust movement speed based on zoom level
-            switch(e.key) {
-                case 'ArrowUp':
-                case 'w':
-                    offsetY += moveSpeed;
-                    break;
-                case 'ArrowDown':
-                case 's':
-                    offsetY -= moveSpeed;
-                    break;
-                case 'ArrowLeft':
-                case 'a':
-                    offsetX += moveSpeed;
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                    offsetX -= moveSpeed;
-                    break;
-                case '+':
-                case '=':
-                    zoomIn();
-                    break;
-                case '-':
-                case '_':
-                    zoomOut();
-                    break;
-                  }
-            updateCanvasTransform(); // Update canvas transform after keyboard movement
-        });
-
+       
         // Animation loop with FPS limiting
         let lastTime = 0;
         let frameCount = 0;
