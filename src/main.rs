@@ -6,6 +6,7 @@ mod tilemap;
 mod web;
 mod serialization;
 mod cached_world;
+mod resources;
 
 use tilemap::{TilemapPlugin, WorldGenerator, WorldConfig};
 use serialization::WorldSerializationPlugin;

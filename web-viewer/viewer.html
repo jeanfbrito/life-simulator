@@ -317,6 +317,26 @@
             'Desert': '#cc9966'
         };
 
+        // Resource colors and symbols
+        const RESOURCE_COLORS = {
+            'TreeOak': '#0d4d0d',
+            'TreePine': '#0d3d0d',
+            'TreeBirch': '#1d5d1d',
+            'Rock': '#5a5a5a',
+            'Bush': '#2d4d2d',
+            'Flower': '#ff69b4'
+        };
+
+        // Resource symbols for rendering
+        const RESOURCE_SYMBOLS = {
+            'TreeOak': '🌳',
+            'TreePine': '🌲',
+            'TreeBirch': '🌳',
+            'Rock': '🪨',
+            'Bush': '🌿',
+            'Flower': '🌸'
+        };
+
         // Canvas setup
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
@@ -332,6 +352,7 @@
         let ws = null;
         let worldData = {
             chunks: {},
+            resources: {},
             centerChunk: { x: 0, y: 0 },
             worldStats: {
                 total_chunks: 0,
@@ -414,10 +435,23 @@
             }
 
             const coordsQuery = coords.map(c => `coords=${c}`).join('&');
-            const data = await fetchData(`/api/chunks?${coordsQuery}`);
+            // Request multi-layer data
+            const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
 
             if (data && data.chunk_data) {
-                worldData.chunks = data.chunk_data;
+                // Extract terrain and resources from multi-layer data
+                worldData.chunks = {};
+                worldData.resources = {};
+
+                for (const [chunkKey, chunkData] of Object.entries(data.chunk_data)) {
+                    if (chunkData.terrain) {
+                        worldData.chunks[chunkKey] = chunkData.terrain;
+                    }
+                    if (chunkData.resources) {
+                        worldData.resources[chunkKey] = chunkData.resources;
+                    }
+                }
+
                 updateStats();
                 updateConnectionStatus(true);
             }
@@ -525,6 +559,34 @@
                     const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS['DeepWater'];
                     ctx.fillStyle = color;
                     ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Draw resource on top if exists
+                    let resourceType = '';
+                    if (worldData.resources[chunkKey] &&
+                        worldData.resources[chunkKey][localY] &&
+                        worldData.resources[chunkKey][localY][localX]) {
+                        resourceType = worldData.resources[chunkKey][localY][localX];
+                    }
+
+                    if (resourceType) {
+                        // Draw resource as a colored circle with emoji
+                        const centerX = x * TILE_SIZE + TILE_SIZE / 2;
+                        const centerY = y * TILE_SIZE + TILE_SIZE / 2;
+                        const radius = TILE_SIZE / 3;
+
+                        // Draw resource background circle
+                        ctx.fillStyle = RESOURCE_COLORS[resourceType] || '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Draw resource emoji
+                        ctx.font = `${TILE_SIZE * 0.7px Arial`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillText(RESOURCE_SYMBOLS[resourceType] || '•', centerX, centerY);
+                    }
 
                     // Draw grid lines
                     ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
@@ -689,7 +751,19 @@
                     terrainType = worldData.chunks[chunkKey][localY][localX];
                 }
 
-                tooltip.innerHTML = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
+                // Check for resource
+                let resourceType = '';
+                if (worldData.resources[chunkKey] &&
+                    worldData.resources[chunkKey][localY] &&
+                    worldData.resources[chunkKey][localY][localX]) {
+                    resourceType = worldData.resources[chunkKey][localY][localX];
+                }
+
+                let tooltipText = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
+                if (resourceType) {
+                    tooltipText += `<br>Resource: ${resourceType} ${RESOURCE_SYMBOLS[resourceType] || ''}`;
+                }
+                tooltip.innerHTML = tooltipText;
             }
         });
 
