@@ -6,6 +6,7 @@ use std::process;
 use life_simulator::{
     tilemap::{WorldGenerator, WorldConfig, CHUNK_SIZE},
     serialization::{WorldSerializer, SerializedWorld},
+    resources::ResourceGenerator,
 };
 
 fn main() {
@@ -81,7 +82,6 @@ fn generate_world(file_name: &str, map_name: &str, seed: u64) -> Result<(), Box<
     println!("🌍 Generating terrain chunks...");
 
     // Generate chunks around center for saving
-    let mut chunks = HashMap::new();
     let center_x = 0;
     let center_y = 0;
     let radius = 3; // Save 7x7 chunk area around center
@@ -89,10 +89,28 @@ fn generate_world(file_name: &str, map_name: &str, seed: u64) -> Result<(), Box<
     let total_chunks = ((radius * 2 + 1) * (radius * 2 + 1)) as usize;
     let mut generated_chunks = 0;
 
+    // Multi-layer chunks: terrain + resources
+    let mut multi_layer_chunks = HashMap::new();
+
     for chunk_x in (center_x - radius)..=(center_x + radius) {
         for chunk_y in (center_y - radius)..=(center_y + radius) {
-            let chunk_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
-            chunks.insert((chunk_x, chunk_y), chunk_tiles);
+            // Generate terrain layer
+            let terrain_layer = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
+
+            // Generate resource layer based on terrain
+            let resource_layer = ResourceGenerator::create_resources_for_chunk(
+                &terrain_layer,
+                chunk_x,
+                chunk_y,
+                world_generator.get_seed()
+            );
+
+            // Create multi-layer chunk
+            let mut layers = HashMap::new();
+            layers.insert("terrain".to_string(), terrain_layer);
+            layers.insert("resources".to_string(), resource_layer);
+
+            multi_layer_chunks.insert((chunk_x, chunk_y), layers);
             generated_chunks += 1;
 
             // Show progress
@@ -103,13 +121,13 @@ fn generate_world(file_name: &str, map_name: &str, seed: u64) -> Result<(), Box<
         }
     }
 
-    println!("\n🔧 Creating serialized world data...");
+    println!("\n🔧 Creating serialized world data with multi-layer support...");
 
-    let serialized_world = WorldSerializer::create_serialized_world(
+    let serialized_world = WorldSerializer::create_serialized_world_from_layers(
         map_name.to_string(),
         seed,
         WorldConfig::default(),
-        chunks,
+        multi_layer_chunks,
     );
 
     println!("💾 Saving world to 'saves/{}.ron'...", file_name);

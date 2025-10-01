@@ -124,27 +124,41 @@ fn handle_connection(mut stream: TcpStream, world_generator: Arc<RwLock<WorldGen
         path if path.starts_with("/api/chunks") => {
             // Only use cached world data - no fallback to generator
             if crate::cached_world::CachedWorld::global_is_loaded() {
-                let coords = parse_chunk_coords_from_path(path);
-                let mut chunk_data = std::collections::HashMap::new();
+                // Check if multi-layer format is requested
+                let use_multi_layer = path.contains("&layers=true") || path.contains("?layers=true");
 
-                for &(chunk_x, chunk_y) in &coords {
-                    let chunk_key = format!("{},{}", chunk_x, chunk_y);
-
-                    if let Some(terrain_data) = crate::cached_world::CachedWorld::global_get_chunk(chunk_x, chunk_y) {
-                        let data_str = terrain_data.iter()
-                            .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        chunk_data.insert(chunk_key, data_str);
+                let json = if use_multi_layer {
+                    // Use the new multi-layer format
+                    if let Some(cached_world) = crate::cached_world::CachedWorld::global_get() {
+                        cached_world.generate_multi_layer_chunks_json(path)
+                    } else {
+                        r#"{"error": "Failed to access cached world."}"#.to_string()
                     }
-                }
+                } else {
+                    // Use legacy terrain-only format for backward compatibility
+                    let coords = parse_chunk_coords_from_path(path);
+                    let mut chunk_data = std::collections::HashMap::new();
 
-                let json_parts: Vec<String> = chunk_data
-                    .into_iter()
-                    .map(|(key, data_str)| format!("\"{}\": [{}]", key, data_str))
-                    .collect();
+                    for &(chunk_x, chunk_y) in &coords {
+                        let chunk_key = format!("{},{}", chunk_x, chunk_y);
 
-                let json = format!("{{\"chunk_data\": {{{}}}}}", json_parts.join(", "));
+                        if let Some(terrain_data) = crate::cached_world::CachedWorld::global_get_chunk(chunk_x, chunk_y) {
+                            let data_str = terrain_data.iter()
+                                .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            chunk_data.insert(chunk_key, data_str);
+                        }
+                    }
+
+                    let json_parts: Vec<String> = chunk_data
+                        .into_iter()
+                        .map(|(key, data_str)| format!("\"{}\": [{}]", key, data_str))
+                        .collect();
+
+                    format!("{{\"chunk_data\": {{{}}}}}", json_parts.join(", "))
+                };
+
                 send_response(&mut stream, "200 OK", "application/json", &json);
             } else {
                 // No cached world loaded - return error
