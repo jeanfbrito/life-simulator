@@ -287,6 +287,10 @@ fn handle_map_load(mut stream: &mut TcpStream, world_generator: &Arc<RwLock<Worl
                         gen.set_seed(serialized_world.seed);
                     }
 
+                    // Populate the global cached world with the loaded data
+                    let cached_world = crate::cached_world::CachedWorld::from_serialized(serialized_world.clone());
+                    crate::cached_world::CachedWorld::global_set(cached_world);
+
                     let response_json = format!(r#"{{"success": true, "message": "World loaded successfully", "name": "{}", "seed": {}}}"#, serialized_world.name, serialized_world.seed);
                     send_response(&mut stream, "200 OK", "application/json", &response_json);
                 }
