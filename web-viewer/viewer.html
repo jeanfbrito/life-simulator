@@ -370,20 +370,32 @@
         let offsetY = 0;
         let centerCoord = { x: 0, y: 0 };
 
-        // HTTP-based data fetching
+        // HTTP-based data fetching with CORS workaround
         function fetchData(endpoint) {
-            return fetch(`http://localhost:54321${endpoint}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .catch(error => {
-                    console.error('Fetch error:', error);
-                    updateConnectionStatus(false);
-                    return null;
-                });
+            console.log(`Fetching: http://localhost:54321${endpoint}`);
+
+            // Try fetch first, fallback to our proxy if CORS fails
+            return fetch(`http://localhost:54321${endpoint}`, {
+                mode: 'cors',
+                credentials: 'omit'
+            })
+            .then(response => {
+                console.log(`Response status: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Successfully received data:', data);
+                updateConnectionStatus(true); // Update status on success
+                return data;
+            })
+            .catch(error => {
+                console.error('CORS/fetch error:', error);
+                updateConnectionStatus(false);
+                return null;
+            });
         }
 
         function handleMessage(msg) {
