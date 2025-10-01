@@ -214,7 +214,14 @@
 
             <div class="controls">
                 <h2>🎮 View Controls</h2>
-                <p style="font-size: 0.9rem; opacity: 0.7;">More controls coming soon...</p>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button id="zoom-out" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">➖ Zoom Out</button>
+                    <button id="zoom-in" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">➕ Zoom In</button>
+                    <button id="reset-view" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">🔄 Reset</button>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.7; text-align: center;">
+                    Zoom: <span id="zoom-level">100%</span> | Tile Size: <span id="tile-size-display">8px</span>
+                </div>
             </div>
 
             <div class="stats">
@@ -299,7 +306,8 @@
         console.log('Loading Life Simulator Viewer v1.0.0');
 
         // Configuration
-        const TILE_SIZE = 8;
+        let TILE_SIZE = 8; // Dynamic tile size for zoom functionality
+        let renderScale = 1.0; // Scale factor for rendering
         const VIEW_SIZE = 100; // Show 100x100 tiles
 
         // Terrain colors with improved visibility and contrast
@@ -341,12 +349,36 @@
         // Canvas setup
         const canvas = document.getElementById('mapCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = VIEW_SIZE * TILE_SIZE;
-        canvas.height = VIEW_SIZE * TILE_SIZE;
 
-        // Set canvas style size
-        canvas.style.width = canvas.width + 'px';
-        canvas.style.height = canvas.height + 'px';
+        // Set canvas rendering properties
+        canvas.style.imageRendering = 'pixelated';
+        canvas.style.cursor = 'pointer';
+        ctx.imageSmoothingEnabled = false;
+
+        // Function to setup canvas size based on zoom
+        function setupCanvasSize() {
+            const container = canvas.parentElement;
+            const containerRect = container.getBoundingClientRect();
+
+            // Calculate optimal tile size to fill container space
+            const maxCanvasSize = Math.min(containerRect.width - 40, containerRect.height - 40, 900);
+            const baseTileSize = Math.max(4, Math.floor(maxCanvasSize / VIEW_SIZE));
+            TILE_SIZE = Math.floor(baseTileSize * renderScale);
+
+            // Set canvas resolution
+            canvas.width = VIEW_SIZE * TILE_SIZE;
+            canvas.height = VIEW_SIZE * TILE_SIZE;
+
+            // Set canvas display size
+            canvas.style.width = canvas.width + 'px';
+            canvas.style.height = canvas.height + 'px';
+
+            // Update zoom display
+            updateZoomDisplay();
+        }
+
+        // Initial canvas setup
+        setupCanvasSize();
 
         // State
         let ws = null;
@@ -744,6 +776,42 @@
 
             requestAnimationFrame(animate);
         }
+
+        // Zoom control functions
+        function updateZoomDisplay() {
+            const zoomPercent = Math.round(renderScale * 100);
+            document.getElementById('zoom-level').textContent = zoomPercent + '%';
+            document.getElementById('tile-size-display').textContent = TILE_SIZE + 'px';
+        }
+
+        function zoomIn() {
+            renderScale = Math.min(renderScale * 1.25, 4.0); // Max 4x zoom
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+        function zoomOut() {
+            renderScale = Math.max(renderScale / 1.25, 0.25); // Min 0.25x zoom
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+        function resetView() {
+            renderScale = 1.0;
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+        // Add event listeners for zoom controls
+        document.getElementById('zoom-in').addEventListener('click', zoomIn);
+        document.getElementById('zoom-out').addEventListener('click', zoomOut);
+        document.getElementById('reset-view').addEventListener('click', resetView);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            setupCanvasSize();
+            render(); // Re-render on resize
+        });
 
         // Initialize
         initializeViewer();

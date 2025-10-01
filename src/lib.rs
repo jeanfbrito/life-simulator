@@ -3,6 +3,7 @@ pub mod web;
 pub mod serialization;
 pub mod cached_world;
 pub mod resources;
+pub mod world_loader;
 
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,
@@ -21,4 +22,8 @@ pub use cached_world::{
 
 pub use resources::{
     ResourceType, ResourceConfig, ResourceGenerator, ResourceUtils,
+};
+
+pub use world_loader::{
+    WorldLoader, WorldInfo, validate_world_file, list_available_worlds,
 };

@@ -1,19 +1,22 @@
 # Life Simulator
 
-A headless life simulation game with procedural world generation and web-based visualization, built with Bevy 0.16.
+A headless life simulation game with **separated world generation** and web-based visualization, built with Bevy 0.16.
 
 ## Overview
 
-This project demonstrates procedural terrain generation and web-based visualization using the Bevy game engine in headless mode. It creates circular island worlds with realistic terrain patterns and provides an interactive HTML viewer for exploration.
+This project demonstrates a **separated architecture** where world generation is completely independent from the running simulation engine. Maps are generated as a separate step using a dedicated CLI tool, and the life simulator loads pre-generated worlds. This approach provides consistent, reproducible worlds and allows for world sharing and versioning.
 
 ## Features
 
+- **Separated Architecture**: World generation completely separate from simulation engine
+- **Standalone Map Generator**: CLI tool for generating and saving worlds independently
 - **Bevy 0.16**: Built with the latest version of the Bevy game engine in headless mode
-- **Procedural Terrain Generation**: Circular island generation with realistic beach edges and terrain zones
+- **Pre-Generated Worlds**: Load existing worlds instead of generating procedurally at runtime
+- **World Selection**: Switch between different generated worlds via API
 - **Web-Based Visualization**: Interactive HTML viewer with zoom and pan capabilities
-- **HTTP API Server**: RESTful API for terrain data access
+- **HTTP API Server**: RESTful API for world and terrain data access
 - **ECS Architecture**: Entity-Component-System based design
-- **Performance Optimized**: Configured for both development and release builds
+- **Multi-Layer Support**: Terrain and resources layers stored separately
 
 ### Terrain Generation
 
@@ -29,9 +32,15 @@ life-simulator/
 ├── src/
 │   ├── main.rs              # Main application entry point (headless)
 │   ├── lib.rs               # Library exports
-│   ├── web_server_simple.rs # HTTP server and terrain generation
+│   ├── map_generator.rs     # Standalone map generator binary
+│   ├── world_loader.rs      # World loading and management
+│   ├── web_server_simple.rs # HTTP server for world API
 │   ├── tilemap/             # Chunk-based terrain system
+│   ├── serialization.rs     # World save/load functionality
+│   ├── resources.rs         # Resource generation
+│   ├── cached_world.rs      # World caching system
 │   └── web/                 # WebSocket and web components
+├── maps/                    # Directory for generated world files
 ├── web-viewer/
 │   └── viewer.html          # Interactive terrain visualization
 ├── Cargo.toml               # Project configuration
@@ -54,15 +63,40 @@ git clone <repository-url>
 cd life-simulator
 ```
 
-2. Run the project:
+2. **Generate a world first** (required step):
 ```bash
-cargo run
+# Generate a default world (radius 5, random seed)
+cargo run --bin map_generator
+
+# Or generate with custom parameters
+cargo run --bin map_generator -- --name "my_world" --seed 12345 --radius 10 --verbose
 ```
 
-3. Open the web viewer:
+3. Run the life simulator:
+```bash
+cargo run --bin life-simulator
+```
+
+4. Open the web viewer:
 ```bash
 # The server starts on http://127.0.0.1:54321
 # Open http://127.0.0.1:54321/viewer.html in your browser
+```
+
+### Map Generator Usage
+
+The standalone map generator provides these options:
+
+```bash
+cargo run --bin map_generator -- --help
+
+Options:
+  -n, --name <NAME>         World name [default: generated_world]
+  -s, --seed <SEED>         World generation seed (random if not specified)
+  -r, --radius <RADIUS>     World size in chunks radius [default: 5]
+  -o, --output-dir <DIR>    Output directory [default: maps]
+  -p, --preview             Generate HTML preview
+  -v, --verbose             Verbose output
 ```
 
 ### Web Viewer Features
@@ -161,10 +195,28 @@ This project is dual-licensed under either:
 
 The HTTP server provides the following endpoints:
 
+### World Management
+- `GET /api/world_info` - Current world information (name, seed, chunk count, bounds)
+- `GET /api/world/current` - Current loaded world details
+- `GET /api/worlds` - List all available generated worlds
+- `POST /api/world/select` - Switch to a different world (JSON: `{"world_name": "my_world"}`)
+
+### Terrain Data
 - `GET /viewer.html` - Main terrain viewer interface
-- `GET /api/world_info` - World metadata (center chunk, world size)
 - `GET /api/chunks?coords=x1,y1&coords=x2,y2` - Terrain data for specified chunks
 - `GET /api/chunks?center_x=0&center_y=0&radius=3&layers=true` - Multi-layer terrain data with batched requests
+
+### World Selection Usage
+
+```bash
+# List available worlds
+curl http://127.0.0.1:54321/api/worlds
+
+# Select a different world
+curl -X POST http://127.0.0.1:54321/api/world/select \
+  -H "Content-Type: application/json" \
+  -d '{"world_name": "my_world"}'
+```
 
 ### URL Length Limitations and Batched Requests
 

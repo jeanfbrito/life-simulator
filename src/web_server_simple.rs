@@ -2,15 +2,64 @@ use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::sync::{Arc, RwLock};
-use crate::tilemap::{WorldGenerator, WorldConfig};
+use crate::world_loader::{WorldLoader, list_available_worlds};
 use crate::cached_world::CachedWorld;
+
+fn parse_chunk_key(chunk_key: &str) -> Result<(i32, i32), Box<dyn std::error::Error>> {
+    // Parse chunk key format "x,y" into tuple (x, y)
+    let parts: Vec<&str> = chunk_key.split(',').collect();
+    if parts.len() != 2 {
+        return Err("Invalid chunk key format".into());
+    }
+
+    let x = parts[0].parse::<i32>()?;
+    let y = parts[1].parse::<i32>()?;
+    Ok((x, y))
+}
 
 pub fn start_simple_web_server() {
     println!("🌐 WEB_SERVER: Starting web server on port 54321");
 
-    // Create world generator for terrain generation
-    let world_generator = Arc::new(RwLock::new(WorldGenerator::new(WorldConfig::default())));
+    // Load the default world for the web server
+    let world_loader = match WorldLoader::load_default() {
+        Ok(loader) => {
+            println!("✅ WEB_SERVER: World loaded: {} (seed: {})", loader.get_name(), loader.get_seed());
 
+            // Initialize CachedWorld with the loaded world data
+            let mut cached_chunks = std::collections::HashMap::new();
+            for (chunk_key, chunk) in &loader.get_world_info().chunks {
+                if let Ok((chunk_x, chunk_y)) = parse_chunk_key(chunk_key) {
+                    cached_chunks.insert((chunk_x, chunk_y), chunk.layers.clone());
+                }
+            }
+
+            let cached_world = CachedWorld {
+                name: loader.get_name().to_string(),
+                seed: loader.get_seed(),
+                chunks: cached_chunks,
+                is_loaded: true,
+            };
+
+            // Set the global cached world
+            CachedWorld::global_set(cached_world);
+            println!("✅ WEB_SERVER: CachedWorld initialized with {} chunks", loader.get_chunk_count());
+
+            Arc::new(RwLock::new(loader))
+        }
+        Err(e) => {
+            eprintln!("❌ WEB_SERVER: Failed to load world: {}", e);
+            eprintln!("💡 WEB_SERVER: Please generate a world first using: cargo run --bin map_generator");
+            // Create a placeholder world loader for error handling
+            let placeholder = WorldLoader::load_from_file("maps/test_world.ron").unwrap_or_else(|_| {
+                eprintln!("❌ WEB_SERVER: No test world available, creating minimal placeholder");
+                // This would need to be handled better in production
+                panic!("No world files available for web server");
+            });
+            Arc::new(RwLock::new(placeholder))
+        }
+    };
+
+    let _world_loader_clone = Arc::clone(&world_loader);
     thread::spawn(move || {
         let listener = TcpListener::bind("127.0.0.1:54321").unwrap_or_else(|e| {
             eprintln!("❌ WEB_SERVER: Failed to bind to port 54321: {}", e);
@@ -21,9 +70,9 @@ pub fn start_simple_web_server() {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let world_generator = Arc::clone(&world_generator);
+                    let world_loader = Arc::clone(&world_loader);
                     thread::spawn(move || {
-                        handle_connection(stream, world_generator);
+                        handle_connection(stream, world_loader);
                     });
                 }
                 Err(e) => {
@@ -35,7 +84,7 @@ pub fn start_simple_web_server() {
     println!("✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:54321");
 }
 
-fn handle_connection(mut stream: TcpStream, world_generator: Arc<RwLock<WorldGenerator>>) {
+fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader>>) {
     let mut buffer = [0; 1024];
     let bytes_read = stream.read(&mut buffer).unwrap();
     eprintln!("🌐 WEB_SERVER: Received {} bytes", bytes_read);
@@ -67,25 +116,13 @@ fn handle_connection(mut stream: TcpStream, world_generator: Arc<RwLock<WorldGen
         return;
     }
 
-    // Handle POST requests for seed updates
-    if method == "POST" && path == "/api/seed" {
-        handle_seed_update(&mut stream, &world_generator, &request);
+    // Handle POST requests for world selection
+    if method == "POST" && path == "/api/world/select" {
+        handle_world_selection(&mut stream, &world_loader, &request);
         return;
     }
 
-    // Handle POST requests for saving maps
-    if method == "POST" && path == "/api/save" {
-        handle_map_save(&mut stream, &world_generator, &request);
-        return;
-    }
-
-    // Handle POST requests for loading maps
-    if method == "POST" && path == "/api/load" {
-        handle_map_load(&mut stream, &world_generator, &request);
-        return;
-    }
-
-    if method != "GET" {
+    if method != "GET" && method != "POST" {
         send_response(&mut stream, "405 Method Not Allowed", "text/plain", "Method Not Allowed");
         return;
     }
@@ -99,20 +136,30 @@ fn handle_connection(mut stream: TcpStream, world_generator: Arc<RwLock<WorldGen
             }
         }
         "/api/world_info" => {
-            let seed = world_generator.read().unwrap().get_seed();
-            let json = format!(r#"{{"center_chunk": {{"x": 0, "y": 0}}, "world_size": {{"width": 20, "height": 20}}, "seed": {}}}"#, seed);
+            let world = world_loader.read().unwrap();
+            let seed = world.get_seed();
+            let name = world.get_name();
+            let chunk_count = world.get_chunk_count();
+            let (bounds_min, bounds_max) = world.get_world_bounds();
+            let json = format!(r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "bounds": {{"min": {{"x": {}, "y": {}}}, "max": {{"x": {}, "y": {}}}}}}}"#,
+                name, seed, chunk_count, bounds_min.0, bounds_min.1, bounds_max.0, bounds_max.1);
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
-        "/api/seed" => {
-            let seed = world_generator.read().unwrap().get_seed();
-            let json = format!(r#"{{"seed": {}}}"#, seed);
+        "/api/world/current" => {
+            let world = world_loader.read().unwrap();
+            let json = format!(r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "file_path": "{}"}}"#,
+                world.get_name(), world.get_seed(), world.get_chunk_count(), "maps/current");
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/worlds" => {
-            // List all saved worlds
-            match list_saved_worlds() {
+            // List all available worlds
+            match list_available_worlds() {
                 Ok(worlds) => {
-                    let json = format!(r#"{{"worlds": [{}]}}"#, worlds.join(","));
+                    let world_jsons: Vec<String> = worlds.iter().map(|w| {
+                        format!(r#"{{"name": "{}", "file_path": "{}", "seed": {}, "chunk_count": {}, "version": "{}", "file_size": {}}}"#,
+                            w.name, w.file_path, w.seed, w.chunk_count, w.version, w.file_size)
+                    }).collect();
+                    let json = format!(r#"{{"worlds": [{}]}}"#, world_jsons.join(","));
                     send_response(&mut stream, "200 OK", "application/json", &json);
                 }
                 Err(e) => {
@@ -184,202 +231,91 @@ fn send_response(stream: &mut TcpStream, status: &str, content_type: &str, body:
     let _ = stream.flush();
 }
 
-fn handle_seed_update(mut stream: &mut TcpStream, world_generator: &Arc<RwLock<WorldGenerator>>, request: &str) {
+fn handle_world_selection(mut stream: &mut TcpStream, world_loader: &Arc<RwLock<WorldLoader>>, request: &str) {
     // Extract JSON body from request
     let lines: Vec<&str> = request.lines().collect();
 
     if let Some(body_start) = lines.iter().position(|line| line.is_empty()) {
         let body = lines[body_start + 1..].join("\n");
 
-        // Parse JSON to extract new seed
-        if let Ok(new_seed) = parse_seed_from_json(&body) {
-            // Update the world generator seed
-            {
-                let mut gen = world_generator.write().unwrap();
-                gen.set_seed(new_seed);
-            }
-
-            let response_json = format!(r#"{{"success": true, "seed": {}}}"#, new_seed);
-            send_response(&mut stream, "200 OK", "application/json", &response_json);
-        } else {
-            send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "Invalid seed format"}"#);
-        }
-    } else {
-        send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "No request body"}"#);
-    }
-}
-
-fn parse_seed_from_json(json_str: &str) -> Result<u64, Box<dyn std::error::Error>> {
-    // Simple JSON parsing to extract seed value
-    // Expected format: {"seed": 12345}
-
-    if let Some(seed_start) = json_str.find("\"seed\"") {
-        // Find the colon that comes after "seed"
-        let after_seed_key = &json_str[seed_start + 6..]; // +6 to skip "seed"
-
-        if let Some(colon_pos) = after_seed_key.find(':') {
-            let after_colon = &after_seed_key[colon_pos + 1..];
-
-            // The seed value should be immediately after the colon
-            let seed_str = after_colon.trim().trim_end_matches('}');
-
-            seed_str.parse::<u64>().map_err(|e| e.into())
-        } else {
-            Err("Invalid JSON format - no colon after seed".into())
-        }
-    } else {
-        Err("No seed field found".into())
-    }
-}
-
-fn handle_map_save(mut stream: &mut TcpStream, world_generator: &Arc<RwLock<WorldGenerator>>, request: &str) {
-    // Extract JSON body from request
-    let lines: Vec<&str> = request.lines().collect();
-
-    if let Some(body_start) = lines.iter().position(|line| line.is_empty()) {
-        let body = lines[body_start + 1..].join("\n");
-
-        // Parse JSON to extract file name and map name
-        if let Ok((file_path, map_name)) = parse_save_request_from_json(&body) {
-            // Create a saves directory if it doesn't exist
-            let full_path = format!("saves/{}.ron", file_path);
-
-            // Generate chunks around center for saving
-            let mut chunks = std::collections::HashMap::new();
-            let center_x = 0;
-            let center_y = 0;
-            let radius = 3; // Save 7x7 chunk area around center
-
-            for chunk_x in (center_x - radius)..=(center_x + radius) {
-                for chunk_y in (center_y - radius)..=(center_y + radius) {
-                    let terrain_tiles = world_generator.read().unwrap().generate_procedural_chunk(chunk_x, chunk_y);
-
-                    // Generate resources layer using the existing resource generation system
-                    let resources_tiles = crate::resources::ResourceGenerator::create_resources_for_chunk(
-                        &terrain_tiles,
-                        chunk_x,
-                        chunk_y,
-                        world_generator.read().unwrap().get_seed()
-                    );
-
-                    // Create multi-layer chunk with both terrain and resources
-                    let mut multi_layer_chunk = std::collections::HashMap::new();
-                    multi_layer_chunk.insert("terrain".to_string(), terrain_tiles);
-                    multi_layer_chunk.insert("resources".to_string(), resources_tiles);
-
-                    chunks.insert((chunk_x, chunk_y), multi_layer_chunk);
-                }
-            }
-
-            let serialized_world = crate::serialization::WorldSerializer::create_serialized_world_from_layers(
-                map_name.clone(),
-                world_generator.read().unwrap().get_seed(),
-                crate::tilemap::WorldConfig::default(),
-                chunks,
-            );
-
-            match crate::serialization::WorldSerializer::save_world(&serialized_world, &full_path) {
-                Ok(()) => {
-                    let response_json = format!(r#"{{"success": true, "message": "World saved as {}", "path": "{}"}}"#, map_name, full_path);
-                    send_response(&mut stream, "200 OK", "application/json", &response_json);
-                }
-                Err(e) => {
-                    let response_json = format!(r#"{{"success": false, "error": "Failed to save world: {}"}}"#, e);
-                    send_response(&mut stream, "500 Internal Server Error", "application/json", &response_json);
-                }
-            }
-        } else {
-            send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "Invalid save request format"}"#);
-        }
-    } else {
-        send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "No request body"}"#);
-    }
-}
-
-fn handle_map_load(mut stream: &mut TcpStream, world_generator: &Arc<RwLock<WorldGenerator>>, request: &str) {
-    // Extract JSON body from request
-    let lines: Vec<&str> = request.lines().collect();
-
-    if let Some(body_start) = lines.iter().position(|line| line.is_empty()) {
-        let body = lines[body_start + 1..].join("\n");
-
-        // Parse JSON to extract file path
-        if let Ok(file_path) = parse_load_request_from_json(&body) {
-            let full_path = format!("saves/{}.ron", file_path);
-
-            match crate::serialization::WorldSerializer::load_world(&full_path) {
-                Ok(serialized_world) => {
-                    // Update the world generator with the loaded seed
+        // Parse JSON to extract world name
+        if let Ok(world_name) = parse_world_name_from_json(&body) {
+            // Try to load the selected world
+            match WorldLoader::load_by_name(&world_name) {
+                Ok(new_world) => {
+                    // Update the world loader
+                    let world_seed = new_world.get_seed();
                     {
-                        let mut gen = world_generator.write().unwrap();
-                        gen.set_seed(serialized_world.seed);
+                        let mut loader = world_loader.write().unwrap();
+                        *loader = new_world;
                     }
 
-                    // Populate the global cached world with the loaded data
-                    let cached_world = crate::cached_world::CachedWorld::from_serialized(serialized_world.clone());
-                    crate::cached_world::CachedWorld::global_set(cached_world);
+                    // Update the CachedWorld for the chunk API
+                    let loader = world_loader.read().unwrap();
+                    let mut cached_chunks = std::collections::HashMap::new();
 
-                    let response_json = format!(r#"{{"success": true, "message": "World loaded successfully", "name": "{}", "seed": {}}}"#, serialized_world.name, serialized_world.seed);
+                    // Load all chunks from the world into the CachedWorld
+                    for (chunk_key, chunk) in &loader.get_world_info().chunks {
+                        if let Ok((chunk_x, chunk_y)) = parse_chunk_key(chunk_key) {
+                            cached_chunks.insert((chunk_x, chunk_y), chunk.layers.clone());
+                        }
+                    }
+
+                    let cached_world = CachedWorld {
+                        name: world_name.clone(),
+                        seed: world_seed,
+                        chunks: cached_chunks,
+                        is_loaded: true,
+                    };
+
+                    // Set the global cached world
+                    CachedWorld::global_set(cached_world);
+
+                    let response_json = format!(r#"{{"success": true, "world_name": "{}", "seed": {}}}"#,
+                        world_name, world_seed);
                     send_response(&mut stream, "200 OK", "application/json", &response_json);
                 }
                 Err(e) => {
-                    let response_json = format!(r#"{{"success": false, "error": "Failed to load world: {}"}}"#, e);
+                    let response_json = format!(r#"{{"success": false, "error": "Failed to load world '{}': {}"}}"#, world_name, e);
                     send_response(&mut stream, "404 Not Found", "application/json", &response_json);
                 }
             }
         } else {
-            send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "Invalid load request format"}"#);
+            send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "Invalid world name format"}"#);
         }
     } else {
         send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "No request body"}"#);
     }
 }
 
-fn parse_save_request_from_json(json_str: &str) -> Result<(String, String), Box<dyn std::error::Error>> {
-    // Expected format: {"file_name": "my_world", "map_name": "My World"}
-    let mut file_name = None;
-    let mut map_name = None;
+fn parse_world_name_from_json(json_str: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Simple JSON parsing to extract world name
+    // Expected format: {"world_name": "my_world"}
 
-    // Extract file_name
-    if let Some(file_start) = json_str.find("\"file_name\"") {
-        let after_file_key = &json_str[file_start + 11..]; // +11 to skip "file_name"
-        if let Some(colon_pos) = after_file_key.find(':') {
-            let after_colon = &after_file_key[colon_pos + 1..];
-            let file_str = after_colon.trim().trim_end_matches('}').trim_matches('"');
-            file_name = Some(file_str.to_string());
-        }
-    }
+    if let Some(name_start) = json_str.find("\"world_name\"") {
+        // Find the colon that comes after "world_name"
+        let after_name_key = &json_str[name_start + 12..]; // +12 to skip "world_name"
 
-    // Extract map_name
-    if let Some(name_start) = json_str.find("\"map_name\"") {
-        let after_name_key = &json_str[name_start + 10..]; // +10 to skip "map_name"
         if let Some(colon_pos) = after_name_key.find(':') {
             let after_colon = &after_name_key[colon_pos + 1..];
-            let name_str = after_colon.trim().trim_end_matches('}').trim_matches('"');
-            map_name = Some(name_str.to_string());
-        }
-    }
 
-    match (file_name, map_name) {
-        (Some(file), Some(name)) => Ok((file, name)),
-        _ => Err("Missing required fields".into()),
+            // The world name should be in quotes after the colon
+            let name_with_quotes = after_colon.trim().trim_end_matches('}');
+
+            if name_with_quotes.starts_with('"') && name_with_quotes.ends_with('"') {
+                let world_name = &name_with_quotes[1..name_with_quotes.len()-1];
+                Ok(world_name.to_string())
+            } else {
+                Err("Invalid JSON format - world name not in quotes".into())
+            }
+        } else {
+            Err("Invalid JSON format - no colon after world_name".into())
+        }
+    } else {
+        Err("No world_name field found".into())
     }
 }
 
-fn parse_load_request_from_json(json_str: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Expected format: {"file_name": "my_world"}
-
-    if let Some(file_start) = json_str.find("\"file_name\"") {
-        let after_file_key = &json_str[file_start + 11..]; // +11 to skip "file_name"
-        if let Some(colon_pos) = after_file_key.find(':') {
-            let after_colon = &after_file_key[colon_pos + 1..];
-            let file_str = after_colon.trim().trim_end_matches('}').trim_matches('"');
-            return Ok(file_str.to_string());
-        }
-    }
-
-    Err("No file_name field found".into())
-}
 
 fn parse_chunk_coords_from_path(path: &str) -> Vec<(i32, i32)> {
     // Extract coordinates from path like /api/chunks?coords=0,0&coords=1,0

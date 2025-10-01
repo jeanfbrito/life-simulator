@@ -1,0 +1,320 @@
+use clap::Parser;
+use std::collections::HashMap;
+use std::fs;
+use std::time::Instant;
+use rand;
+
+mod tilemap;
+mod serialization;
+mod resources;
+mod cached_world;
+
+use tilemap::{WorldGenerator, WorldConfig};
+use serialization::WorldSerializer;
+use resources::ResourceGenerator;
+
+/// Map Generator for Life Simulator
+///
+/// A standalone tool to generate complete worlds and save them to files.
+/// The generated worlds can then be loaded by the life simulator engine.
+#[derive(Parser, Debug)]
+#[command(version, about = "Generate complete worlds for the Life Simulator")]
+struct Args {
+    /// Name of the world to generate
+    #[arg(short, long, default_value = "generated_world")]
+    name: String,
+
+    /// Seed for world generation (random if not specified)
+    #[arg(short, long)]
+    seed: Option<u64>,
+
+    /// World size in chunks (radius from center)
+    #[arg(short, long, default_value = "5")]
+    radius: i32,
+
+    /// Output directory for generated worlds
+    #[arg(short, long, default_value = "maps")]
+    output_dir: String,
+
+    /// Generate preview HTML file
+    #[arg(long)]
+    preview: bool,
+
+    /// Verbose output
+    #[arg(short, long)]
+    verbose: bool,
+}
+
+fn main() {
+    let args = Args::parse();
+
+    if args.verbose {
+        println!("Map Generator for Life Simulator");
+        println!("=====================================");
+    }
+
+    // Generate or use provided seed
+    let seed = args.seed.unwrap_or_else(|| {
+        let random_seed = rand::random::<u64>();
+        if args.verbose {
+            println!("Using random seed: {}", random_seed);
+        }
+        random_seed
+    });
+
+    if args.verbose {
+        println!("Generating world: {}", args.name);
+        println!("Seed: {}", seed);
+        println!("Radius: {} chunks", args.radius);
+        println!("Output: {}", args.output_dir);
+    }
+
+    let start_time = Instant::now();
+
+    // Create output directory
+    if let Err(e) = fs::create_dir_all(&args.output_dir) {
+        eprintln!("Failed to create output directory '{}': {}", args.output_dir, e);
+        std::process::exit(1);
+    }
+
+    // Initialize world generator
+    let mut config = WorldConfig::default();
+    config.seed = seed;
+    let world_generator = WorldGenerator::new(config);
+
+    // Generate complete world data
+    println!("Generating world chunks...");
+    let mut multi_layer_chunks = HashMap::new();
+    let total_chunks = ((args.radius * 2 + 1) * (args.radius * 2 + 1)) as usize;
+    let mut generated_chunks = 0;
+
+    for chunk_x in (-args.radius)..=(args.radius) {
+        for chunk_y in (-args.radius)..=(args.radius) {
+            // Generate terrain layer
+            let terrain_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
+
+            // Generate resources layer
+            let resources_tiles = ResourceGenerator::create_resources_for_chunk(
+                &terrain_tiles,
+                chunk_x,
+                chunk_y,
+                seed
+            );
+
+            // Create multi-layer chunk
+            let mut chunk_layers = HashMap::new();
+            chunk_layers.insert("terrain".to_string(), terrain_tiles);
+            chunk_layers.insert("resources".to_string(), resources_tiles);
+
+            multi_layer_chunks.insert((chunk_x, chunk_y), chunk_layers);
+            generated_chunks += 1;
+
+            if args.verbose && generated_chunks % 10 == 0 {
+                println!("Progress: {}/{} chunks ({}%)",
+                    generated_chunks, total_chunks,
+                    (generated_chunks * 100) / total_chunks);
+            }
+        }
+    }
+
+    println!("Generated {} chunks", total_chunks);
+
+    // Create serialized world
+    println!("Serializing world data...");
+    let serialized_world = WorldSerializer::create_serialized_world_from_layers(
+        args.name.clone(),
+        seed,
+        WorldConfig::default(),
+        multi_layer_chunks,
+    );
+
+    // Save to file
+    let file_name = format!("{}.ron", args.name);
+    let file_path = format!("{}/{}", args.output_dir, file_name);
+
+    println!("Saving world to: {}", file_path);
+    match WorldSerializer::save_world(&serialized_world, &file_path) {
+        Ok(()) => {
+            println!("World saved successfully!");
+        }
+        Err(e) => {
+            eprintln!("Failed to save world: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Generate preview if requested
+    if args.preview {
+        generate_preview(&args, &serialized_world, &file_path);
+    }
+
+    let duration = start_time.elapsed();
+    println!("Generation completed in: {:?}", duration);
+
+    // Print summary
+    println!("\nGeneration Summary:");
+    println!("  World file: {}", file_path);
+    println!("  Chunks: {} ({}x{} area)", total_chunks, args.radius * 2 + 1, args.radius * 2 + 1);
+    println!("  Seed: {}", seed);
+    println!("  Time: {:?}", duration);
+
+    if args.preview {
+        let preview_path = format!("{}/{}_preview.html", args.output_dir, args.name);
+        println!("  Preview: {}", preview_path);
+    }
+}
+
+fn generate_preview(args: &Args, world: &serialization::SerializedWorld, world_file: &str) {
+    println!("Generating preview HTML...");
+
+    use std::fmt::Write;
+
+    let secondary_class = "action-btn-secondary";
+    let note_class = "viewer-note";
+    let onclick_handler = format!("copyToClipboard(&quot;{}&quot;)", world_file);
+
+    // Build HTML using Write! macro to avoid format string parsing issues
+    let mut preview_html = String::new();
+
+    write!(&mut preview_html, r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Preview: {}</title>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }}
+        .header {{
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+        .info {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        .info-item {{
+            background: #333;
+            padding: 15px;
+            border-radius: 5px;
+        }}
+        .info-label {{
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }}
+        .info-value {{
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4CAF50;
+        }}
+        .viewer-container {{
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }}
+        .viewer-note {{
+            color: #888;
+            margin-top: 10px;
+            font-style: italic;
+        }}
+        .actions {{
+            margin-top: 20px;
+            text-align: center;
+        }}
+        .action-btn {{
+            display: inline-block;
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 0 10px;
+        }}
+        .action-btn-secondary {{
+            background: #666;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🗺️ World Preview: {}</h1>
+        <p>This world has been generated and is ready to use with the Life Simulator engine.</p>
+    </div>
+
+    <div class="info">
+        <div class="info-item">
+            <div class="info-label">World Name</div>
+            <div class="info-value">{}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Seed</div>
+            <div class="info-value">{}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Chunks</div>
+            <div class="info-value">{}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Version</div>
+            <div class="info-value">{}</div>
+        </div>
+    </div>
+
+    <div class="viewer-container">
+        <h2>🌐 World Viewer</h2>
+        <p>To view this world in the Life Simulator:</p>
+        <div class="actions">
+            <a href="life-simulator://load?file={}" class="action-btn">Open in Life Simulator</a>
+            <a href="#" class="action-btn {}" onclick="{}">Copy File Path</a>
+        </div>
+        <p class="{}">
+            Or run: <code>cargo run --bin life-simulator -- --load {}</code>
+        </p>"#,
+        secondary_class,
+        onclick_handler,
+        note_class,
+        world_file
+    </div>
+
+    <script>
+        function copyToClipboard(text) {{
+            navigator.clipboard.writeText(text).then(function() {{
+                alert("File path copied to clipboard!");
+            }});
+        }}
+    </script>
+</body>
+</html>"#,
+        args.name,
+        args.name,
+        world.seed,
+        world.chunks.len(),
+        world.version,
+        world_file,
+        secondary_class,
+        onclick_handler,
+        note_class,
+        world_file
+    ).expect("Failed to write HTML ");
+
+    let preview_path = format!("{}/{}_preview.html ", args.output_dir, args.name);
+    match fs::write(&preview_path, preview_html) {
+        Ok(()) => {
+            println!("Preview saved to: {}", preview_path);
+        }
+        Err(e) => {
+            eprintln!("Failed to save preview: {}", e);
+        }
+    }
+}

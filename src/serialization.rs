@@ -7,6 +7,7 @@ use ron::error::SpannedError;
 use serde::{Deserialize, Serialize};
 
 use crate::tilemap::{ChunkCoordinate, WorldConfig, CHUNK_SIZE};
+use crate::cached_world::CachedWorld;
 
 /// Serializable world data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,30 +225,44 @@ pub fn handle_world_save_requests(
     for (entity, request, config) in save_requests.iter() {
         info!("Saving world '{}' to {}", request.name, request.file_path);
 
-        // Generate chunks around center for saving
-        let mut chunks = HashMap::new();
+        // Generate multi-layer chunks around center for saving
+        let mut multi_layer_chunks = HashMap::new();
         let center_x = 0;
         let center_y = 0;
         let radius = 3; // Save 7x7 chunk area around center
 
         for chunk_x in (center_x - radius)..=(center_x + radius) {
             for chunk_y in (center_y - radius)..=(center_y + radius) {
-                let coord = ChunkCoordinate::new(chunk_x, chunk_y);
-                let chunk_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
-                chunks.insert((chunk_x, chunk_y), chunk_tiles);
+                // Generate terrain layer
+                let terrain_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
+
+                // Generate resources layer using the existing resource generation system
+                let resources_tiles = crate::resources::ResourceGenerator::create_resources_for_chunk(
+                    &terrain_tiles,
+                    chunk_x,
+                    chunk_y,
+                    world_generator.get_seed()
+                );
+
+                // Create multi-layer chunk with both terrain and resources
+                let mut chunk_layers = HashMap::new();
+                chunk_layers.insert("terrain".to_string(), terrain_tiles);
+                chunk_layers.insert("resources".to_string(), resources_tiles);
+
+                multi_layer_chunks.insert((chunk_x, chunk_y), chunk_layers);
             }
         }
 
-        let serialized_world = WorldSerializer::create_serialized_world(
+        let serialized_world = WorldSerializer::create_serialized_world_from_layers(
             request.name.clone(),
             world_generator.get_seed(),
             config.clone(),
-            chunks,
+            multi_layer_chunks,
         );
 
         match WorldSerializer::save_world(&serialized_world, &request.file_path) {
             Ok(()) => {
-                info!("World saved successfully!");
+                info!("World '{}' saved successfully to {}", request.name, request.file_path);
                 commands.entity(entity).remove::<WorldSaveRequest>();
             }
             Err(e) => {
@@ -261,15 +276,32 @@ pub fn handle_world_save_requests(
 pub fn handle_world_load_requests(
     mut commands: Commands,
     load_requests: Query<(Entity, &WorldLoadRequest)>,
+    mut world_generator: ResMut<crate::tilemap::WorldGenerator>,
 ) {
     for (entity, request) in load_requests.iter() {
         info!("Loading world from {}", request.file_path);
 
         match WorldSerializer::load_world(&request.file_path) {
             Ok(serialized_world) => {
-                info!("World loaded successfully: {}", serialized_world.name);
-                // Here you could spawn entities or update world state based on loaded data
-                // For now, we'll just log the success and remove the component
+                info!("World '{}' loaded successfully (seed: {})", serialized_world.name, serialized_world.seed);
+
+                // Update the world generator with the loaded seed
+                world_generator.set_seed(serialized_world.seed);
+
+                // Create and populate the cached world with loaded data
+                let cached_world = CachedWorld::from_serialized(serialized_world.clone());
+                CachedWorld::global_set(cached_world);
+
+                // Log chunk loading details
+                let loaded_chunks_count = serialized_world.chunks.len();
+                info!("Loaded {} chunks into cached world", loaded_chunks_count);
+
+                // Log available layers in loaded world
+                if let Some((_, first_chunk)) = serialized_world.chunks.iter().next() {
+                    let layer_names: Vec<&String> = first_chunk.layers.keys().collect();
+                    info!("Available layers: {:?}", layer_names);
+                }
+
                 commands.entity(entity).remove::<WorldLoadRequest>();
             }
             Err(e) => {
