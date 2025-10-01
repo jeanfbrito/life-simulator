@@ -305,20 +305,20 @@
         const MAX_ZOOM = 4.0;
         const MIN_ZOOM = 0.25;
 
-        // Terrain colors matching our Rust enum
+        // Terrain colors with improved visibility and contrast
         const TERRAIN_COLORS = {
-            'Grass': '#228822',
-            'Stone': '#666666',
-            'Sand': '#f4e4bc',
-            'Water': '#0066cc',
-            'Dirt': '#8b4513',
-            'Snow': '#ffffff',
-            'Forest': '#006600',
-            'Mountain': '#999999',
-            'DeepWater': '#003366',
-            'ShallowWater': '#3399cc',
-            'Swamp': '#4d6633',
-            'Desert': '#cc9966'
+            'Grass': '#3a7f47',      // Brighter grass green
+            'Stone': '#8b8680',       // Lighter stone gray
+            'Sand': '#f4d58f',       // Brighter sand yellow
+            'Water': '#4a90e2',      // Brighter water blue
+            'Dirt': '#8b6239',       // Richer dirt brown
+            'Snow': '#f0f0f0',       // Slightly off-white snow
+            'Forest': '#2d5a2d',     // Darker forest green
+            'Mountain': '#a8a8a8',   // Lighter mountain gray
+            'DeepWater': '#1e3a5f',  // Darker deep water
+            'ShallowWater': '#5ca7d8', // Lighter shallow water
+            'Swamp': '#5a6b3c',      // Brighter swamp green
+            'Desert': '#d4a76a'      // Brighter desert tan
         };
 
         // Resource colors and symbols
@@ -592,28 +592,36 @@
                         // Draw resource as a colored circle with emoji
                         const centerX = x * TILE_SIZE + TILE_SIZE / 2;
                         const centerY = y * TILE_SIZE + TILE_SIZE / 2;
-                        const radius = TILE_SIZE / 2.5; // Make resources bigger
+                        const radius = TILE_SIZE / 2.2; // Make resources slightly bigger
 
-                        // Draw resource background circle
-                        ctx.fillStyle = RESOURCE_COLORS[resourceType] || '#ff0000'; // Red fallback for debugging
+                        // Draw resource background circle with darker color for better contrast
+                        ctx.fillStyle = RESOURCE_COLORS[resourceType] || '#8B0000'; // Dark red fallback
                         ctx.beginPath();
                         ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
                         ctx.fill();
 
-                        // Draw resource emoji
-                        ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                        // Add subtle border to make resources more visible
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+
+                        // Draw resource emoji with better contrast
+                        ctx.font = `${TILE_SIZE * 0.9}px Arial`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillStyle = '#ffffff';
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                        ctx.shadowBlur = 2;
                         ctx.fillText(RESOURCE_SYMBOLS[resourceType] || '•', centerX, centerY);
+                        ctx.shadowBlur = 0; // Reset shadow
 
                         // Debug: count resources
                         resourceCount++;
                     }
 
-                    // Draw grid lines
-                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
-                    ctx.lineWidth = 0.5;
+                    // Draw subtle grid lines
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.lineWidth = 0.3;
                     ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
                     // Count terrain types for statistics
