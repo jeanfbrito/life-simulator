@@ -178,6 +178,7 @@ pub struct WorldSerializationPlugin;
 
 impl Plugin for WorldSerializationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (handle_world_save_requests, handle_world_load_requests));
+        app.add_systems(Update, handle_world_save_requests)
+           .add_systems(Update, handle_world_load_requests);
     }
 }

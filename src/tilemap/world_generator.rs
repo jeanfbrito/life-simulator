@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Component)]
 pub struct WorldConfig {
     pub seed: u64,
     pub world_size_chunks: i32,
