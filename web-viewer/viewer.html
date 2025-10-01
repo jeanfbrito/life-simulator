@@ -200,13 +200,11 @@
     <div class="container">
         <div class="sidebar">
             <div class="controls">
-                <h2>🌍 World Seed</h2>
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
-                    <input type="number" id="seed-input" placeholder="Enter seed" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.5rem; border-radius: 4px;">
-                    <button onclick="setSeed()" style="padding: 0.5rem 1rem;">🎲 Set Seed</button>
-                </div>
+                <h2>🌍 World Information</h2>
                 <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 1rem;">
-                    Current Seed: <span id="current-seed">Loading...</span>
+                    World Name: <span id="current-world">Loading...</span><br>
+                    World Seed: <span id="current-seed">Loading...</span><br>
+                    Total Chunks: <span id="total-chunks">Loading...</span>
                 </div>
             </div>
 
@@ -215,8 +213,7 @@
                 <button onclick="zoomIn()">🔍+ Zoom In</button>
                 <button onclick="zoomOut()">🔍- Zoom Out</button>
                 <button onclick="resetView()">🔄 Reset View</button>
-                <button onclick="regenerateWorld()">🌍 New World</button>
-            </div>
+              </div>
 
             <div class="stats">
                 <div class="stat-card">
@@ -503,58 +500,25 @@
             }
         }
 
-        async function regenerateWorld() {
-            // Generate new world with different seed
-            centerCoord.x = Math.floor(Math.random() * 20) - 10;
-            centerCoord.y = Math.floor(Math.random() * 20) - 10;
-            await requestChunks();
-        }
-
-        async function loadSeed() {
+        async function loadWorldInfo() {
             try {
-                const response = await fetch('/api/seed');
-                if (response.ok) {
-                    const data = await response.json();
-                    document.getElementById('current-seed').textContent = data.seed;
+                // Load current world info
+                const currentData = await fetchData('/api/world/current');
+                if (currentData) {
+                    document.getElementById('current-world').textContent = currentData.name;
+                    document.getElementById('current-seed').textContent = currentData.seed;
+                }
+
+                // Load additional world info
+                const worldData = await fetchData('/api/world_info');
+                if (worldData) {
+                    document.getElementById('total-chunks').textContent = worldData.chunk_count;
                 }
             } catch (error) {
-                console.error('Failed to load seed:', error);
-            }
-        }
-
-        async function setSeed() {
-            const seedInput = document.getElementById('seed-input');
-            const newSeed = parseInt(seedInput.value);
-
-            if (isNaN(newSeed)) {
-                alert('Please enter a valid number for the seed');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/seed', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ seed: newSeed })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    document.getElementById('current-seed').textContent = data.seed;
-
-                    // Clear existing world data and regenerate
-                    worldData.chunks = {};
-                    centerCoord.x = 0;
-                    centerCoord.y = 0;
-                    await requestChunks();
-                } else {
-                    alert('Failed to update seed');
-                }
-            } catch (error) {
-                console.error('Failed to set seed:', error);
-                alert('Failed to update seed');
+                console.error('Failed to load world info:', error);
+                document.getElementById('current-world').textContent = 'Error';
+                document.getElementById('current-seed').textContent = 'Error';
+                document.getElementById('total-chunks').textContent = 'Error';
             }
         }
 
@@ -617,29 +581,19 @@
                     }
 
                     if (resourceType && resourceType !== '') {
-                        // Draw resource as a colored circle with emoji
+                        // Draw resource emoji directly without background
                         const centerX = x * TILE_SIZE + TILE_SIZE / 2;
                         const centerY = y * TILE_SIZE + TILE_SIZE / 2;
-                        const radius = TILE_SIZE / 2.2; // Make resources slightly bigger
 
-                        // Draw resource background circle with darker color for better contrast
-                        ctx.fillStyle = RESOURCE_COLORS[resourceType] || '#8B0000'; // Dark red fallback
-                        ctx.beginPath();
-                        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        // Add subtle border to make resources more visible
-                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-                        ctx.lineWidth = 0.5;
-                        ctx.stroke();
-
-                        // Draw resource emoji with better contrast
-                        ctx.font = `${TILE_SIZE * 0.9}px Arial`;
+                        // Draw resource emoji
+                        ctx.font = `${TILE_SIZE * 0.8}px Arial`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
+
+                        // Add subtle shadow for better visibility
+                        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                        ctx.shadowBlur = 1;
                         ctx.fillStyle = '#ffffff';
-                        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-                        ctx.shadowBlur = 2;
                         ctx.fillText(RESOURCE_SYMBOLS[resourceType] || '•', centerX, centerY);
                         ctx.shadowBlur = 0; // Reset shadow
 
@@ -868,10 +822,7 @@
                 case '_':
                     zoomOut();
                     break;
-                case 'r':
-                    regenerateWorld();
-                    break;
-            }
+                  }
             updateCanvasTransform(); // Update canvas transform after keyboard movement
         });
 
@@ -909,14 +860,9 @@
         animate();
 
         async function initializeViewer() {
-            // Load current seed
-            await loadSeed();
+            // Load world information
+            await loadWorldInfo();
 
-            // Load initial world info
-            const worldInfo = await fetchData('/api/world_info');
-            if (worldInfo) {
-                updateWorldInfo(worldInfo);
-            }
             // Load initial chunks
             await requestChunks();
         }
