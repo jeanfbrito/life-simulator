@@ -86,7 +86,7 @@
             border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-            background: #0a0a0a;
+            background: #003366; /* DeepWater color as default background */
             cursor: crosshair;
         }
 
@@ -454,7 +454,7 @@
                     const localY = ((worldY % 16) + 16) % 16;
 
                     const chunkKey = `${chunkX},${chunkY}`;
-                    let terrainType = 'Grass'; // Default fallback
+                    let terrainType = 'DeepWater'; // Default fallback
 
                     if (worldData.chunks[chunkKey] &&
                         worldData.chunks[chunkKey][localY] &&
@@ -463,7 +463,7 @@
                     }
 
                     // Draw tile
-                    const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS['Grass'];
+                    const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS['DeepWater'];
                     ctx.fillStyle = color;
                     ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
