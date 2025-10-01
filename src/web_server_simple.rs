@@ -156,7 +156,7 @@ fn generate_procedural_chunk(chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
             let world_x = chunk_x * 16 + x;
             let world_y = chunk_y * 16 + y;
 
-            // Generate terrain based on patterns and noise
+            // Generate terrain based on circular island pattern
             let terrain_type = generate_terrain_type(world_x, world_y, &mut rng);
             row.push(terrain_type);
         }
@@ -167,31 +167,76 @@ fn generate_procedural_chunk(chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
 }
 
 fn generate_terrain_type(world_x: i32, world_y: i32, rng: &mut rand::rngs::StdRng) -> String {
-    // Create some interesting patterns
-    let distance_from_origin = ((world_x * world_x + world_y * world_y) as f64).sqrt();
-    let pattern1 = ((world_x as f64 * 0.1).sin() + (world_y as f64 * 0.1).cos()) * 0.5 + 0.5;
-    let pattern2 = ((world_x as f64 * 0.05).sin() + (world_y as f64 * 0.05).cos()) * 0.5 + 0.5;
-    let random_factor = rng.gen::<f64>();
+    // Circular island generation with clean beach edges
+    let distance_from_center = ((world_x * world_x + world_y * world_y) as f32).sqrt();
 
-    if distance_from_origin < 20.0 {
+    // Main island parameters
+    let island_radius = 35.0; // Main island radius
+    let beach_width = 4.0;    // Beach width around island
+    let shallow_water_width = 6.0; // Shallow water zone
+
+    // Create circular island with reduced irregularity for more consistency
+    let angle = (world_y as f32).atan2(world_x as f32);
+    let island_variation = (angle * 2.0).sin() * 1.5 + (angle * 3.0).cos() * 1.0;
+    let effective_island_radius = island_radius + island_variation;
+
+    // Beach variation - reduced for consistency
+    let beach_variation = (angle * 4.0).sin() * 0.8;
+    let effective_beach_width = beach_width + beach_variation;
+
+    // Determine terrain based on distance from center
+    let normalized_distance = distance_from_center;
+
+    // Add small random variation for texture
+    let texture_noise = (world_x as f32 * 0.1).sin() * (world_y as f32 * 0.1).cos() * 0.5 + 0.5;
+
+    if distance_from_center > effective_island_radius + effective_beach_width + shallow_water_width {
+        // Deep water - outer ocean
         "DeepWater".to_string()
-    } else if distance_from_origin < 40.0 {
-        "Water".to_string()
-    } else if pattern1 < 0.2 {
-        "Forest".to_string()
-    } else if pattern1 < 0.3 {
-        "Mountain".to_string()
-    } else if pattern1 < 0.4 {
-        "Stone".to_string()
-    } else if pattern2 < 0.3 {
-        "Sand".to_string()
-    } else if pattern2 < 0.5 && random_factor < 0.3 {
-        "Swamp".to_string()
-    } else if distance_from_origin > 80.0 {
-        "Snow".to_string()
-    } else if distance_from_origin > 60.0 && random_factor < 0.5 {
-        "Desert".to_string()
+    } else if distance_from_center > effective_island_radius + effective_beach_width {
+        // Shallow water - between beach and deep water
+        "ShallowWater".to_string()
+    } else if distance_from_center > effective_island_radius {
+        // Beach sand - ring around island
+        if texture_noise < 0.1 && distance_from_center - effective_island_radius > 1.0 {
+            // Some shallow water patches in beach for variety
+            "ShallowWater".to_string()
+        } else {
+            "Sand".to_string()
+        }
     } else {
-        "Grass".to_string()
+        // Island interior - mostly grass with some variation
+        let center_distance = distance_from_center;
+        let inner_radius = effective_island_radius * 0.7; // Inner grass circle
+
+        if center_distance < inner_radius {
+            // Inner area - guaranteed grass
+            if texture_noise < 0.05 {
+                // Small dirt patches for variety
+                "Dirt".to_string()
+            } else if texture_noise > 0.95 {
+                // occasional forest patches
+                "Forest".to_string()
+            } else {
+                "Grass".to_string()
+            }
+        } else {
+            // Outer island area - transition zone
+            let transition_factor = (distance_from_center - inner_radius) / (effective_island_radius - inner_radius);
+
+            if rng.gen::<f32>() < transition_factor * 0.3 {
+                // Some sand patches near beach
+                "Sand".to_string()
+            } else if texture_noise > 0.8 && transition_factor < 0.5 {
+                // Forest patches in middle areas
+                "Forest".to_string()
+            } else if texture_noise < 0.1 && transition_factor > 0.3 {
+                // Dirt patches near edges
+                "Dirt".to_string()
+            } else {
+                // Mostly grass
+                "Grass".to_string()
+            }
+        }
     }
 }

@@ -13,7 +13,7 @@
 
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f23 100%);
             color: #fff;
             display: flex;
             flex-direction: column;
@@ -85,8 +85,8 @@
         canvas {
             border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-            background: #2a4a2a;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            background: #0a0a0a;
             cursor: crosshair;
         }
 
@@ -292,9 +292,9 @@
 
         // Terrain colors matching our Rust enum
         const TERRAIN_COLORS = {
-            'Grass': '#33cc33',
+            'Grass': '#228822',
             'Stone': '#666666',
-            'Sand': '#cccccc',
+            'Sand': '#f4e4bc',
             'Water': '#0066cc',
             'Dirt': '#8b4513',
             'Snow': '#ffffff',
@@ -311,6 +311,11 @@
         const ctx = canvas.getContext('2d');
         canvas.width = VIEW_SIZE * TILE_SIZE;
         canvas.height = VIEW_SIZE * TILE_SIZE;
+
+        // Set canvas style size
+        canvas.style.width = canvas.width + 'px';
+        canvas.style.height = canvas.height + 'px';
+        canvas.style.cursor = 'grab';
 
         // State
         let ws = null;
@@ -437,9 +442,10 @@
 
             for (let y = startY; y < endY; y++) {
                 for (let x = startX; x < endX; x++) {
-                    // Convert pixel coordinates to world coordinates
-                    const worldX = Math.floor((x - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.x * 16;
-                    const worldY = Math.floor((y - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.y * 16;
+                    // Convert view coordinates to world coordinates
+                    // This should map center of view (50,50) to world (0,0) when centerCoord is (0,0)
+                    const worldX = x - VIEW_SIZE/2 + centerCoord.x * 16;
+                    const worldY = y - VIEW_SIZE/2 + centerCoord.y * 16;
 
                     // Get chunk coordinates
                     const chunkX = Math.floor(worldX / 16);
@@ -515,26 +521,89 @@
 
         function zoomIn() {
             zoom = Math.min(zoom * 1.2, MAX_ZOOM);
-            canvas.style.transform = `scale(${zoom})`;
+            updateCanvasTransform();
         }
 
         function zoomOut() {
             zoom = Math.max(zoom / 1.2, MIN_ZOOM);
-            canvas.style.transform = `scale(${zoom})`;
+            updateCanvasTransform();
         }
 
         function resetView() {
             zoom = 1.0;
             offsetX = 0;
             offsetY = 0;
-            canvas.style.transform = `scale(${zoom})`;
+            updateCanvasTransform();
         }
 
-        // Mouse interaction
-        canvas.addEventListener('mousemove', (e) => {
+        function updateCanvasTransform() {
+            canvas.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`;
+            canvas.style.transformOrigin = 'center center';
+        }
+
+        // Mouse interaction with drag to pan and wheel zoom
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        // Mouse wheel zoom
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+
             const rect = canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / (TILE_SIZE * zoom));
-            const y = Math.floor((e.clientY - rect.top) / (TILE_SIZE * zoom));
+            const mouseX = e.clientX - rect.left - rect.width / 2;
+            const mouseY = e.clientY - rect.top - rect.height / 2;
+
+            // Calculate world position before zoom
+            const worldX = (mouseX - offsetX) / zoom;
+            const worldY = (mouseY - offsetY) / zoom;
+
+            // Update zoom
+            if (e.deltaY < 0) {
+                zoom = Math.min(zoom * 1.1, MAX_ZOOM);
+            } else {
+                zoom = Math.max(zoom / 1.1, MIN_ZOOM);
+            }
+
+            // Adjust offset to zoom towards mouse position
+            offsetX = mouseX - worldX * zoom;
+            offsetY = mouseY - worldY * zoom;
+
+            updateCanvasTransform();
+        });
+
+        // Mouse down for drag panning
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragOffsetX = offsetX;
+            dragOffsetY = offsetY;
+            canvas.style.cursor = 'grabbing';
+        });
+
+        // Mouse move for drag panning and hover info
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                offsetX = dragOffsetX + deltaX;
+                offsetY = dragOffsetY + deltaY;
+                updateCanvasTransform();
+                return;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            // Convert mouse position to canvas coordinates
+            const canvasX = (e.clientX - centerX - offsetX) / zoom;
+            const canvasY = (e.clientY - centerY - offsetY) / zoom;
+            const x = Math.floor(canvasX / TILE_SIZE + VIEW_SIZE / 2);
+            const y = Math.floor(canvasY / TILE_SIZE + VIEW_SIZE / 2);
 
             if (x >= 0 && x < VIEW_SIZE && y >= 0 && y < VIEW_SIZE) {
                 const tooltip = document.getElementById('tooltip');
@@ -542,9 +611,9 @@
                 tooltip.style.left = e.clientX + 10 + 'px';
                 tooltip.style.top = e.clientY + 10 + 'px';
 
-                // Convert to world coordinates
-                const worldX = Math.floor((x - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.x * 16;
-                const worldY = Math.floor((y - VIEW_SIZE/2) / TILE_SIZE) + centerCoord.y * 16;
+                // Convert to world coordinates (matching render function)
+                const worldX = x - VIEW_SIZE/2 + centerCoord.x * 16;
+                const worldY = y - VIEW_SIZE/2 + centerCoord.y * 16;
 
                 // Get chunk coordinates
                 const chunkX = Math.floor(worldX / 16);
@@ -565,13 +634,22 @@
             }
         });
 
+        // Mouse up to stop dragging
+        canvas.addEventListener('mouseup', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        });
+
+        // Mouse leave to stop dragging and hide tooltip
         canvas.addEventListener('mouseleave', () => {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
             document.getElementById('tooltip').style.display = 'none';
         });
 
         // Keyboard controls
         document.addEventListener('keydown', (e) => {
-            const moveSpeed = 2;
+            const moveSpeed = 10 * zoom; // Adjust movement speed based on zoom level
             switch(e.key) {
                 case 'ArrowUp':
                 case 'w':
@@ -601,6 +679,7 @@
                     regenerateWorld();
                     break;
             }
+            updateCanvasTransform(); // Update canvas transform after keyboard movement
         });
 
         // Animation loop with FPS limiting
