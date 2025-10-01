@@ -4,8 +4,12 @@ use std::time::Duration;
 
 mod tilemap;
 mod web;
+mod serialization;
+mod cached_world;
 
-use tilemap::{TilemapPlugin, WorldGenerator};
+use tilemap::{TilemapPlugin, WorldGenerator, WorldConfig};
+use serialization::WorldSerializationPlugin;
+use cached_world::CachedWorldPlugin;
 
 mod web_server_simple;
 
@@ -17,6 +21,9 @@ fn main() {
             ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)),
         ))
         .add_plugins(TilemapPlugin)
+        .add_plugins(WorldSerializationPlugin)
+        .add_plugins(CachedWorldPlugin)
+        .insert_resource(WorldConfig::default())
         .add_systems(Startup, setup)
         .add_systems(Update, simulation_system)
         .run();

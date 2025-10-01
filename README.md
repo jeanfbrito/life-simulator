@@ -168,7 +168,10 @@ The HTTP server provides the following endpoints:
 ## References and Inspiration
 
 - [Bevy Game Engine](https://bevyengine.org/) - The game engine powering this project
-- [World Simulator](https://github.com/jeanfbrito/world-simulator) - Terrain generation inspiration
+- `/Users/jean/Github/world-simulator` - Terrain generation inspiration
+- `/Users/jean/Github/dogoap` - AI and behavior tree reference
+- `/Users/jean/Github/big-brain` - AI planning and decision-making reference
+- `/Users/jean/Github/bevy_entitiles` - Tile-based entity system reference
 - Procedural content generation techniques for realistic island formation
 
 ## Future Development
