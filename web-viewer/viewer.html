@@ -87,7 +87,7 @@
             border-radius: 8px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             background: #003366; /* DeepWater color as default background */
-            cursor: crosshair;
+            cursor: pointer; /* Finger cursor for interactive map */
         }
 
         .controls {
@@ -168,15 +168,19 @@
         }
 
         .tooltip {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
+            position: fixed; /* Use fixed positioning to follow cursor smoothly */
+            background: rgba(0, 0, 0, 0.95);
             color: white;
-            padding: 0.5rem;
+            padding: 0.5rem 0.75rem;
             border-radius: 6px;
             font-size: 0.85rem;
             pointer-events: none;
             display: none;
             z-index: 1000;
+            max-width: 200px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
@@ -347,7 +351,6 @@
         // Set canvas style size
         canvas.style.width = canvas.width + 'px';
         canvas.style.height = canvas.height + 'px';
-        canvas.style.cursor = 'grab';
 
         // State
         let ws = null;
@@ -743,8 +746,26 @@
             if (x >= 0 && x < VIEW_SIZE && y >= 0 && y < VIEW_SIZE) {
                 const tooltip = document.getElementById('tooltip');
                 tooltip.style.display = 'block';
-                tooltip.style.left = e.clientX + 10 + 'px';
-                tooltip.style.top = e.clientY + 10 + 'px';
+
+                // Position tooltip near cursor with smart positioning
+                const offset = 15; // Distance from cursor
+                const tooltipRect = tooltip.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                let left = e.clientX + offset;
+                let top = e.clientY + offset;
+
+                // Adjust if tooltip would go off screen
+                if (left + tooltipRect.width > viewportWidth) {
+                    left = e.clientX - tooltipRect.width - offset;
+                }
+                if (top + tooltipRect.height > viewportHeight) {
+                    top = e.clientY - tooltipRect.height - offset;
+                }
+
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
 
                 // Convert to world coordinates (matching render function)
                 const worldX = x - VIEW_SIZE/2 + centerCoord.x * 16;
