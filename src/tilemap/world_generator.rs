@@ -43,6 +43,15 @@ impl WorldGenerator {
     }
     }
 
+    pub fn get_seed(&self) -> u64 {
+        self.config.seed
+    }
+
+    pub fn set_seed(&mut self, seed: u64) {
+        self.config.seed = seed;
+        *self.rng.write().unwrap() = Pcg64::seed_from_u64(seed);
+    }
+
     pub fn generate_chunk(&self, coordinate: ChunkCoordinate) -> Chunk {
         let mut chunk = Chunk::new(coordinate, self.config.seed);
 

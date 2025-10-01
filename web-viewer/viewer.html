@@ -200,6 +200,17 @@
     <div class="container">
         <div class="sidebar">
             <div class="controls">
+                <h2>🌍 World Seed</h2>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+                    <input type="number" id="seed-input" placeholder="Enter seed" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.5rem; border-radius: 4px;">
+                    <button onclick="setSeed()" style="padding: 0.5rem 1rem;">🎲 Set Seed</button>
+                </div>
+                <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 1rem;">
+                    Current Seed: <span id="current-seed">Loading...</span>
+                </div>
+            </div>
+
+            <div class="controls">
                 <h2>🎮 View Controls</h2>
                 <button onclick="zoomIn()">🔍+ Zoom In</button>
                 <button onclick="zoomOut()">🔍- Zoom Out</button>
@@ -417,6 +428,54 @@
             centerCoord.x = Math.floor(Math.random() * 20) - 10;
             centerCoord.y = Math.floor(Math.random() * 20) - 10;
             await requestChunks();
+        }
+
+        async function loadSeed() {
+            try {
+                const response = await fetch('/api/seed');
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('current-seed').textContent = data.seed;
+                }
+            } catch (error) {
+                console.error('Failed to load seed:', error);
+            }
+        }
+
+        async function setSeed() {
+            const seedInput = document.getElementById('seed-input');
+            const newSeed = parseInt(seedInput.value);
+
+            if (isNaN(newSeed)) {
+                alert('Please enter a valid number for the seed');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/seed', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ seed: newSeed })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('current-seed').textContent = data.seed;
+
+                    // Clear existing world data and regenerate
+                    worldData.chunks = {};
+                    centerCoord.x = 0;
+                    centerCoord.y = 0;
+                    await requestChunks();
+                } else {
+                    alert('Failed to update seed');
+                }
+            } catch (error) {
+                console.error('Failed to set seed:', error);
+                alert('Failed to update seed');
+            }
         }
 
         function render() {
@@ -716,6 +775,9 @@
         animate();
 
         async function initializeViewer() {
+            // Load current seed
+            await loadSeed();
+
             // Load initial world info
             const worldInfo = await fetchData('/api/world_info');
             if (worldInfo) {
