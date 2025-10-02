@@ -66,24 +66,32 @@ export class Renderer {
         this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.clip();
 
-        // Apply drag offset by translating the canvas
-        this.ctx.translate(dragOffset.x, dragOffset.y);
+        // Calculate camera position in world tiles (integer part)
+        const cameraOffsetX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE);
+        const cameraOffsetY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE);
+
+        // Calculate sub-pixel offset for smooth panning (remainder)
+        const pixelOffsetX = -dragOffset.x % CONFIG.TILE_SIZE;
+        const pixelOffsetY = -dragOffset.y % CONFIG.TILE_SIZE;
+
+        // Apply sub-pixel translation for smooth movement
+        this.ctx.translate(pixelOffsetX, pixelOffsetY);
 
         // Collect resource data for second pass rendering
         const resourcesToRender = [];
 
-        // First pass: Render terrain layers
-        const stats = this.renderTerrain(worldData, resourcesToRender);
+        // First pass: Render terrain layers with camera offset
+        const stats = this.renderTerrain(worldData, resourcesToRender, cameraOffsetX, cameraOffsetY);
 
         // Second pass: Render resources on top (allows overflow beyond tile boundaries)
         this.renderResources(resourcesToRender);
 
-        this.ctx.restore(); // Restore the drag offset translation and clipping
+        this.ctx.restore(); // Restore the translation and clipping
 
         return stats;
     }
 
-    renderTerrain(worldData, resourcesToRender) {
+    renderTerrain(worldData, resourcesToRender, cameraOffsetX, cameraOffsetY) {
         const startX = 0;
         const startY = 0;
         const endX = CONFIG.VIEW_SIZE_X;
@@ -100,9 +108,9 @@ export class Renderer {
 
         for (let y = startY; y < endY; y++) {
             for (let x = startX; x < endX; x++) {
-                // Simple fixed coordinate system: render area around chunk 0,0
-                const worldX = x - Math.floor(CONFIG.VIEW_SIZE_X / 2);
-                const worldY = y - Math.floor(CONFIG.VIEW_SIZE_Y / 2);
+                // Calculate world coordinates based on camera position
+                const worldX = x + cameraOffsetX - Math.floor(CONFIG.VIEW_SIZE_X / 2);
+                const worldY = y + cameraOffsetY - Math.floor(CONFIG.VIEW_SIZE_Y / 2);
 
                 // Get chunk coordinates
                 const chunkX = Math.floor(worldX / 16);
