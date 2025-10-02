@@ -21,7 +21,7 @@ pub struct UtilityScore {
 
 /// Planner configuration
 const UTILITY_THRESHOLD: f32 = 0.3; // Only queue actions above this utility
-const MAX_SEARCH_RADIUS: i32 = 30; // Max tiles to search for resources
+const MAX_SEARCH_RADIUS: i32 = 100; // Max tiles to search for resources (wider range to prevent death from thirst)
 
 /// System that plans actions for entities every frame
 /// This runs async (not tick-synced) for responsiveness
