@@ -19,7 +19,7 @@ use serialization::{WorldSerializationPlugin, WorldSaveRequest, WorldLoadRequest
 use cached_world::CachedWorldPlugin;
 use world_loader::WorldLoader;
 use pathfinding::{PathfindingGrid, process_pathfinding_requests};
-use entities::{EntitiesPlugin, spawn_humans, spawn_rabbits};
+use entities::{EntitiesPlugin, spawn_humans, spawn_rabbits, spawn_rabbit, spawn_deer};
 use simulation::SimulationPlugin;
 use ai::TQUAIPlugin;
 
@@ -145,7 +145,7 @@ fn spawn_wanderers(
     println!("🎯 LIFE_SIMULATOR: Spawning 5 rabbits for testing...");
     
     // Import the spawn function that attaches BehaviorConfig
-    use entities::spawn_rabbit;
+    // use entities::spawn_rabbit;  // already imported above
     
     // Find walkable spawn positions near origin
     use rand::Rng;
@@ -153,6 +153,7 @@ fn spawn_wanderers(
     
     let rabbit_names = ["Bugs", "Roger", "Thumper", "Peter", "Clover"];
     let mut spawned_count = 0;
+    let mut first_rabbit_pos: Option<bevy::math::IVec2> = None;
     
     for (idx, name) in rabbit_names.iter().enumerate() {
         // Try to find a walkable tile near origin
@@ -170,6 +171,9 @@ fn spawn_wanderers(
         if let Some(spawn_pos) = spawn_pos {
             // Use the proper spawn function that attaches BehaviorConfig
             let rabbit = spawn_rabbit(&mut commands, *name, spawn_pos);
+            if first_rabbit_pos.is_none() {
+                first_rabbit_pos = Some(spawn_pos);
+            }
             spawned_count += 1;
             println!("   ✅ Spawned rabbit #{}: {} 🐇 at {:?}", idx + 1, name, spawn_pos);
         } else {
@@ -177,10 +181,29 @@ fn spawn_wanderers(
         }
     }
     
+    // Spawn one deer near the first rabbit as a following example
+    if let Some(base_pos) = first_rabbit_pos {
+        // Try to find a walkable tile within 6 tiles of the first rabbit
+        let deer_pos = (0..30).find_map(|_| {
+            let dx = rng.gen_range(-6..=6);
+            let dy = rng.gen_range(-6..=6);
+            let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
+            if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
+        });
+        if let Some(deer_pos) = deer_pos {
+            let deer = spawn_deer(&mut commands, "Bambi", deer_pos);
+            println!("   🦌 Spawned deer 'Bambi' near first rabbit at {:?}", deer_pos);
+            println!("   🦌 Deer will follow the nearest rabbit while needs are low");
+        } else {
+            eprintln!("   ⚠️ Failed to find a walkable spawn position for deer near first rabbit");
+        }
+    }
+    
     if spawned_count > 0 {
         println!("✅ LIFE_SIMULATOR: Spawned {} rabbits successfully!", spawned_count);
         println!("   📊 Rabbits will only move when thirsty/hungry (no wandering)");
         println!("   🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range");
+        println!("   🦌 Example: Deer follows the nearest rabbit while idle");
         println!("🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html");
         println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
     } else {

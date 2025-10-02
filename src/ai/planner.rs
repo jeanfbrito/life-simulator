@@ -4,13 +4,13 @@
 /// queues high-utility actions for execution on ticks.
 
 use bevy::prelude::*;
-use crate::entities::{Rabbit, TilePosition, stats::{Thirst, Hunger, Energy}, BehaviorConfig};
+use crate::entities::{Rabbit, Deer, TilePosition, stats::{Thirst, Hunger, Energy}, BehaviorConfig};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 use super::action::ActionType;
 use super::queue::ActionQueue;
 use super::consideration::{ThirstConsideration, DistanceConsideration, ConsiderationSet, CombinationMethod};
-use super::behaviors::{evaluate_grazing_behavior, evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_resting_behavior};
+use super::behaviors::{evaluate_grazing_behavior, evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_resting_behavior, evaluate_follow_behavior};
 
 /// Utility score with associated action
 #[derive(Debug, Clone)]
@@ -28,20 +28,22 @@ const UTILITY_THRESHOLD: f32 = 0.05; // Only queue actions above this utility (l
 pub fn plan_entity_actions(
     mut queue: ResMut<ActionQueue>,
     rabbit_query: Query<(Entity, &TilePosition, &Thirst, &Hunger, &Energy, &BehaviorConfig), With<Rabbit>>,
+    deer_query: Query<(Entity, &TilePosition, &Thirst, &Hunger, &Energy, &BehaviorConfig), With<Deer>>,
+    rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
     world_loader: Res<WorldLoader>,
     tick: Res<crate::simulation::SimulationTick>,
 ) {
     // Plan for each rabbit
     for (entity, position, thirst, hunger, energy, behavior_config) in rabbit_query.iter() {
-        // Skip if entity already has an action queued/active
         if queue.has_action(entity) {
             continue;
         }
-        
-        // Evaluate all possible actions
-        let actions = evaluate_entity_actions(entity, position, thirst, hunger, energy, behavior_config, &world_loader);
-        
-        // Debug: Log all evaluated actions
+
+        // Delegate rabbit behavior evaluation to the rabbit module
+        let actions = crate::entities::types::rabbit::RabbitBehavior::evaluate_actions(
+            position, thirst, hunger, energy, behavior_config, &world_loader,
+        );
+
         if !actions.is_empty() {
             info!(
                 "🧠 Entity {:?} at {:?} - Thirst: {:.1}% - Evaluated {} actions",
@@ -79,6 +81,64 @@ pub fn plan_entity_actions(
         } else if has_actions {
             warn!(
                 "❌ Entity {:?} - No actions above threshold {:.2}",
+                entity,
+                UTILITY_THRESHOLD
+            );
+        }
+    }
+
+    // Plan for each deer
+    let rabbit_list: Vec<(Entity, IVec2)> = rabbit_positions
+        .iter()
+        .map(|(e, pos)| (e, pos.tile))
+        .collect();
+
+    for (entity, position, thirst, hunger, energy, behavior_config) in deer_query.iter() {
+        if queue.has_action(entity) {
+            continue;
+        }
+
+        // Delegate deer behavior evaluation to the deer module
+        let actions = crate::entities::types::deer::DeerBehavior::evaluate_actions(
+            entity, position, thirst, hunger, energy, behavior_config, &world_loader, &rabbit_list,
+        );
+
+        if !actions.is_empty() {
+            info!(
+                "🧠 Deer {:?} at {:?} - Thirst: {:.1}% - Evaluated {} actions",
+                entity,
+                position.tile,
+                thirst.0.percentage(),
+                actions.len()
+            );
+            for action in &actions {
+                info!("   - {:?} utility: {:.3}", action.action_type, action.utility);
+            }
+        }
+
+        let has_actions = !actions.is_empty();
+
+        if let Some(best_action) = actions.into_iter()
+            .filter(|a| a.utility >= UTILITY_THRESHOLD)
+            .max_by(|a, b| a.utility.partial_cmp(&b.utility).unwrap())
+        {
+            info!(
+                "✅ Deer {:?} queuing action {:?} with utility {:.2}",
+                entity,
+                best_action.action_type,
+                best_action.utility
+            );
+            
+            queue.queue_action(
+                entity,
+                best_action.action_type,
+                best_action.utility,
+                best_action.priority,
+                tick.0,
+            );
+        } else if has_actions {
+            warn!(
+                "❌ Deer {:?} - No actions above threshold {:.2}",
                 entity,
                 UTILITY_THRESHOLD
             );

@@ -5,6 +5,7 @@
 use bevy::prelude::*;
 use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature, CurrentAction};
 use super::types::rabbit::RabbitBehavior;
+use super::types::deer::DeerBehavior;
 use crate::pathfinding::PathfindingGrid;
 use rand::Rng;
 
@@ -125,6 +126,28 @@ pub fn spawn_rabbit(
         RabbitBehavior::config(), // Attach behavior configuration
         CurrentAction::none(), // Track current action for viewer
         // NO Wanderer component - movement driven by utility AI!
+    )).id()
+}
+
+/// Spawn a deer entity
+pub fn spawn_deer(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: IVec2,
+) -> Entity {
+    let template = EntityTemplate::DEER;
+    
+    commands.spawn((
+        Creature {
+            name: name.into(),
+            species: template.species.to_string(),
+        },
+        Deer,
+        TilePosition::from_tile(position),
+        MovementSpeed::custom(template.movement_speed),
+        EntityStatsBundle::default(),
+        DeerBehavior::config(), // Attach behavior configuration
+        CurrentAction::none(), // Track current action for viewer
     )).id()
 }
 

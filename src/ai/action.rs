@@ -8,7 +8,7 @@ use crate::entities::stats::{Thirst, Hunger, Energy};
 use crate::entities::{TilePosition, MoveOrder};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
-use crate::pathfinding::PathfindingFailed;
+use crate::pathfinding::{PathfindingFailed, Path};
 
 /// Result of executing an action
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -36,6 +36,7 @@ pub enum ActionType {
     DrinkWater { target_tile: IVec2 },
     Graze { target_tile: IVec2 },   // Move to grass tile (eating happens via auto-eat system)
     Rest { duration_ticks: u32 },
+    Follow { target: Entity, stop_distance: i32 },
     // Future actions:
     // Hunt { target: Entity },
     // Flee { from: Entity },
@@ -407,6 +408,77 @@ impl Action for RestAction {
 }
 
 // =============================================================================
+// FOLLOW ACTION
+// =============================================================================
+
+/// Action: Follow a target entity until within a certain distance
+#[derive(Debug, Clone)]
+pub struct FollowAction {
+    pub target: Entity,
+    pub stop_distance: i32,
+    pub started: bool,
+}
+
+impl FollowAction {
+    pub fn new(target: Entity, stop_distance: i32) -> Self {
+        Self { target, stop_distance, started: false }
+    }
+}
+
+impl Action for FollowAction {
+    fn can_execute(&self, world: &World, _entity: Entity, _tick: u64) -> bool {
+        // Target must still exist and have a position
+        world.get_entity(self.target).is_ok() && world.get::<TilePosition>(self.target).is_some()
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, _tick: u64) -> ActionResult {
+        // Abort on pathfinding failure for this entity
+        if world.get::<PathfindingFailed>(entity).is_some() {
+            warn!("Entity {:?} pathfinding failed while following, aborting Follow action", entity);
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.remove::<PathfindingFailed>();
+            }
+            return ActionResult::Failed;
+        }
+
+        let Some(follower_pos) = world.get::<TilePosition>(entity).copied() else {
+            return ActionResult::Failed;
+        };
+        let Some(target_pos) = world.get::<TilePosition>(self.target).copied() else {
+            return ActionResult::Failed;
+        };
+
+        // Check distance
+        let d = {
+            let diff = (follower_pos.tile - target_pos.tile).abs();
+            diff.x.max(diff.y)
+        };
+
+        if d <= self.stop_distance {
+            return ActionResult::Success;
+        }
+
+        // If not currently moving (no Path), issue/refresh a move order to the target's current tile
+        let is_moving = world.get::<Path>(entity).is_some();
+        if !is_moving {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: target_pos.tile,
+                    allow_diagonal: true,
+                });
+            }
+            self.started = true;
+        }
+
+        ActionResult::InProgress
+    }
+
+    fn name(&self) -> &'static str {
+        "Follow"
+    }
+}
+
+// =============================================================================
 // ACTION FACTORY
 // =============================================================================
 
@@ -421,6 +493,9 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
         }
         ActionType::Rest { duration_ticks } => {
             Box::new(RestAction::new(duration_ticks))
+        }
+        ActionType::Follow { target, stop_distance } => {
+            Box::new(FollowAction::new(target, stop_distance))
         }
     }
 }

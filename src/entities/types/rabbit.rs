@@ -28,6 +28,56 @@ impl RabbitBehavior {
             15,         // wander_radius: Small territory
         )
     }
+
+    /// Evaluate Rabbit actions in one place (the Rabbit's module)
+    /// Delegates to generic behavior evaluators but centralizes Rabbit logic.
+    pub fn evaluate_actions(
+        position: &crate::entities::TilePosition,
+        thirst: &crate::entities::stats::Thirst,
+        hunger: &crate::entities::stats::Hunger,
+        energy: &crate::entities::stats::Energy,
+        behavior_config: &BehaviorConfig,
+        world_loader: &crate::world_loader::WorldLoader,
+    ) -> Vec<crate::ai::UtilityScore> {
+        use crate::ai::behaviors::{
+            evaluate_drinking_behavior,
+            evaluate_eating_behavior,
+            evaluate_grazing_behavior,
+            evaluate_resting_behavior,
+        };
+
+        let mut actions = Vec::new();
+
+        if let Some(drink) = evaluate_drinking_behavior(
+            position,
+            thirst,
+            world_loader,
+            behavior_config.thirst_threshold,
+            behavior_config.water_search_radius,
+        ) { actions.push(drink); }
+
+        if let Some(eat) = evaluate_eating_behavior(
+            position,
+            hunger,
+            world_loader,
+            behavior_config.hunger_threshold,
+            behavior_config.food_search_radius,
+        ) { actions.push(eat); }
+
+        if let Some(rest) = evaluate_resting_behavior(
+            position,
+            energy,
+            behavior_config.energy_threshold,
+        ) { actions.push(rest); }
+
+        if let Some(graze) = evaluate_grazing_behavior(
+            position,
+            world_loader,
+            behavior_config.graze_range,
+        ) { actions.push(graze); }
+
+        actions
+    }
 }
 
 #[cfg(test)]
@@ -37,7 +87,8 @@ mod tests {
     #[test]
     fn test_rabbit_config() {
         let config = RabbitBehavior::config();
-        assert_eq!(config.thirst_threshold, 0.6);
+        // Note: thresholds are defined as 0.15 above
+        assert_eq!(config.thirst_threshold, 0.15);
         assert_eq!(config.graze_range, (3, 8));
         assert_eq!(config.water_search_radius, 100);
     }

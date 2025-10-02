@@ -37,8 +37,10 @@ pub mod grazing;
 pub mod drinking;
 pub mod eating;
 pub mod resting;
+pub mod follow;
 
 pub use grazing::evaluate_grazing_behavior;
 pub use drinking::evaluate_drinking_behavior;
 pub use eating::evaluate_eating_behavior;
 pub use resting::evaluate_resting_behavior;
+pub use follow::evaluate_follow_behavior;

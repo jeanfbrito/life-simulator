@@ -31,7 +31,7 @@ pub use stats::{
 pub use entity_types::{
     Human, Rabbit, Deer, Wolf,
     EntityTemplate,
-    spawn_human, spawn_rabbit,
+    spawn_human, spawn_rabbit, spawn_deer,
     spawn_humans, spawn_rabbits,
     count_entities_by_type,
 };

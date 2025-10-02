@@ -4,6 +4,7 @@
 /// Each entity can have a BehaviorConfig component attached that defines its AI parameters.
 
 pub mod rabbit;
+pub mod deer;
 
 use bevy::prelude::*;
 
