@@ -116,7 +116,7 @@ impl Default for TickMetrics {
 #[derive(Resource, Debug)]
 pub struct TickAccumulator {
     /// Accumulated time since last tick
-    accumulated: f32,
+    pub accumulated: f32,
     /// Number of ticks that should run this frame
     pub pending_ticks: u32,
 }

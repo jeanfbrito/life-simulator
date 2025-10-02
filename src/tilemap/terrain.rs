@@ -45,9 +45,9 @@ impl TerrainType {
 
     pub fn movement_cost(&self) -> f32 {
         match self {
-            TerrainType::Grass | TerrainType::Dirt => 1.0,
+            TerrainType::Grass | TerrainType::Dirt | TerrainType::Sand => 1.0,
             TerrainType::Stone => 1.2,
-            TerrainType::Sand | TerrainType::Snow => 1.5,
+            TerrainType::Snow => 1.5,
             TerrainType::Forest => 1.8,
             TerrainType::ShallowWater | TerrainType::Swamp => 2.0,
             TerrainType::Desert => 1.3,

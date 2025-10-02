@@ -33,9 +33,10 @@ impl Plugin for TQUAIPlugin {
             ).run_if(should_tick))
             
             // Frame-rate systems (run every frame for responsiveness)
+            // Wait for WorldLoader resource to be available before planning
             .add_systems(Update, (
                 planner::plan_entity_actions,
-            ));
+            ).run_if(resource_exists::<crate::world_loader::WorldLoader>));
     }
 }
 

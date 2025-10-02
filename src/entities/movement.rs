@@ -86,7 +86,7 @@ pub fn initiate_pathfinding(
             origin: position.tile,
             destination: order.destination,
             allow_diagonal: order.allow_diagonal,
-            max_steps: Some(1000), // Prevent infinite search
+            max_steps: Some(5000), // Prevent infinite search (needs to be high for fragmented world terrain)
         });
 
         info!(

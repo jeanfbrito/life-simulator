@@ -27,17 +27,17 @@ mod web_server_simple;
 
 fn main() {
     println!("🚀 Starting Life Simulator (Headless Mode)");
+    println!("🔧 Configuring Bevy app with MinimalPlugins...");
 
     App::new()
         .add_plugins(
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0))),
         )
-        .add_plugins(TilemapPlugin)
-        .add_plugins(WorldSerializationPlugin)
+        .add_plugins(bevy::log::LogPlugin::default())  // Enable logging!
+        // TilemapPlugin removed - we're loading a world, not generating one
+        // WorldSerializationPlugin removed - not needed for running simulation
         .add_plugins(CachedWorldPlugin)
-        .add_plugins(SimulationPlugin)  // Tick system
-        .add_plugins(EntitiesPlugin)     // Movement & AI
-        .add_plugins(TQUAIPlugin)        // Utility AI system
+        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin))  // Core plugins
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
@@ -46,7 +46,7 @@ fn main() {
             process_pathfinding_requests,  // Async pathfinding
             simulation_system,
             save_load_system.after(simulation_system),
-        ))
+        ).run_if(resource_exists::<WorldLoader>))
         .run();
 }
 

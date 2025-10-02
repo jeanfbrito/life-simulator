@@ -21,6 +21,7 @@ pub struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
+        info!("🔌 SimulationPlugin: Installing tick systems...");
         app
             // Resources
             .insert_resource(SimulationTick::default())
@@ -29,12 +30,25 @@ impl Plugin for SimulationPlugin {
             .insert_resource(TickMetrics::default())
             .insert_resource(TickAccumulator::default())
             
-            // Core tick systems run in Update (NOT FixedUpdate)
+            // Core tick systems run in Update schedule
             .add_systems(Update, (
+                diagnostic_heartbeat,
                 accumulate_ticks.before(run_simulation_ticks),
                 run_simulation_ticks,
                 handle_speed_controls,
             ));
+        info!("✅ SimulationPlugin: Tick systems installed");
+    }
+}
+
+/// Diagnostic system to verify Update schedule is running
+fn diagnostic_heartbeat() {
+    static mut HEARTBEAT: u32 = 0;
+    unsafe {
+        HEARTBEAT += 1;
+        if HEARTBEAT <= 3 || HEARTBEAT % 600 == 0 {
+            info!("💓 Heartbeat #{} - Update schedule is running", HEARTBEAT);
+        }
     }
 }
 
@@ -52,8 +66,19 @@ fn accumulate_ticks(
     }
     
     let tick_duration = 1.0 / BASE_TICK_RATE as f32;
-    let ticks = accumulator.update(time.delta_secs(), tick_duration, speed.multiplier);
+    let delta = time.delta_secs();
+    let ticks = accumulator.update(delta, tick_duration, speed.multiplier);
     state.should_tick = ticks > 0;
+    
+    // Debug: Log first few frames
+    static mut FRAME_COUNT: u32 = 0;
+    unsafe {
+        FRAME_COUNT += 1;
+        if FRAME_COUNT <= 5 || (FRAME_COUNT % 100 == 0) {
+            info!("🔍 Frame {}: delta={:.4}s, ticks={}, accumulated={:.4}", 
+                FRAME_COUNT, delta, ticks, accumulator.accumulated);
+        }
+    }
 }
 
 /// System that runs simulation ticks when accumulated

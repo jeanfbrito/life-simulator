@@ -83,7 +83,14 @@ fn find_adjacent_walkable_tile(
             if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                 // Must be walkable but NOT water
                 if terrain.is_walkable() && !matches!(terrain, TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water) {
-                    return Some(check_pos);
+                    // CRITICAL: Also check that tile doesn't have resources blocking it
+                    let has_blocking_resource = world_loader.get_resource_at(check_pos.x, check_pos.y)
+                        .map(|r| !r.is_empty())
+                        .unwrap_or(false);
+                    
+                    if !has_blocking_resource {
+                        return Some(check_pos);
+                    }
                 }
             }
         }

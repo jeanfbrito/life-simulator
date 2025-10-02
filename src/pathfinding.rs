@@ -173,8 +173,15 @@ pub fn find_path(
     allow_diagonal: bool,
     max_steps: Option<u32>,
 ) -> Option<Path> {
+    // Early exit if origin is not walkable
+    if !grid.is_walkable(origin) {
+        warn!("Pathfinding: Origin {:?} is not walkable! Cost: {}", origin, grid.get_cost(origin));
+        return None;
+    }
+    
     // Early exit if destination is not walkable
     if !grid.is_walkable(destination) {
+        warn!("Pathfinding: Destination {:?} is not walkable! Cost: {}", destination, grid.get_cost(destination));
         return None;
     }
 
@@ -194,6 +201,8 @@ pub fn find_path(
         // Check step limit
         if let Some(max) = max_steps {
             if steps >= max {
+                warn!("Pathfinding: Max steps ({}) reached. Origin: {:?}, Dest: {:?}, Explored: {}",
+                    max, origin, destination, explored.len());
                 return None; // Failed - too many steps
             }
         }
@@ -201,6 +210,7 @@ pub fn find_path(
 
         // Reached destination!
         if current.index == destination {
+            debug!("Pathfinding: SUCCESS! Steps: {}, Explored: {}", steps, explored.len());
             return Some(reconstruct_path(&all_nodes, origin, destination));
         }
 
@@ -239,6 +249,8 @@ pub fn find_path(
         }
     }
 
+    warn!("Pathfinding: No path found! Origin: {:?}, Dest: {:?}, Steps: {}, Explored: {}, To explore: {}",
+        origin, destination, steps, explored.len(), to_explore.len());
     None // No path found
 }
 

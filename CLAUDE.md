@@ -407,7 +407,10 @@ Before considering map viewer functionality complete, verify:
 - `/Users/jean/Github/world-simulator` - Terrain generation inspiration
 - `/Users/jean/Github/dogoap` - AI and behavior tree reference
 - `/Users/jean/Github/big-brain` - AI planning and decision-making reference
-- `/Users/jean/Github/bevy_entitiles` - Tile-based entity system reference
+- `/Users/jean/Github/bevy_entitiles` - Tile-based entity system and **pathfinding algorithm** reference
+  - Key file: `src/algorithm/pathfinding.rs` - Original A* implementation
+  - Our implementation simplified for single-threaded discrete tick simulation
+  - Max steps increased to 5000 (vs original 1000) due to resource-fragmented terrain
 - Procedural content generation techniques for realistic island formation
 
 ## Future Development Ideas
