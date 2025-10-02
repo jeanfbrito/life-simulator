@@ -20,7 +20,7 @@ pub struct UtilityScore {
 }
 
 /// Planner configuration
-const UTILITY_THRESHOLD: f32 = 0.3; // Only queue actions above this utility
+const UTILITY_THRESHOLD: f32 = 0.05; // Only queue actions above this utility (lowered to allow early water seeking)
 const MAX_SEARCH_RADIUS: i32 = 100; // Max tiles to search for resources (wider range to prevent death from thirst)
 
 /// System that plans actions for entities every frame
@@ -41,13 +41,29 @@ pub fn plan_entity_actions(
         // Evaluate all possible actions
         let actions = evaluate_rabbit_actions(entity, position, thirst, &world_loader);
         
+        // Debug: Log all evaluated actions
+        if !actions.is_empty() {
+            info!(
+                "🧠 Entity {:?} at {:?} - Thirst: {:.1}% - Evaluated {} actions",
+                entity,
+                position.tile,
+                thirst.0.percentage(),
+                actions.len()
+            );
+            for action in &actions {
+                info!("   - {:?} utility: {:.3}", action.action_type, action.utility);
+            }
+        }
+        
+        let has_actions = !actions.is_empty();
+        
         // Queue the best action if it's above threshold
         if let Some(best_action) = actions.into_iter()
             .filter(|a| a.utility >= UTILITY_THRESHOLD)
             .max_by(|a, b| a.utility.partial_cmp(&b.utility).unwrap())
         {
-            debug!(
-                "🧠 Entity {:?} planning action {:?} with utility {:.2}",
+            info!(
+                "✅ Entity {:?} queuing action {:?} with utility {:.2}",
                 entity,
                 best_action.action_type,
                 best_action.utility
@@ -59,6 +75,12 @@ pub fn plan_entity_actions(
                 best_action.utility,
                 best_action.priority,
                 tick.0,
+            );
+        } else if has_actions {
+            warn!(
+                "❌ Entity {:?} - No actions above threshold {:.2}",
+                entity,
+                UTILITY_THRESHOLD
             );
         }
     }
@@ -106,8 +128,10 @@ fn evaluate_drink_water_action(
     let distance = position.tile.as_vec2().distance(water_tile.as_vec2());
     let distance_score = (1.0 - (distance / MAX_SEARCH_RADIUS as f32)).max(0.0);
     
-    // Multiply considerations (both must be good for high utility)
-    let utility = thirst_score * distance_score;
+    // Use weighted combination instead of multiplication
+    // This ensures water sources are considered even with low thirst
+    // Thirst weighted at 70%, distance at 30%
+    let utility = (thirst_score * 0.7 + distance_score * 0.3).max(0.1);
     
     // Calculate priority based on urgency
     // Higher thirst = higher priority
@@ -161,20 +185,21 @@ fn evaluate_wander_action(
                     action_type: ActionType::Wander {
                         target_tile: adjusted_target,
                     },
-                    utility: 0.2, // Low constant utility
-                    priority: 10,  // Very low priority
+                    utility: 0.01, // Absolute lowest - only when nothing else to do
+                    priority: 1,  // Lowest priority
                 });
             }
         }
     }
     
     // Wander has constant low utility (idle behavior)
+    // Should only happen when there's absolutely nothing else to do
     Some(UtilityScore {
         action_type: ActionType::Wander {
             target_tile: target,
         },
-        utility: 0.2, // Low constant utility
-        priority: 10,  // Very low priority
+        utility: 0.01, // Absolute lowest - only when nothing else to do
+        priority: 1,  // Lowest priority
     })
 }
 
@@ -210,12 +235,13 @@ fn find_nearest_walkable(
 }
 
 /// Find the nearest water tile (ShallowWater) from a position
+/// Returns a walkable tile ADJACENT to water, not the water tile itself
 fn find_nearest_water(
     from: IVec2,
     max_radius: i32,
     world_loader: &WorldLoader,
 ) -> Option<IVec2> {
-    let mut nearest: Option<(IVec2, f32)> = None;
+    let mut nearest: Option<(IVec2, IVec2, f32)> = None; // (water_pos, adjacent_pos, distance)
     
     // Search in expanding square pattern
     for radius in 1..=max_radius {
@@ -233,14 +259,17 @@ fn find_nearest_water(
                 if let Some(terrain_str) = world_loader.get_terrain_at(check_pos.x, check_pos.y) {
                     if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                         if matches!(terrain, TerrainType::ShallowWater) {
-                            let distance = from.as_vec2().distance(check_pos.as_vec2());
-                            
-                            if let Some((_, best_dist)) = nearest {
-                                if distance < best_dist {
-                                    nearest = Some((check_pos, distance));
+                            // Found water! Now find an adjacent walkable tile
+                            if let Some(adjacent_tile) = find_adjacent_walkable_to_water(check_pos, world_loader) {
+                                let distance = from.as_vec2().distance(adjacent_tile.as_vec2());
+                                
+                                if let Some((_, _, best_dist)) = nearest {
+                                    if distance < best_dist {
+                                        nearest = Some((check_pos, adjacent_tile, distance));
+                                    }
+                                } else {
+                                    nearest = Some((check_pos, adjacent_tile, distance));
                                 }
-                            } else {
-                                nearest = Some((check_pos, distance));
                             }
                         }
                     }
@@ -254,7 +283,41 @@ fn find_nearest_water(
         }
     }
     
-    nearest.map(|(pos, _)| pos)
+    // Return the water tile position (action will handle adjacency)
+    nearest.map(|(water_pos, _, _)| water_pos)
+}
+
+/// Find a walkable tile adjacent to a water tile
+fn find_adjacent_walkable_to_water(
+    water_pos: IVec2,
+    world_loader: &WorldLoader,
+) -> Option<IVec2> {
+    // Check all 8 adjacent tiles (including diagonals)
+    let adjacent_offsets = [
+        IVec2::new(0, 1),
+        IVec2::new(1, 0),
+        IVec2::new(0, -1),
+        IVec2::new(-1, 0),
+        IVec2::new(1, 1),
+        IVec2::new(1, -1),
+        IVec2::new(-1, 1),
+        IVec2::new(-1, -1),
+    ];
+    
+    for offset in adjacent_offsets {
+        let check_pos = water_pos + offset;
+        
+        if let Some(terrain_str) = world_loader.get_terrain_at(check_pos.x, check_pos.y) {
+            if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+                // Must be walkable but NOT water
+                if terrain.is_walkable() && !matches!(terrain, TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water) {
+                    return Some(check_pos);
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 #[cfg(test)]
