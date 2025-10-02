@@ -445,6 +445,13 @@
         let dragStart = { x: 0, y: 0 };
         let dragOffset = { x: 0, y: 0 };
 
+        // Dynamic chunk loading state
+        let loadedChunks = new Set(); // Track which chunks we've loaded
+        let loadingChunks = new Set(); // Track chunks currently being loaded
+        let chunkLoadRadius = 5; // Load chunks in this radius around visible area
+        let chunkLoadTimeout = null; // Debounce timer for chunk loading
+        let lastLoadedCenter = { x: 0, y: 0 }; // Track last loaded center to avoid duplicate requests
+
         // HTTP-based data fetching with CORS workaround
         function fetchData(endpoint) {
             console.log(`Fetching: http://localhost:54321${endpoint}`);
@@ -517,65 +524,109 @@
         }
 
         async function requestChunks() {
-            // Request chunks in the saved world area (7x7 grid from -3 to +3)
+            // Request initial chunks around the center
             const radius = 3; // Load 7x7 chunks (from -3 to +3) - matches saved world area
-            let allChunkData = {};
+            await requestChunksInArea(centerCoord.x, centerCoord.y, radius);
+        }
 
-            // Split requests into smaller batches to avoid URL length issues
-            const batchSize = 10; // Request 10 chunks at a time
-            let coords = [];
+        async function requestChunksInArea(centerX, centerY, radius) {
+            const neededChunks = new Set();
 
+            // Calculate which chunks we need
             for (let dx = -radius; dx <= radius; dx++) {
                 for (let dy = -radius; dy <= radius; dy++) {
-                    coords.push(`${centerCoord.x + dx},${centerCoord.y + dy}`);
+                    const chunkX = centerX + dx;
+                    const chunkY = centerY + dy;
+                    const chunkKey = `${chunkX},${chunkY}`;
 
-                    // When we reach batch size, make the request
-                    if (coords.length >= batchSize) {
-                        const coordsQuery = coords.map(c => `coords=${c}`).join('&');
-                        // Request multi-layer data for this batch
-                        const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+                    if (!loadedChunks.has(chunkKey) && !loadingChunks.has(chunkKey)) {
+                        neededChunks.add(chunkKey);
+                    }
+                }
+            }
 
-                        if (data && data.chunk_data) {
-                            // Merge chunk data
-                            Object.assign(allChunkData, data.chunk_data);
+            if (neededChunks.size === 0) {
+                return; // No new chunks to load
+            }
+
+            // Mark chunks as being loaded
+            neededChunks.forEach(chunkKey => loadingChunks.add(chunkKey));
+
+            // Split requests into smaller batches to avoid URL length issues
+            const batchSize = 10;
+            const chunkArray = Array.from(neededChunks);
+
+            for (let i = 0; i < chunkArray.length; i += batchSize) {
+                const batch = chunkArray.slice(i, i + batchSize);
+                const coordsQuery = batch.map(c => `coords=${c}`).join('&');
+
+                try {
+                    const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+
+                    if (data && data.chunk_data) {
+                        for (const [chunkKey, chunkData] of Object.entries(data.chunk_data)) {
+                            // Store the chunk data
+                            if (chunkData.terrain) {
+                                worldData.chunks[chunkKey] = chunkData.terrain;
+                            }
+                            if (chunkData.resources) {
+                                worldData.resources[chunkKey] = chunkData.resources;
+                            }
+
+                            // Mark as loaded
+                            loadedChunks.add(chunkKey);
+                            loadingChunks.delete(chunkKey);
                         }
 
-                        coords = []; // Reset for next batch
+                        updateStats();
+                        updateConnectionStatus(true);
                     }
+                } catch (error) {
+                    console.error('Error loading chunks:', error);
+                    // Remove from loading set on error
+                    batch.forEach(chunkKey => loadingChunks.delete(chunkKey));
                 }
             }
+        }
 
-            // Request remaining chunks
-            if (coords.length > 0) {
-                const coordsQuery = coords.map(c => `coords=${c}`).join('&');
-                const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
-
-                if (data && data.chunk_data) {
-                    Object.assign(allChunkData, data.chunk_data);
-                }
+        // Function to load chunks around the visible area (debounced)
+        function loadVisibleChunksDebounced() {
+            // Clear existing timeout
+            if (chunkLoadTimeout) {
+                clearTimeout(chunkLoadTimeout);
             }
 
-            const data = { chunk_data: allChunkData };
+            // Set new timeout
+            chunkLoadTimeout = setTimeout(async () => {
+                await loadVisibleChunks();
+            }, 200); // 200ms delay
+        }
 
-            if (data && data.chunk_data) {
-                // Extract terrain and resources from multi-layer data
-                worldData.chunks = {};
-                worldData.resources = {};
+        // Function to load chunks around the visible area
+        async function loadVisibleChunks() {
+            // Calculate the center of the current view
+            const viewCenterWorldX = Math.floor(-dragOffset.x / TILE_SIZE) + Math.floor(VIEW_SIZE_X / 2);
+            const viewCenterWorldY = Math.floor(-dragOffset.y / TILE_SIZE) + Math.floor(VIEW_SIZE_Y / 2);
 
-                for (const [chunkKey, chunkData] of Object.entries(data.chunk_data)) {
-                    // The API returns terrain and resources as direct properties
-                    if (chunkData.terrain) {
-                        worldData.chunks[chunkKey] = chunkData.terrain;
-                    }
-                    if (chunkData.resources) {
-                        worldData.resources[chunkKey] = chunkData.resources;
-                    }
-                }
+            const centerChunkX = Math.floor(viewCenterWorldX / 16);
+            const centerChunkY = Math.floor(viewCenterWorldY / 16);
 
-        
-                updateStats();
-                updateConnectionStatus(true);
+            // Only load if we've moved significantly from last loaded center
+            const distanceX = Math.abs(centerChunkX - lastLoadedCenter.x);
+            const distanceY = Math.abs(centerChunkY - lastLoadedCenter.y);
+
+            if (distanceX < 2 && distanceY < 2) {
+                return; // Not enough movement to trigger new loading
             }
+
+            lastLoadedCenter = { x: centerChunkX, y: centerChunkY };
+
+            // Calculate how many chunks are visible
+            const visibleChunkRadiusX = Math.ceil((VIEW_SIZE_X * TILE_SIZE) / 16 / 2) + 2;
+            const visibleChunkRadiusY = Math.ceil((VIEW_SIZE_Y * TILE_SIZE) / 16 / 2) + 2;
+            const visibleRadius = Math.max(visibleChunkRadiusX, visibleChunkRadiusY, chunkLoadRadius);
+
+            await requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
         }
 
         async function loadWorldInfo() {
@@ -615,6 +666,9 @@
             const startY = 0;
             const endX = VIEW_SIZE_X;
             const endY = VIEW_SIZE_Y;
+
+            // Trigger chunk loading for visible area
+            loadVisibleChunksDebounced();
 
             // Track terrain statistics for display
             let totalTiles = 0;
@@ -848,6 +902,8 @@
                 e.preventDefault();
                 isDragging = false;
                 canvas.style.cursor = 'pointer';
+                // Load chunks for the new position immediately when dragging stops
+                loadVisibleChunksDebounced();
             }
         });
 
