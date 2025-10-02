@@ -25,12 +25,12 @@ impl DeerBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        // Deer: lower metabolism — eat/drink less often, tire a bit slower
         EntityStatsBundle {
-            // For now, use same defaults as Rabbit; tweak here if deer needs differ
-            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.10)),
-            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.15)),
-            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),
+            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.07)),  // slower hunger gain
+            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.12)),  // slower thirst gain
+            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.04)), // slower energy drain
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)), // same regen for now
         }
     }
 

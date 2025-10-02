@@ -33,11 +33,12 @@ impl RabbitBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        // Rabbits: higher metabolism — eat/drink more often, tire a bit faster
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.10)),  // default rabbit hunger rate
-            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.15)),  // default thirst rate
-            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),
+            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.14)),  // faster hunger gain
+            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.20)),  // faster thirst gain
+            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.07)), // slightly faster energy drain
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)), // same regen for now
         }
     }
 
