@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Life Simulator Map Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f23 100%);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .status-item {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        #connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .connected { color: #4ade80; }
+        .disconnected { color: #f87171; }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 10;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+        }
+
+        canvas {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            background: #003366; /* DeepWater color as default background */
+            cursor: pointer; /* Finger cursor for interactive map */
+        }
+
+        .controls {
+            margin-bottom: 1.5rem;
+        }
+
+        .controls h2 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.9;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 0.25rem;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .legend {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .legend h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .tooltip {
+            position: fixed; /* Use fixed positioning to follow cursor smoothly */
+            background: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+            max-width: 200px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🗺️ Life Simulator Map Viewer</h1>
+        <div class="status">
+            <div id="connection-status" class="status-item disconnected">
+                <span class="status-dot">⚫</span>
+                <span>Disconnected</span>
+            </div>
+            <div class="status-item">
+                <span>FPS: <span id="fps">0</span></span>
+            </div>
+            <div class="status-item">
+                <span>Chunks: <span id="chunk-count">0</span></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="controls">
+                <h2>🌍 World Information</h2>
+                <div style="font-size: 0.9rem; opacity: 0.8; margin-bottom: 1rem;">
+                    World Name: <span id="current-world">Loading...</span><br>
+                    World Seed: <span id="current-seed">Loading...</span><br>
+                    Total Chunks: <span id="total-chunks">Loading...</span>
+                </div>
+            </div>
+
+            <div class="controls">
+                <h2>🎮 View Controls</h2>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button id="zoom-out" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">➖ Zoom Out</button>
+                    <button id="zoom-in" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">➕ Zoom In</button>
+                    <button id="reset-view" style="flex: 1; padding: 0.5rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; cursor: pointer;">🔄 Reset</button>
+                </div>
+                <div style="margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.7; text-align: center;">
+                    Zoom: <span id="zoom-level">100%</span> | Tile Size: <span id="tile-size-display">8px</span>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-tiles">0</div>
+                    <div class="stat-label">🗺️ Total Tiles</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="walkable-percentage">0%</div>
+                    <div class="stat-label">🚶 Walkable</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="water-percentage">0%</div>
+                    <div class="stat-label">💧 Water</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="forest-percentage">0%</div>
+                    <div class="stat-label">🌲 Forest</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="resource-count">0</div>
+                    <div class="stat-label">🌳 Resources</div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <h3>📋 Terrain Legend</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #33cc33;"></div>
+                    <span>🌱 Grass</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066cc;"></div>
+                    <span>💧 Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #003366;"></div>
+                    <span>🌊 Deep Water</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #cccccc;"></div>
+                    <span>🏖️ Sand</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #666666;"></div>
+                    <span>🪨 Stone</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #006600;"></div>
+                    <span>🌲 Forest</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #999999;"></div>
+                    <span>🏔️ Mountain</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffffff;"></div>
+                    <span>❄️ Snow</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #cc9966;"></div>
+                    <span>🏜️ Desert</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4d6633;"></div>
+                    <span>🐊 Swamp</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8b4513;"></div>
+                    <span>🟫 Dirt</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <canvas id="mapCanvas"></canvas>
+            <div class="tooltip" id="tooltip"></div>
+        </div>
+    </div>
+
+    <!-- Modular JavaScript components -->
+    <script type="module" src="js/config.js"></script>
+    <script type="module" src="js/renderer.js"></script>
+    <script type="module" src="js/chunk-manager.js"></script>
+    <script type="module" src="js/network.js"></script>
+    <script type="module" src="js/controls.js"></script>
+    <script type="module" src="js/app.js"></script>
+
+        // Configuration
+        let TILE_SIZE = 8; // Dynamic tile size for zoom functionality
+        let renderScale = 1.0; // Scale factor for rendering
+        let VIEW_SIZE_X = 100; // Dynamic view width based on container
+        let VIEW_SIZE_Y = 100; // Dynamic view height based on container
+
+        // Terrain colors with improved visibility and contrast
+        const TERRAIN_COLORS = {
+            'Grass': '#3a7f47',      // Brighter grass green
+            'Stone': '#8b8680',       // Lighter stone gray
+            'Sand': '#f4d58f',       // Brighter sand yellow
+            'Water': '#4a90e2',      // Brighter water blue
+            'Dirt': '#8b6239',       // Richer dirt brown
+            'Snow': '#f0f0f0',       // Slightly off-white snow
+            'Forest': '#2d5a2d',     // Darker forest green
+            'Mountain': '#a8a8a8',   // Lighter mountain gray
+            'DeepWater': '#1e3a5f',  // Darker deep water
+            'ShallowWater': '#5ca7d8', // Lighter shallow water
+            'Swamp': '#5a6b3c',      // Brighter swamp green
+            'Desert': '#d4a76a'      // Brighter desert tan
+        };
+
+        // Resource colors and symbols
+        const RESOURCE_COLORS = {
+            'TreeOak': '#0d4d0d',
+            'TreePine': '#0d3d0d',
+            'TreeBirch': '#1d5d1d',
+            'Rock': '#5a5a5a',
+            'Bush': '#2d4d2d',
+            'Flower': '#ff69b4'
+        };
+
+        // Resource symbols for rendering
+        const RESOURCE_SYMBOLS = {
+            'TreeOak': '🌳',
+            'TreePine': '🌲',
+            'TreeBirch': '🪾',
+            'Rock': '🪨',
+            'Bush': '🌳',
+            'Flower': '🌸'
+        };
+
+        // Resource rendering configuration with size and positioning
+        const RESOURCE_CONFIG = {
+            'TreeOak': {
+                sizeMultiplier: 1.4,
+                offsetX: 0,
+                offsetY: -0.3
+            },
+            'TreePine': {
+                sizeMultiplier: 1.6, // Double size (0.8 * 2.0 = 1.6)
+                offsetX: 0,
+                offsetY: -0.5 // Perfectly centered the base of the tree on the grid
+            },
+            'TreeBirch': {
+                sizeMultiplier: 1.4,
+                offsetX: 0,
+                offsetY: -0.3
+            },
+            'Rock': {
+                sizeMultiplier: 0.6,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'Bush': {
+                sizeMultiplier: 0.6,
+                offsetX: 0,
+                offsetY: 0.1
+            },
+            'Flower': {
+                sizeMultiplier: 0.4,
+                offsetX: 0,
+                offsetY: 0
+            }
+        };
+
+        // Canvas setup
+        const canvas = document.getElementById('mapCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas rendering properties
+        canvas.style.imageRendering = 'pixelated';
+        canvas.style.cursor = 'pointer';
+        ctx.imageSmoothingEnabled = false;
+
+        // Function to setup canvas size based on zoom
+        function setupCanvasSize() {
+            const container = canvas.parentElement;
+            const containerRect = container.getBoundingClientRect();
+
+            // Store old view size for drag offset adjustment
+            const oldViewSizeX = VIEW_SIZE_X || 100;
+            const oldViewSizeY = VIEW_SIZE_Y || 100;
+
+            // Calculate tile size based on zoom
+            TILE_SIZE = Math.max(4, Math.floor(8 * renderScale));
+
+            // Calculate exact view size needed to fill canvas
+            // Calculate how many tiles fit exactly in the container
+            const viewWidth = Math.floor(containerRect.width / TILE_SIZE);
+            const viewHeight = Math.floor(containerRect.height / TILE_SIZE);
+
+            // Set view size to exactly match container dimensions
+            VIEW_SIZE_X = Math.max(10, viewWidth);
+            VIEW_SIZE_Y = Math.max(10, viewHeight);
+
+            // Adjust drag offset proportionally to maintain position relative to zoom
+            if (oldViewSizeX !== 0 && oldViewSizeY !== 0) {
+                const scaleX = VIEW_SIZE_X / oldViewSizeX;
+                const scaleY = VIEW_SIZE_Y / oldViewSizeY;
+                dragOffset.x *= scaleX;
+                dragOffset.y *= scaleY;
+            }
+
+            // Set canvas resolution to match container dimensions
+            canvas.width = containerRect.width;
+            canvas.height = containerRect.height;
+
+            // Make canvas fill entire container
+            canvas.style.width = containerRect.width + 'px';
+            canvas.style.height = containerRect.height + 'px';
+            canvas.style.left = '0';
+            canvas.style.top = '0';
+            canvas.style.transform = 'none';
+
+            // Update zoom display
+            updateZoomDisplay();
+        }
+
+        // State
+        let ws = null;
+        let worldData = {
+            chunks: {},
+            resources: {},
+            centerChunk: { x: 0, y: 0 },
+            worldStats: {
+                total_chunks: 0,
+                total_tiles: 0,
+                walkable_tiles: 0,
+                terrain_distribution: {}
+            }
+        };
+        let centerCoord = { x: 0, y: 0 };
+
+        // Map panning state
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragOffset = { x: 0, y: 0 };
+
+        // Initial canvas setup
+        setupCanvasSize();
+
+        // Dynamic chunk loading state
+        let loadedChunks = new Set(); // Track which chunks we've loaded
+        let loadingChunks = new Set(); // Track chunks currently being loaded
+        let chunkLoadRadius = 5; // Load chunks in this radius around visible area
+        let chunkLoadTimeout = null; // Debounce timer for chunk loading
+        let lastLoadedCenter = { x: 0, y: 0 }; // Track last loaded center to avoid duplicate requests
+
+        // HTTP-based data fetching with CORS workaround
+        function fetchData(endpoint) {
+            console.log(`Fetching: http://localhost:54321${endpoint}`);
+
+            // Try fetch first, fallback to our proxy if CORS fails
+            return fetch(`http://localhost:54321${endpoint}`, {
+                mode: 'cors',
+                credentials: 'omit'
+            })
+            .then(response => {
+                console.log(`Response status: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Successfully received data:', data);
+                updateConnectionStatus(true); // Update status on success
+                return data;
+            })
+            .catch(error => {
+                console.error('CORS/fetch error:', error);
+                updateConnectionStatus(false);
+                return null;
+            });
+        }
+
+        function handleMessage(msg) {
+            switch(msg.type) {
+                case 'world_info':
+                    updateWorldInfo(msg.data);
+                    break;
+                case 'chunk_data':
+                    updateChunkData(msg.data);
+                    break;
+                case 'world_stats':
+                    updateWorldStats(msg.data);
+                    break;
+                case 'error':
+                    console.error('Server error:', msg.message);
+                    break;
+                default:
+                    console.log('Unhandled message type:', msg.type);
+                    break;
+            }
+        }
+
+        function updateWorldInfo(data) {
+            if (data.center_chunk) {
+                centerCoord = data.center_chunk;
+                centerCoord.x = data.center_chunk.x || 0;
+                centerCoord.y = data.center_chunk.y || 0;
+            }
+
+            // Request new chunks around the new center
+            requestChunks();
+        }
+
+        function updateChunkData(data) {
+            if (data.chunk_data) {
+                worldData.chunks = data.chunk_data;
+                updateStats();
+            }
+        }
+
+        function updateWorldStats(data) {
+            worldData.worldStats = data;
+            updateStats();
+        }
+
+        async function requestChunks() {
+            // Request initial chunks around the center
+            const radius = 3; // Load 7x7 chunks (from -3 to +3) - matches saved world area
+            await requestChunksInArea(centerCoord.x, centerCoord.y, radius);
+        }
+
+        async function requestChunksInArea(centerX, centerY, radius) {
+            const neededChunks = new Set();
+
+            // Calculate which chunks we need
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
+                    const chunkX = centerX + dx;
+                    const chunkY = centerY + dy;
+                    const chunkKey = `${chunkX},${chunkY}`;
+
+                    if (!loadedChunks.has(chunkKey) && !loadingChunks.has(chunkKey)) {
+                        neededChunks.add(chunkKey);
+                    }
+                }
+            }
+
+            if (neededChunks.size === 0) {
+                return; // No new chunks to load
+            }
+
+            // Mark chunks as being loaded
+            neededChunks.forEach(chunkKey => loadingChunks.add(chunkKey));
+
+            // Split requests into smaller batches to avoid URL length issues
+            const batchSize = 10;
+            const chunkArray = Array.from(neededChunks);
+
+            for (let i = 0; i < chunkArray.length; i += batchSize) {
+                const batch = chunkArray.slice(i, i + batchSize);
+                const coordsQuery = batch.map(c => `coords=${c}`).join('&');
+
+                try {
+                    const data = await fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+
+                    if (data && data.chunk_data) {
+                        for (const [chunkKey, chunkData] of Object.entries(data.chunk_data)) {
+                            // Store the chunk data
+                            if (chunkData.terrain) {
+                                worldData.chunks[chunkKey] = chunkData.terrain;
+                            }
+                            if (chunkData.resources) {
+                                worldData.resources[chunkKey] = chunkData.resources;
+                            }
+
+                            // Mark as loaded
+                            loadedChunks.add(chunkKey);
+                            loadingChunks.delete(chunkKey);
+                        }
+
+                        updateStats();
+                        updateConnectionStatus(true);
+                    }
+                } catch (error) {
+                    console.error('Error loading chunks:', error);
+                    // Remove from loading set on error
+                    batch.forEach(chunkKey => loadingChunks.delete(chunkKey));
+                }
+            }
+        }
+
+        // Function to load chunks around the visible area (debounced)
+        function loadVisibleChunksDebounced() {
+            // Clear existing timeout
+            if (chunkLoadTimeout) {
+                clearTimeout(chunkLoadTimeout);
+            }
+
+            // Set new timeout
+            chunkLoadTimeout = setTimeout(async () => {
+                await loadVisibleChunks();
+            }, 100); // 100ms delay for more responsive loading
+        }
+
+        // Function to load chunks around the visible area
+        async function loadVisibleChunks() {
+            // Calculate the center of the current view in world coordinates
+            const viewCenterWorldX = Math.floor(-dragOffset.x / TILE_SIZE) + Math.floor(VIEW_SIZE_X / 2);
+            const viewCenterWorldY = Math.floor(-dragOffset.y / TILE_SIZE) + Math.floor(VIEW_SIZE_Y / 2);
+
+            const centerChunkX = Math.floor(viewCenterWorldX / 16);
+            const centerChunkY = Math.floor(viewCenterWorldY / 16);
+
+            // Only load if we've moved significantly from last loaded center
+            const distanceX = Math.abs(centerChunkX - lastLoadedCenter.x);
+            const distanceY = Math.abs(centerChunkY - lastLoadedCenter.y);
+
+            if (distanceX < 1 && distanceY < 1) {
+                return; // Not enough movement to trigger new loading
+            }
+
+            lastLoadedCenter = { x: centerChunkX, y: centerChunkY };
+
+            // Calculate the actual visible area in world coordinates
+            const viewStartWorldX = Math.floor(-dragOffset.x / TILE_SIZE);
+            const viewStartWorldY = Math.floor(-dragOffset.y / TILE_SIZE);
+            const viewEndWorldX = viewStartWorldX + VIEW_SIZE_X;
+            const viewEndWorldY = viewStartWorldY + VIEW_SIZE_Y;
+
+            // Convert to chunk coordinates and add buffer
+            const startChunkX = Math.floor(viewStartWorldX / 16) - 1; // Add 1 chunk buffer
+            const startChunkY = Math.floor(viewStartWorldY / 16) - 1;
+            const endChunkX = Math.floor(viewEndWorldX / 16) + 1; // Add 1 chunk buffer
+            const endChunkY = Math.floor(viewEndWorldY / 16) + 1;
+
+            // Calculate radius from the bounds
+            const radiusX = Math.max(Math.abs(centerChunkX - startChunkX), Math.abs(endChunkX - centerChunkX));
+            const radiusY = Math.max(Math.abs(centerChunkY - startChunkY), Math.abs(endChunkY - centerChunkY));
+            const visibleRadius = Math.max(radiusX, radiusY, 3); // Minimum radius of 3
+
+            await requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
+        }
+
+        async function loadWorldInfo() {
+            try {
+                // Load current world info
+                const currentData = await fetchData('/api/world/current');
+                if (currentData) {
+                    document.getElementById('current-world').textContent = currentData.name;
+                    document.getElementById('current-seed').textContent = currentData.seed;
+                }
+
+                // Load additional world info
+                const worldData = await fetchData('/api/world_info');
+                if (worldData) {
+                    document.getElementById('total-chunks').textContent = worldData.chunk_count;
+                }
+            } catch (error) {
+                console.error('Failed to load world info:', error);
+                document.getElementById('current-world').textContent = 'Error';
+                document.getElementById('current-seed').textContent = 'Error';
+                document.getElementById('total-chunks').textContent = 'Error';
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply drag offset by translating the canvas
+            ctx.save();
+            ctx.translate(dragOffset.x, dragOffset.y);
+
+            // Collect resource data for second pass rendering
+            const resourcesToRender = [];
+
+            // First pass: Render terrain layers
+            const startX = 0;
+            const startY = 0;
+            const endX = VIEW_SIZE_X;
+            const endY = VIEW_SIZE_Y;
+
+            // Trigger chunk loading for visible area
+            loadVisibleChunksDebounced();
+
+            // Track terrain statistics for display
+            let totalTiles = 0;
+            let walkableTiles = 0;
+            let resourceCount = 0;
+            let waterTiles = 0;
+            let forestTiles = 0;
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    // Simple fixed coordinate system: render area around chunk 0,0
+                    // Each tile in our view corresponds to a world tile
+                    const worldX = x - Math.floor(VIEW_SIZE_X / 2);
+                    const worldY = y - Math.floor(VIEW_SIZE_Y / 2);
+
+                    // Get chunk coordinates
+                    const chunkX = Math.floor(worldX / 16);
+                    const chunkY = Math.floor(worldY / 16);
+                    const localX = ((worldX % 16) + 16) % 16;
+                    const localY = ((worldY % 16) + 16) % 16;
+
+                    const chunkKey = `${chunkX},${chunkY}`;
+                    let terrainType = 'DeepWater'; // Default to deep water when no terrain loaded
+
+                    // Access the actual terrain data from loaded chunks
+                    if (worldData.chunks[chunkKey] &&
+                        worldData.chunks[chunkKey][localY] &&
+                        worldData.chunks[chunkKey][localY][localX]) {
+                        terrainType = worldData.chunks[chunkKey][localY][localX];
+                    }
+
+                    // Draw tile
+                    const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS['DeepWater'];
+                    ctx.fillStyle = color;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Collect resource data for later rendering
+                    let resourceType = '';
+                    if (worldData.resources[chunkKey] &&
+                        worldData.resources[chunkKey][localY] &&
+                        worldData.resources[chunkKey][localY][localX]) {
+                        resourceType = worldData.resources[chunkKey][localY][localX];
+                    }
+
+                    if (resourceType && resourceType !== '') {
+                        resourcesToRender.push({
+                            type: resourceType,
+                            x: x,
+                            y: y
+                        });
+                        resourceCount++;
+                    }
+
+                    // Draw subtle grid lines
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.lineWidth = 0.3;
+                    ctx.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                    // Count terrain types for statistics
+                    totalTiles++;
+                    if (terrainType !== 'Water' && terrainType !== 'DeepWater' && terrainType !== 'Mountain') {
+                        walkableTiles++;
+                    }
+                    if (terrainType === 'Water' || terrainType === 'DeepWater' || terrainType === 'ShallowWater') {
+                        waterTiles++;
+                    }
+                    if (terrainType === 'Forest') {
+                        forestTiles++;
+                    }
+                }
+            }
+
+            // Second pass: Render resources on top (allows overflow beyond tile boundaries)
+            ctx.save(); // Save context state
+            for (const resource of resourcesToRender) {
+                // Get resource configuration or use defaults
+                const config = RESOURCE_CONFIG[resource.type] || {
+                    sizeMultiplier: 0.8,
+                    offsetX: 0,
+                    offsetY: 0
+                };
+
+                // Calculate position with offsets
+                const baseX = resource.x * TILE_SIZE + TILE_SIZE / 2;
+                const baseY = resource.y * TILE_SIZE + TILE_SIZE / 2;
+                const centerX = baseX + (config.offsetX * TILE_SIZE);
+                const centerY = baseY + (config.offsetY * TILE_SIZE);
+
+                // Draw resource emoji with dynamic sizing
+                ctx.font = `${TILE_SIZE * config.sizeMultiplier}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Add subtle shadow for better visibility
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+                ctx.shadowBlur = 1;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(RESOURCE_SYMBOLS[resource.type] || '•', centerX, centerY);
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+            ctx.restore(); // Restore context state (this also restores the drag offset)
+            ctx.restore(); // Restore the drag offset translation
+
+            // Update statistics display
+            if (totalTiles > 0) {
+                document.getElementById('total-tiles').textContent = totalTiles;
+                document.getElementById('walkable-percentage').textContent =
+                    Math.round((walkableTiles / totalTiles) * 100) + '%';
+                document.getElementById('water-percentage').textContent =
+                    Math.round((waterTiles / totalTiles) * 100) + '%';
+                document.getElementById('forest-percentage').textContent =
+                    Math.round((forestTiles / totalTiles) * 100) + '%';
+                document.getElementById('resource-count').textContent = resourceCount;
+            }
+        }
+
+        function updateStats() {
+            if (worldData.worldStats) {
+                document.getElementById('chunk-count').textContent =
+                    Object.keys(worldData.chunks).length + '/' + worldData.worldStats.total_chunks;
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connection-status');
+            if (connected) {
+                status.className = 'status-item connected';
+                status.innerHTML = '<span class="status-dot">🟢</span><span>Connected</span>';
+            } else {
+                status.className = 'status-item disconnected';
+                status.innerHTML = '<span class="status-dot">🔴</span><span>Disconnected</span>';
+            }
+        }
+
+        // Mouse move for hover info only
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+
+            // Convert mouse position to canvas coordinates
+            const canvasX = e.clientX - rect.left - dragOffset.x;
+            const canvasY = e.clientY - rect.top - dragOffset.y;
+            const x = Math.floor(canvasX / TILE_SIZE);
+            const y = Math.floor(canvasY / TILE_SIZE);
+
+  
+            if (x >= 0 && x < VIEW_SIZE_X && y >= 0 && y < VIEW_SIZE_Y) {
+                const tooltip = document.getElementById('tooltip');
+                tooltip.style.display = 'block';
+
+                // Position tooltip near cursor with smart positioning
+                const offset = 15; // Distance from cursor
+                const tooltipRect = tooltip.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                let left = e.clientX + offset;
+                let top = e.clientY + offset;
+
+                // Adjust if tooltip would go off screen
+                if (left + tooltipRect.width > viewportWidth) {
+                    left = e.clientX - tooltipRect.width - offset;
+                }
+                if (top + tooltipRect.height > viewportHeight) {
+                    top = e.clientY - tooltipRect.height - offset;
+                }
+
+                tooltip.style.left = left + 'px';
+                tooltip.style.top = top + 'px';
+
+                // Convert to world coordinates (matching render function)
+                const worldX = x - Math.floor(VIEW_SIZE_X / 2);
+                const worldY = y - Math.floor(VIEW_SIZE_Y / 2);
+
+                // Get chunk coordinates
+                const chunkX = Math.floor(worldX / 16);
+                const chunkY = Math.floor(worldY / 16);
+                const localX = ((worldX % 16) + 16) % 16;
+                const localY = ((worldY % 16) + 16) % 16;
+
+                const chunkKey = `${chunkX},${chunkY}`;
+                let terrainType = 'Grass';
+
+                if (worldData.chunks[chunkKey] &&
+                    worldData.chunks[chunkKey][localY] &&
+                    worldData.chunks[chunkKey][localY][localX]) {
+                    terrainType = worldData.chunks[chunkKey][localY][localX];
+                }
+
+                // Check for resource
+                let resourceType = '';
+                if (worldData.resources[chunkKey] &&
+                    worldData.resources[chunkKey][localY] &&
+                    worldData.resources[chunkKey][localY][localX]) {
+                    resourceType = worldData.resources[chunkKey][localY][localX];
+                }
+
+                let tooltipText = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
+                if (resourceType) {
+                    tooltipText += `<br>Resource: ${resourceType} ${RESOURCE_SYMBOLS[resourceType] || ''}`;
+                }
+                tooltip.innerHTML = tooltipText;
+            }
+        });
+
+        // Mouse leave to hide tooltip
+        canvas.addEventListener('mouseleave', () => {
+            document.getElementById('tooltip').style.display = 'none';
+        });
+
+        // Middle mouse button drag functionality
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                e.preventDefault();
+                isDragging = true;
+                dragStart.x = e.clientX - dragOffset.x;
+                dragStart.y = e.clientY - dragOffset.y;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                dragOffset.x = e.clientX - dragStart.x;
+                dragOffset.y = e.clientY - dragStart.y;
+                // Trigger chunk loading during drag for smoother experience
+                loadVisibleChunksDebounced();
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                e.preventDefault();
+                isDragging = false;
+                canvas.style.cursor = 'pointer';
+                // Load chunks for the new position immediately when dragging stops
+                loadVisibleChunksDebounced();
+            }
+        });
+
+        // Handle context menu (right click) to prevent interference
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Reset drag offset on reset view
+        function resetView() {
+            renderScale = 1.0;
+            dragOffset = { x: 0, y: 0 };
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+
+        // Animation loop with FPS limiting
+        let lastTime = 0;
+        let frameCount = 0;
+        let fpsTime = 0;
+        const targetFPS = 30;
+        const frameDelay = 1000 / targetFPS;
+
+        function animate(currentTime) {
+            if (!currentTime) currentTime = 0;
+            const deltaTime = currentTime - lastTime;
+
+            if (deltaTime >= frameDelay) {
+                lastTime = currentTime - (deltaTime % frameDelay);
+
+                // Update FPS counter
+                frameCount++;
+                if (currentTime - fpsTime >= 1000) {
+                    document.getElementById('fps').textContent = frameCount;
+                    frameCount = 0;
+                    fpsTime = currentTime;
+                }
+
+                // Render the map
+                render();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Zoom control functions
+        function updateZoomDisplay() {
+            const zoomPercent = Math.round(renderScale * 100);
+            document.getElementById('zoom-level').textContent = zoomPercent + '%';
+            document.getElementById('tile-size-display').textContent = TILE_SIZE + 'px';
+        }
+
+        function zoomIn() {
+            renderScale = Math.min(renderScale * 1.25, 4.0); // Max 4x zoom
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+        function zoomOut() {
+            renderScale = Math.max(renderScale / 1.25, 0.25); // Min 0.25x zoom
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+    
+        // Add event listeners for zoom controls
+        document.getElementById('zoom-in').addEventListener('click', zoomIn);
+        document.getElementById('zoom-out').addEventListener('click', zoomOut);
+        document.getElementById('reset-view').addEventListener('click', resetView);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            setupCanvasSize();
+            render(); // Re-render on resize
+        });
+
+        // Initialize
+        initializeViewer();
+        animate();
+
+        async function initializeViewer() {
+            // Load world information
+            await loadWorldInfo();
+
+            // Load initial chunks
+            await requestChunks();
+        }
+    </script>
+</body>
+</html>
