@@ -77,17 +77,17 @@ export class Renderer {
         // Apply sub-pixel translation for smooth movement
         this.ctx.translate(pixelOffsetX, pixelOffsetY);
 
-        // Collect resource data for second pass rendering
+        // Collect resource data for third pass rendering
         const resourcesToRender = [];
 
         // First pass: Render terrain layers with camera offset
         const stats = this.renderTerrain(worldData, resourcesToRender, cameraOffsetX, cameraOffsetY);
 
-        // Second pass: Render resources on top (allows overflow beyond tile boundaries)
-        this.renderResources(resourcesToRender);
-
-        // Third pass: Render entities on top of everything
+        // Second pass: Render entities (between terrain and resources)
         this.renderEntities(entities, cameraOffsetX, cameraOffsetY);
+
+        // Third pass: Render resources on top (allows trees to cover entities below them)
+        this.renderResources(resourcesToRender);
 
         this.ctx.restore(); // Restore the translation and clipping
 
