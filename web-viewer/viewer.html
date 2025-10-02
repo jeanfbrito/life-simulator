@@ -396,18 +396,29 @@
             const container = canvas.parentElement;
             const containerRect = container.getBoundingClientRect();
 
+            // Store old view size for drag offset adjustment
+            const oldViewSizeX = VIEW_SIZE_X || 100;
+            const oldViewSizeY = VIEW_SIZE_Y || 100;
+
             // Calculate tile size based on zoom
             TILE_SIZE = Math.max(4, Math.floor(8 * renderScale));
 
-            // Calculate view size based on container dimensions and tile size
-            // This ensures we see more tiles when zoomed in, fewer when zoomed out
+            // Calculate exact view size needed to fill canvas
+            // Calculate how many tiles fit exactly in the container
             const viewWidth = Math.floor(containerRect.width / TILE_SIZE);
             const viewHeight = Math.floor(containerRect.height / TILE_SIZE);
 
-            // Set view size to match container dimensions exactly
-            // Remove artificial limits to prevent cutting when zoomed in
-            VIEW_SIZE_X = Math.max(10, viewWidth); // Minimum 10 tiles to prevent issues
-            VIEW_SIZE_Y = Math.max(10, viewHeight); // Minimum 10 tiles to prevent issues
+            // Set view size to exactly match container dimensions
+            VIEW_SIZE_X = Math.max(10, viewWidth);
+            VIEW_SIZE_Y = Math.max(10, viewHeight);
+
+            // Adjust drag offset proportionally to maintain position relative to zoom
+            if (oldViewSizeX !== 0 && oldViewSizeY !== 0) {
+                const scaleX = VIEW_SIZE_X / oldViewSizeX;
+                const scaleY = VIEW_SIZE_Y / oldViewSizeY;
+                dragOffset.x *= scaleX;
+                dragOffset.y *= scaleY;
+            }
 
             // Set canvas resolution to match container dimensions
             canvas.width = containerRect.width;
@@ -423,9 +434,6 @@
             // Update zoom display
             updateZoomDisplay();
         }
-
-        // Initial canvas setup
-        setupCanvasSize();
 
         // State
         let ws = null;
@@ -446,6 +454,9 @@
         let isDragging = false;
         let dragStart = { x: 0, y: 0 };
         let dragOffset = { x: 0, y: 0 };
+
+        // Initial canvas setup
+        setupCanvasSize();
 
         // Dynamic chunk loading state
         let loadedChunks = new Set(); // Track which chunks we've loaded
@@ -601,12 +612,12 @@
             // Set new timeout
             chunkLoadTimeout = setTimeout(async () => {
                 await loadVisibleChunks();
-            }, 200); // 200ms delay
+            }, 100); // 100ms delay for more responsive loading
         }
 
         // Function to load chunks around the visible area
         async function loadVisibleChunks() {
-            // Calculate the center of the current view
+            // Calculate the center of the current view in world coordinates
             const viewCenterWorldX = Math.floor(-dragOffset.x / TILE_SIZE) + Math.floor(VIEW_SIZE_X / 2);
             const viewCenterWorldY = Math.floor(-dragOffset.y / TILE_SIZE) + Math.floor(VIEW_SIZE_Y / 2);
 
@@ -617,16 +628,28 @@
             const distanceX = Math.abs(centerChunkX - lastLoadedCenter.x);
             const distanceY = Math.abs(centerChunkY - lastLoadedCenter.y);
 
-            if (distanceX < 2 && distanceY < 2) {
+            if (distanceX < 1 && distanceY < 1) {
                 return; // Not enough movement to trigger new loading
             }
 
             lastLoadedCenter = { x: centerChunkX, y: centerChunkY };
 
-            // Calculate how many chunks are visible
-            const visibleChunkRadiusX = Math.ceil((VIEW_SIZE_X * TILE_SIZE) / 16 / 2) + 2;
-            const visibleChunkRadiusY = Math.ceil((VIEW_SIZE_Y * TILE_SIZE) / 16 / 2) + 2;
-            const visibleRadius = Math.max(visibleChunkRadiusX, visibleChunkRadiusY, chunkLoadRadius);
+            // Calculate the actual visible area in world coordinates
+            const viewStartWorldX = Math.floor(-dragOffset.x / TILE_SIZE);
+            const viewStartWorldY = Math.floor(-dragOffset.y / TILE_SIZE);
+            const viewEndWorldX = viewStartWorldX + VIEW_SIZE_X;
+            const viewEndWorldY = viewStartWorldY + VIEW_SIZE_Y;
+
+            // Convert to chunk coordinates and add buffer
+            const startChunkX = Math.floor(viewStartWorldX / 16) - 1; // Add 1 chunk buffer
+            const startChunkY = Math.floor(viewStartWorldY / 16) - 1;
+            const endChunkX = Math.floor(viewEndWorldX / 16) + 1; // Add 1 chunk buffer
+            const endChunkY = Math.floor(viewEndWorldY / 16) + 1;
+
+            // Calculate radius from the bounds
+            const radiusX = Math.max(Math.abs(centerChunkX - startChunkX), Math.abs(endChunkX - centerChunkX));
+            const radiusY = Math.max(Math.abs(centerChunkY - startChunkY), Math.abs(endChunkY - centerChunkY));
+            const visibleRadius = Math.max(radiusX, radiusY, 3); // Minimum radius of 3
 
             await requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
         }
@@ -896,6 +919,8 @@
                 e.preventDefault();
                 dragOffset.x = e.clientX - dragStart.x;
                 dragOffset.y = e.clientY - dragStart.y;
+                // Trigger chunk loading during drag for smoother experience
+                loadVisibleChunksDebounced();
             }
         });
 
