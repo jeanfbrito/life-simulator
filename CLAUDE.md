@@ -927,6 +927,191 @@ See also:
 - `docs/TESTING_TICK_SYSTEM.md` - Comprehensive testing guide
 - `docs/MOVEMENT_SPEEDS.md` - Entity speed reference
 
+## Pathfinding System Debugging
+
+### Integration Testing Framework
+
+The project includes a comprehensive integration testing framework for debugging pathfinding issues against real world data:
+
+**Test: `tests/pathfinding_test.rs`**
+- Loads actual generated world from `maps/` directory
+- Builds pathfinding grid using same logic as main simulation
+- Tests pathfinding from multiple spawn points to water sources
+- Validates terrain accessibility and resource blocking
+- Provides detailed diagnostics for path failures
+
+```bash
+# Run with verbose diagnostic output
+cargo test --test pathfinding_test -- --nocapture
+```
+
+**Expected Output:**
+```
+🧪 Testing rabbit pathfinding to water
+📂 Loading world...
+✅ World loaded: full_world
+   Chunks: 121
+🗺️  Building pathfinding grid...
+✅ Grid built: 43681 tiles processed, 19077 walkable, 554 blocked
+
+🐇 Testing from North spawn: IVec2(10, 15)
+   💧 Found water at (21, 30) - distance: 18.6 tiles
+   🚶 Adjacent walkable: IVec2(21, 29)
+   🧭 Finding path from IVec2(10, 15) to IVec2(21, 29)...
+   ✅ PATH FOUND! 14 waypoints
+```
+
+### Critical Pathfinding Requirements
+
+**ALWAYS enable diagonal movement** in pathfinding requests:
+```rust
+commands.entity(entity).insert(MoveOrder {
+    destination: target_pos,
+    allow_diagonal: true,  // ← CRITICAL: Must be true
+});
+```
+
+**Why Diagonal Movement Matters:**
+- With only 4-directional movement (N/S/E/W), even small obstacles create impassable barriers
+- 8-directional movement allows navigation around single-tile obstacles
+- Essential for realistic pathfinding with resources (trees, bushes) blocking tiles
+- Without diagonals, pathfinding success rate drops from 75-100% to 0-25%
+
+### Common Pathfinding Issues
+
+#### Issue: Entities can't reach destinations
+**Symptoms:**
+- Pathfinding failures in logs: `"PATH FAILED for entity X to Y"`
+- Actions planned but never completed
+- Entities dying before reaching critical resources (water, food)
+
+**Debugging Steps:**
+1. Run integration test: `cargo test --test pathfinding_test -- --nocapture`
+2. Check if paths are found from typical spawn points
+3. Look for blocked terrain diagnostics in test output
+4. Verify `allow_diagonal: true` in all MoveOrder creations
+5. Check if resources are blocking too many tiles
+
+**Common Causes:**
+- ❌ Diagonal movement disabled (`allow_diagonal: false`)
+- ❌ Too many resources blocking paths
+- ❌ Spawn points isolated by impassable terrain
+- ❌ Water sources too far from spawn (increase `MAX_SEARCH_RADIUS`)
+
+#### Issue: PathfindingFailed component stuck on entities
+**Symptoms:**
+- Entities stop moving permanently
+- Actions report failures but keep trying
+
+**Solution:**
+Actions must detect and remove PathfindingFailed component:
+```rust
+if world.get::<PathfindingFailed>(entity).is_some() {
+    warn!("Pathfinding failed for entity {:?}", entity);
+    if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+        entity_mut.remove::<PathfindingFailed>();
+    }
+    return ActionResult::Failed;
+}
+```
+
+### Pathfinding Documentation References
+
+- **`PATHFINDING_FIX.md`** - Complete pathfinding bug diagnosis and fix
+  - Problem analysis with test-driven approach
+  - Root cause identification (diagonal movement disabled)
+  - Integration test creation for real-world validation
+  - Before/after comparison with metrics
+  - Recommendations for future improvements
+
+- **`SESSION_2025-01-02.md`** - Complete debugging session summary
+  - Investigation methodology
+  - Solutions implemented (3 commits)
+  - Testing infrastructure created
+  - Key takeaways and lessons learned
+
+### Test-Driven Debugging Methodology
+
+When debugging gameplay issues:
+
+1. **Create Integration Test**
+   - Load real world data (not mocks)
+   - Replicate exact simulation setup
+   - Test multiple scenarios
+
+2. **Use Diagnostic Output**
+   - Run with `--nocapture` to see all diagnostics
+   - Analyze failure points systematically
+   - Sample terrain along failed paths
+
+3. **Measure Impact**
+   - Track success rates before/after
+   - Document metrics in commit messages
+   - Validate fixes across multiple test cases
+
+4. **Document Lessons**
+   - Create detailed fix documentation
+   - Add to README "Key Lessons Learned"
+   - Include in session summaries
+
+**Example from PATHFINDING_FIX.md:**
+- Problem: Entities couldn't reach water (0% success)
+- Root Cause: Diagonal movement disabled
+- Fix: Enable `allow_diagonal: true`
+- Result: 75-100% success rate
+- Test: Integration test validates fix
+- Documentation: Complete analysis preserved
+
+### Pathfinding Grid Building
+
+Pathfinding grid must be built from terrain and resources:
+
+```rust
+let terrain_cost = if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+    let cost = terrain.movement_cost();
+    if cost >= 1000.0 {
+        u32::MAX  // Impassable
+    } else {
+        cost as u32
+    }
+} else {
+    u32::MAX
+};
+
+let has_resource = world_loader.get_resource_at(x, y)
+    .map(|r| !r.is_empty())
+    .unwrap_or(false);
+
+let final_cost = if has_resource && terrain_cost != u32::MAX {
+    u32::MAX  // Resources block movement
+} else {
+    terrain_cost
+};
+
+pathfinding_grid.set_cost(pos, final_cost);
+```
+
+**Note:** Currently ALL resources block movement. Future improvement could differentiate between blocking (trees) and passable (flowers) resources.
+
+### AI Planner Logging
+
+Enhanced logging helps debug AI decisions:
+
+```rust
+RUST_LOG=info cargo run --bin life-simulator
+```
+
+**Look for:**
+- `🧠 Entity X - Evaluated N actions` (action planning)
+- `✅ Entity X queuing action Y with utility Z` (action selected)
+- `❌ Entity X - No actions above threshold` (no valid actions)
+- `🐇 Entity X drank water from Y! Thirst: Z%` (successful behavior)
+
+**Utility Scoring:**
+- Drink water: 70% thirst, 30% distance (weighted sum)
+- Wander: 0.01 (lowest priority)
+- Threshold: 0.05 (lowered to allow early water seeking)
+
 ## License
 
 This project is dual-licensed under either:
