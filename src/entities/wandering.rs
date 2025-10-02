@@ -98,6 +98,16 @@ pub fn wanderer_ai_system(
 }
 
 /// Pick a random walkable tile within radius
+pub fn pick_random_walkable_tile_pub(
+    center: IVec2,
+    radius: i32,
+    grid: &PathfindingGrid,
+    rng: &mut impl Rng,
+) -> Option<IVec2> {
+    pick_random_walkable_tile(center, radius, grid, rng)
+}
+
+/// Pick a random walkable tile within radius (internal)
 fn pick_random_walkable_tile(
     center: IVec2,
     radius: i32,

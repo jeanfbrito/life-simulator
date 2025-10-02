@@ -17,7 +17,7 @@ use serialization::{WorldSerializationPlugin, WorldSaveRequest, WorldLoadRequest
 use cached_world::CachedWorldPlugin;
 use world_loader::WorldLoader;
 use pathfinding::{PathfindingGrid, process_pathfinding_requests};
-use entities::{EntitiesPlugin, spawn_wandering_people};
+use entities::{EntitiesPlugin, spawn_humans, spawn_rabbits};
 use simulation::SimulationPlugin;
 
 mod web_server_simple;
@@ -139,19 +139,27 @@ fn spawn_wanderers(
     mut commands: Commands,
     pathfinding_grid: Res<PathfindingGrid>,
 ) {
-    println!("🚶 LIFE_SIMULATOR: Spawning wandering people...");
+    println!("🎯 LIFE_SIMULATOR: Spawning entities...");
     
-    // Spawn 3 wandering people around the origin
-    let entities = spawn_wandering_people(
+    // Spawn 2 humans around the origin
+    let humans = spawn_humans(
         &mut commands,
-        3,                    // Count
+        2,                    // Count
         bevy::math::IVec2::ZERO,  // Center
         20,                   // Spawn radius
-        30,                   // Wander radius
         &pathfinding_grid,
     );
     
-    println!("✅ LIFE_SIMULATOR: Spawned {} wandering people", entities.len());
+    // Spawn 5 rabbits around the origin
+    let rabbits = spawn_rabbits(
+        &mut commands,
+        5,                    // Count
+        bevy::math::IVec2::ZERO,  // Center
+        25,                   // Spawn radius (slightly larger)
+        &pathfinding_grid,
+    );
+    
+    println!("✅ LIFE_SIMULATOR: Spawned {} humans 🧍‍♂️ and {} rabbits 🐇", humans.len(), rabbits.len());
     println!("🌐 LIFE_SIMULATOR: View them at http://127.0.0.1:54321/viewer.html");
     println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
 }

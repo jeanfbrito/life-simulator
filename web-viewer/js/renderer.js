@@ -2,7 +2,7 @@
  * Rendering engine for the Life Simulator Viewer
  */
 
-import { CONFIG, TERRAIN_COLORS, RESOURCE_CONFIG, RESOURCE_SYMBOLS, DEFAULTS } from './config.js';
+import { CONFIG, TERRAIN_COLORS, RESOURCE_CONFIG, RESOURCE_SYMBOLS, ENTITY_CONFIG, DEFAULTS } from './config.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -257,8 +257,12 @@ export class Renderer {
     }
 
     renderSingleEntity(entity, screenX, screenY) {
-        // Draw entity as emoji
-        this.ctx.font = `${CONFIG.TILE_SIZE * 1.2}px Arial`;
+        // Get entity configuration (or use default)
+        const entityType = entity.entity_type || 'default';
+        const config = ENTITY_CONFIG[entityType] || ENTITY_CONFIG['default'];
+        
+        // Draw entity as emoji with configured size
+        this.ctx.font = `${CONFIG.TILE_SIZE * config.sizeMultiplier}px Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
@@ -268,9 +272,12 @@ export class Renderer {
         this.ctx.shadowOffsetX = 1;
         this.ctx.shadowOffsetY = 1;
         
-        // Render the emoji with Y offset to position feet above
-        const entityY = screenY + (CONFIG.TILE_SIZE * -0.2); // Move up 0.2 tiles
-        this.ctx.fillText('🧍‍♂️', screenX, entityY);
+        // Calculate position with configured offsets
+        const entityX = screenX + (CONFIG.TILE_SIZE * config.offsetX);
+        const entityY = screenY + (CONFIG.TILE_SIZE * config.offsetY);
+        
+        // Render the configured emoji
+        this.ctx.fillText(config.emoji, entityX, entityY);
         
         // Reset shadow
         this.ctx.shadowColor = 'transparent';

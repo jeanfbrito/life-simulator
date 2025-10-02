@@ -3,6 +3,7 @@ pub mod movement;
 pub mod wandering;
 pub mod entity_tracker;
 pub mod stats;
+pub mod entity_types;
 
 use bevy::prelude::*;
 
@@ -26,6 +27,14 @@ pub use stats::{
     tick_stats_system, death_system,
     utility_eat, utility_drink, utility_rest, utility_heal,
     get_most_urgent_need,
+};
+
+pub use entity_types::{
+    Human, Rabbit, Deer, Wolf,
+    EntityTemplate,
+    spawn_human, spawn_rabbit,
+    spawn_humans, spawn_rabbits,
+    count_entities_by_type,
 };
 
 // ============================================================================

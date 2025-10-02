@@ -104,6 +104,44 @@ export const RESOURCE_CONFIG = {
     }
 };
 
+// Entity rendering configuration with size and positioning
+// sizeMultiplier: Size relative to tile (1.0 = tile size, 0.5 = half tile, etc.)
+// offsetX/Y: Position offset in tiles (-0.2 = move up 20% of a tile)
+// Adjust these values to make entities look right at different scales!
+export const ENTITY_CONFIG = {
+    'Human': {
+        emoji: '🧍‍♂️',
+        sizeMultiplier: 1.2,  // Standard human size
+        offsetX: 0,
+        offsetY: -0.2  // Move up to keep feet in grid
+    },
+    'Rabbit': {
+        emoji: '🐇',
+        sizeMultiplier: 0.5,  // Smaller than humans
+        offsetX: 0,
+        offsetY: -0.05  // Slightly less offset for smaller creature
+    },
+    'Deer': {
+        emoji: '🦌',
+        sizeMultiplier: 1.3,  // Larger than humans
+        offsetX: 0,
+        offsetY: -0.25  // More offset for tall creature
+    },
+    'Wolf': {
+        emoji: '🐺',
+        sizeMultiplier: 1.0,  // Similar to human
+        offsetX: 0,
+        offsetY: -0.2
+    },
+    // Default for unknown entity types
+    'default': {
+        emoji: '❓',
+        sizeMultiplier: 1.0,
+        offsetX: 0,
+        offsetY: -0.2
+    }
+};
+
 // Default values
 export const DEFAULTS = {
     terrainType: 'DeepWater',
