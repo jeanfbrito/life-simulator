@@ -166,7 +166,12 @@ class LifeSimulatorApp {
         this.renderer.updateStatsDisplay(stats);
         
         // Trigger chunk loading for visible area (after first render)
-        this.chunkManager.loadVisibleChunksDebounced(this.controls.getDragOffset(), this.worldData);
+        // Pass render callback so new chunks trigger a re-render
+        this.chunkManager.loadVisibleChunksDebounced(
+            this.controls.getDragOffset(), 
+            this.worldData,
+            () => this.render()
+        );
     }
 
     startAnimationLoop() {

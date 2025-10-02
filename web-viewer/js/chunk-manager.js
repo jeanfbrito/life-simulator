@@ -124,7 +124,7 @@ export class ChunkManager {
     }
 
     // Function to load chunks around the visible area (debounced)
-    loadVisibleChunksDebounced(dragOffset, worldData) {
+    loadVisibleChunksDebounced(dragOffset, worldData, onChunksLoaded) {
         // Clear existing timeout
         if (this.chunkLoadTimeout) {
             clearTimeout(this.chunkLoadTimeout);
@@ -132,7 +132,11 @@ export class ChunkManager {
 
         // Set new timeout
         this.chunkLoadTimeout = setTimeout(async () => {
-            await this.loadVisibleChunks(dragOffset, worldData);
+            const loaded = await this.loadVisibleChunks(dragOffset, worldData);
+            // Trigger a render if chunks were loaded
+            if (loaded && onChunksLoaded) {
+                onChunksLoaded();
+            }
         }, CONFIG.chunkLoadDebounce);
     }
 
@@ -150,7 +154,7 @@ export class ChunkManager {
         const distanceY = Math.abs(centerChunkY - this.lastLoadedCenter.y);
 
         if (distanceX < 1 && distanceY < 1) {
-            return; // Not enough movement to trigger new loading
+            return false; // Not enough movement to trigger new loading
         }
 
         this.lastLoadedCenter = { x: centerChunkX, y: centerChunkY };
@@ -172,12 +176,19 @@ export class ChunkManager {
         const radiusY = Math.abs(centerChunkY - startChunkY);
         const visibleRadius = Math.max(radiusX, radiusY, 3); // Minimum radius of 3
 
+        console.log(`📦 Loading chunks around (${centerChunkX}, ${centerChunkY}) with radius ${visibleRadius}`);
         const newData = await this.requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
         
         // Merge newly loaded chunks into worldData if provided
         if (newData && worldData) {
-            this.mergeChunkData(newData, worldData);
+            const chunkCount = Object.keys(newData.chunks || {}).length;
+            if (chunkCount > 0) {
+                console.log(`✅ Loaded ${chunkCount} new chunks, merging into worldData`);
+                this.mergeChunkData(newData, worldData);
+                return true; // Return true to indicate chunks were loaded
+            }
         }
+        return false;
     }
 
     async loadWorldInfo() {

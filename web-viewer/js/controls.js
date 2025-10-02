@@ -141,8 +141,8 @@ export class Controls {
             this.dragOffset.x = e.clientX - this.dragStart.x;
             this.dragOffset.y = e.clientY - this.dragStart.y;
             // Trigger chunk loading during drag for smoother experience
-            if (this.worldData) {
-                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData);
+            if (this.worldData && this.onRender) {
+                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
             }
         }
     }
@@ -153,8 +153,8 @@ export class Controls {
             this.isDragging = false;
             this.canvas.style.cursor = 'pointer';
             // Load chunks for the new position immediately when dragging stops
-            if (this.worldData) {
-                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData);
+            if (this.worldData && this.onRender) {
+                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
             }
         }
     }
