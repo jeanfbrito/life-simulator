@@ -75,16 +75,19 @@ impl Plugin for EntitiesPlugin {
                 entity_tracker::sync_entities_to_tracker,  // Sync for web API
             ))
             
-            // Tick systems (run on fixed timestep)
-            .add_systems(FixedUpdate, (
+            // Tick systems (run when should_tick is true)
+            .add_systems(Update, (
                 stats::tick_stats_system,       // Update entity stats
                 wandering::wanderer_ai_system,  // AI runs on ticks
                 movement::tick_movement_system, // Movement execution
                 stats::death_system,            // Handle death
-            ).chain());
-        
-        // NOTE: Systems added to FixedUpdate will run at tick rate (default 10 TPS)
+            ).chain().run_if(should_run_tick_systems));
     }
+}
+
+/// Run condition for tick-based systems
+fn should_run_tick_systems(state: Res<crate::simulation::SimulationState>) -> bool {
+    state.should_tick
 }
 
 // ============================================================================

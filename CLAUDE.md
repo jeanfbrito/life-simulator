@@ -816,7 +816,116 @@ cargo test --lib simulation::tick::tests
 - **Dwarf Fortress**: Variable tick rate, priority queues
 - **Factorio**: Fixed 60 UPS, deterministic lockstep
 - **RimWorld**: Multi-rate "ticker" system (Normal/Rare/Long)
-- **Oxygen Not Included**: 5 TPS with sub-tick physics
+- **Oxygen Not Included**: 5 TPS sub-tick physics
+
+## Entity Movement Verification Test
+
+### Critical Test: Verifying Entities Are Alive and Moving
+
+This is the **fundamental test** to verify the simulation is working correctly. Run this test after any changes to the tick system, movement system, or entity spawning to ensure entities are alive and actively moving.
+
+```bash
+# Start simulation in background
+cargo run --bin life-simulator > /tmp/life-simulator.log 2>&1 &
+sleep 6  # Wait for startup
+
+# Track human and rabbit movement for 20 seconds
+echo "=== Comparing Movement Speeds ==="
+echo ""
+printf "%-8s | %-12s | %-12s | %s\n" "Time" "Human_0" "Rabbit_0" "Notes"
+echo "---------|--------------|--------------|---------------------------"
+
+for i in {1..10}; do
+  timestamp=$(date +"%H:%M:%S")
+  entities=$(curl -s http://127.0.0.1:54321/api/entities 2>/dev/null)
+  human_pos=$(echo "$entities" | jq -r '.entities[] | select(.name == "Human_0") | "\(.position.x),\(.position.y)"' 2>/dev/null)
+  rabbit_pos=$(echo "$entities" | jq -r '.entities[] | select(.name == "Rabbit_0") | "\(.position.x),\(.position.y)"' 2>/dev/null)
+  printf "%-8s | %-12s | %-12s |\n" "$timestamp" "$human_pos" "$rabbit_pos"
+  sleep 2
+done
+
+echo ""
+echo "Expected: Rabbits move every ~2s (20 ticks), Humans every ~3s (30 ticks)"
+
+# Cleanup
+pkill -f "target/debug/life-simulator" 2>/dev/null || true
+```
+
+### What This Test Verifies
+
+1. **✅ Tick System Working**: Entities only move if ticks are accumulating and executing
+2. **✅ Movement System Active**: Entities advance through their movement ticks
+3. **✅ Wandering AI Functional**: Entities generate paths and make decisions
+4. **✅ Pathfinding Working**: Entities find valid paths to destinations
+5. **✅ Speed Configuration Correct**: Different entity types move at their configured speeds
+
+### Expected Output
+
+```
+=== Comparing Movement Speeds ===
+
+Time     | Human_0      | Rabbit_0     | Notes
+---------|--------------|--------------|---------------------------
+13:45:21 | -7,-2        | -10,-15      |
+13:45:23 | -7,-2        | -10,-14      |  <-- Rabbit moved!
+13:45:25 | -7,-3        | -9,-14       |  <-- Both moved!
+13:45:27 | -7,-3        | -9,-15       |  <-- Rabbit moved!
+13:45:29 | -8,-3        | -10,-15      |  <-- Both moved!
+13:45:31 | -7,-3        | -10,-16      |  <-- Rabbit moved!
+13:45:33 | -7,-3        | -11,-16      |  <-- Rabbit moved!
+13:45:35 | -8,-3        | -10,-16      |  <-- Human moved!
+13:45:38 | -8,-4        | -10,-15      |  <-- Both moved!
+13:45:40 | -9,-4        | -9,-15       |  <-- Both moved!
+
+Expected: Rabbits move every ~2s (20 ticks), Humans every ~3s (30 ticks)
+```
+
+### Current Entity Movement Speeds
+
+| Entity Type | Ticks per Tile | Time per Tile | Status |
+|-------------|----------------|---------------|---------|
+| **Rabbit** 🐇 | 20 | 2.0 seconds | Active |
+| **Human** 🧍‍♂️ | 30 | 3.0 seconds | Active |
+| **Deer** 🦌 | 10 | 1.0 seconds | Future |
+| **Wolf** 🐺 | 6 | 0.6 seconds | Future |
+
+### When to Run This Test
+
+- After modifying the tick accumulation system
+- After changing movement speed configurations  
+- After updates to the wandering AI
+- After pathfinding algorithm changes
+- Before committing major simulation changes
+- When debugging "entities not moving" issues
+
+### Troubleshooting
+
+If entities aren't moving:
+1. Check `/tmp/life-simulator.log` for errors
+2. Verify tick counter is incrementing: `grep "Tick #" /tmp/life-simulator.log`
+3. Ensure `should_tick` flag is being set
+4. Check that movement systems are registered with `.run_if(should_tick)`
+5. Verify pathfinding grid is properly initialized
+
+### Automated Test Script
+
+The full test script with analysis is available at `scripts/test_movement.sh`:
+
+```bash
+./scripts/test_movement.sh
+```
+
+This will:
+- Start the simulation
+- Track movement for 30 seconds  
+- Analyze movement patterns
+- Report success/failure
+- Clean up processes
+
+See also:
+- `docs/TICK_SYSTEM_FIXES.md` - Complete tick system architecture
+- `docs/TESTING_TICK_SYSTEM.md` - Comprehensive testing guide
+- `docs/MOVEMENT_SPEEDS.md` - Entity speed reference
 
 ## License
 

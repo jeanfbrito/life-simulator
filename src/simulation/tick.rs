@@ -73,27 +73,19 @@ impl SimulationSpeed {
 }
 
 /// Global simulation state
-#[derive(Resource, Default, Debug)]
+#[derive(Resource, Debug)]
 pub struct SimulationState {
-    pub running: bool,
-    pub started_at: Option<Instant>,
-    pub total_ticks: u64,
+    pub should_tick: bool,
 }
 
-impl SimulationState {
-    pub fn start(&mut self) {
-        self.running = true;
-        self.started_at = Some(Instant::now());
-    }
-    
-    pub fn stop(&mut self) {
-        self.running = false;
-    }
-    
-    pub fn uptime(&self) -> Option<Duration> {
-        self.started_at.map(|start| start.elapsed())
+impl Default for SimulationState {
+    fn default() -> Self {
+        Self {
+            should_tick: false,
+        }
     }
 }
+
 
 /// Performance metrics for tick monitoring
 #[derive(Resource)]
@@ -116,6 +108,52 @@ impl Default for TickMetrics {
             last_tick_start: None,
             current_tick_start: None,
         }
+    }
+}
+
+/// Accumulates frame time and determines when to run simulation ticks
+/// Based on the world-simulator tick accumulator pattern
+#[derive(Resource, Debug)]
+pub struct TickAccumulator {
+    /// Accumulated time since last tick
+    accumulated: f32,
+    /// Number of ticks that should run this frame
+    pub pending_ticks: u32,
+}
+
+impl Default for TickAccumulator {
+    fn default() -> Self {
+        Self {
+            accumulated: 0.0,
+            pending_ticks: 0,
+        }
+    }
+}
+
+impl TickAccumulator {
+    /// Update the accumulator with frame delta time
+    /// Returns the number of ticks that should execute this frame
+    pub fn update(&mut self, delta_seconds: f32, tick_duration: f32, speed_multiplier: f32) -> u32 {
+        // Accumulate time based on speed multiplier
+        self.accumulated += delta_seconds * speed_multiplier;
+
+        // Calculate how many ticks to run
+        let ticks = (self.accumulated / tick_duration) as u32;
+
+        // Remove the consumed time
+        self.accumulated -= ticks as f32 * tick_duration;
+
+        // Cap accumulated time to prevent spiral of death
+        if self.accumulated > tick_duration * 3.0 {
+            self.accumulated = tick_duration * 3.0;
+        }
+
+        self.pending_ticks = ticks;
+        ticks
+    }
+
+    pub fn should_tick(&self) -> bool {
+        self.pending_ticks > 0
     }
 }
 
@@ -182,11 +220,10 @@ impl TickMetrics {
 // ============================================================================
 
 /// Core system that increments the tick counter
-/// Should run first in FixedUpdate schedule
+/// NOTE: This is no longer used - tick incrementing happens in run_simulation_ticks
 pub fn increment_tick_counter(
     mut tick: ResMut<SimulationTick>,
     mut metrics: ResMut<TickMetrics>,
-    mut state: ResMut<SimulationState>,
 ) {
     // End previous tick timing
     metrics.end_tick();
@@ -196,7 +233,6 @@ pub fn increment_tick_counter(
     
     // Increment counter
     tick.increment();
-    state.total_ticks += 1;
 }
 
 /// System that logs tick metrics periodically
@@ -204,7 +240,6 @@ pub fn log_tick_metrics(
     tick: Res<SimulationTick>,
     metrics: Res<TickMetrics>,
     speed: Res<SimulationSpeed>,
-    state: Res<SimulationState>,
 ) {
     let avg_duration = metrics.average_duration();
     let actual_tps = metrics.actual_tps();
@@ -222,17 +257,6 @@ pub fn log_tick_metrics(
     info!("║   Average:       {:>6.2}ms              ║", avg_duration.as_secs_f64() * 1000.0);
     info!("║   Min:           {:>6.2}ms              ║", min.as_secs_f64() * 1000.0);
     info!("║   Max:           {:>6.2}ms              ║", max.as_secs_f64() * 1000.0);
-    info!("║                                          ║");
-    info!("║ Total Ticks:     {:>8}               ║", state.total_ticks);
-    
-    if let Some(uptime) = state.uptime() {
-        let uptime_secs = uptime.as_secs();
-        let hours = uptime_secs / 3600;
-        let minutes = (uptime_secs % 3600) / 60;
-        let seconds = uptime_secs % 60;
-        info!("║ Uptime:          {:02}:{:02}:{:02}               ║", hours, minutes, seconds);
-    }
-    
     info!("╚══════════════════════════════════════════╝");
 }
 

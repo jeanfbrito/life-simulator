@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::app::ScheduleRunnerPlugin;
+use bevy::time::TimePlugin;
 use std::time::Duration;
 
 mod tilemap;
@@ -26,9 +27,9 @@ fn main() {
     println!("🚀 Starting Life Simulator (Headless Mode)");
 
     App::new()
-        .add_plugins((
-            ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)),
-        ))
+        .add_plugins(
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0))),
+        )
         .add_plugins(TilemapPlugin)
         .add_plugins(WorldSerializationPlugin)
         .add_plugins(CachedWorldPlugin)
@@ -39,7 +40,6 @@ fn main() {
         .init_resource::<PathfindingGrid>()
         .add_systems(Startup, (setup, spawn_wanderers.after(setup)))
         .add_systems(Update, (
-            run_fixed_update_schedule,     // Manually run FixedUpdate
             process_pathfinding_requests,  // Async pathfinding
             simulation_system,
             save_load_system.after(simulation_system),
@@ -164,11 +164,6 @@ fn spawn_wanderers(
     println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
 }
 
-/// System that manually runs the FixedUpdate schedule
-/// This is needed because ScheduleRunnerPlugin doesn't run it automatically
-fn run_fixed_update_schedule(world: &mut World) {
-    world.run_schedule(FixedUpdate);
-}
 
 fn simulation_system(
     world_loader: Res<WorldLoader>,

@@ -7,7 +7,7 @@ pub mod tick;
 
 // Re-exports
 pub use tick::{
-    SimulationTick, SimulationSpeed, TickMetrics, SimulationState,
+    SimulationTick, SimulationSpeed, TickMetrics, SimulationState, TickAccumulator,
     increment_tick_counter, log_tick_metrics, every_n_ticks,
 };
 
@@ -25,30 +25,79 @@ impl Plugin for SimulationPlugin {
             // Resources
             .insert_resource(SimulationTick::default())
             .insert_resource(SimulationSpeed::default())
-            .insert_resource(SimulationState::default())
+            .insert_resource(SimulationState { should_tick: false })
             .insert_resource(TickMetrics::default())
+            .insert_resource(TickAccumulator::default())
             
-            // Configure fixed timestep for ticks using proper Bevy API
-            .insert_resource(Time::<Fixed>::from_hz(BASE_TICK_RATE))
-            
-            // Core tick systems (run in FixedUpdate)
-            .add_systems(FixedUpdate, (
-                increment_tick_counter,
-                log_tick_metrics.run_if(every_n_ticks(100)), // Log every 10 seconds
-            ).chain())
-            
-            // Non-tick systems can be added in Update schedule
+            // Core tick systems run in Update (NOT FixedUpdate)
             .add_systems(Update, (
+                accumulate_ticks.before(run_simulation_ticks),
+                run_simulation_ticks,
                 handle_speed_controls,
             ));
     }
+}
+
+/// System that accumulates frame time and determines when ticks should run
+fn accumulate_ticks(
+    time: Res<Time>,
+    mut accumulator: ResMut<TickAccumulator>,
+    speed: Res<SimulationSpeed>,
+    mut state: ResMut<SimulationState>,
+) {
+    if speed.is_paused() {
+        accumulator.pending_ticks = 0;
+        state.should_tick = false;
+        return;
+    }
+    
+    let tick_duration = 1.0 / BASE_TICK_RATE as f32;
+    let ticks = accumulator.update(time.delta_secs(), tick_duration, speed.multiplier);
+    state.should_tick = ticks > 0;
+}
+
+/// System that runs simulation ticks when accumulated
+fn run_simulation_ticks(
+    mut tick: ResMut<SimulationTick>,
+    mut metrics: ResMut<TickMetrics>,
+    mut accumulator: ResMut<TickAccumulator>,
+    state: Res<SimulationState>,
+) {
+    let ticks_to_run = accumulator.pending_ticks;
+    
+    if ticks_to_run == 0 {
+        return;
+    }
+    
+    // Run each tick
+    for _ in 0..ticks_to_run {
+        // End previous tick timing
+        metrics.end_tick();
+        
+        // Start new tick timing  
+        metrics.start_tick();
+        
+        // Increment counter
+        tick.increment();
+        
+        // Log every 100 ticks
+        if tick.get() % 100 == 0 {
+            info!("🎯 Tick #{} | TPS: {:.1} | Avg duration: {:?}",
+                tick.get(),
+                metrics.actual_tps(),
+                metrics.average_duration()
+            );
+        }
+    }
+    
+    // Clear pending ticks
+    accumulator.pending_ticks = 0;
 }
 
 /// System to handle pause/speed controls (runs every frame)
 fn handle_speed_controls(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut speed: ResMut<SimulationSpeed>,
-    mut time: ResMut<Time<Fixed>>,
 ) {
     // Space to pause/unpause
     if keyboard.just_pressed(KeyCode::Space) {
@@ -72,14 +121,5 @@ fn handle_speed_controls(
     if keyboard.just_pressed(KeyCode::Digit4) {
         speed.set_speed(3.0);
         info!("Speed: 3.0x (Ultra)");
-    }
-    
-    // Update fixed timestep based on speed (if not paused)
-    if !speed.is_paused() {
-        let adjusted_hz = BASE_TICK_RATE * speed.multiplier as f64;
-        *time = Time::<Fixed>::from_hz(adjusted_hz);
-    } else {
-        // When paused, set an extremely slow timestep (effectively stopped)
-        *time = Time::<Fixed>::from_hz(0.001);
     }
 }

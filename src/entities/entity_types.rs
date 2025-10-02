@@ -41,11 +41,11 @@ pub struct EntityTemplate {
 }
 
 impl EntityTemplate {
-    /// Human template - standard walking speed
+    /// Human template - standard walking speed (Dwarf Fortress-like)
     pub const HUMAN: EntityTemplate = EntityTemplate {
         name_prefix: "Person",
         species: "Human",
-        movement_speed: 15,  // 0.67 tiles/sec at 10 TPS
+        movement_speed: 30,  // 3 seconds per tile at 10 TPS (comfortable walking)
         wander_radius: 30,
         emoji: "🧍‍♂️",
     };
@@ -54,7 +54,7 @@ impl EntityTemplate {
     pub const RABBIT: EntityTemplate = EntityTemplate {
         name_prefix: "Rabbit",
         species: "Rabbit",
-        movement_speed: 8,   // 1.25 tiles/sec at 10 TPS (faster than humans)
+        movement_speed: 20,   // 2 seconds per tile at 10 TPS (faster than humans)
         wander_radius: 15,   // Smaller territory
         emoji: "🐇",
     };
