@@ -147,6 +147,7 @@ pub fn spawn_wandering_person(
         TilePosition::from_tile(position),
         MovementSpeed::custom(15), // 1 tile per 15 ticks = 0.67 tiles/sec (walking speed)
         Wanderer::new(position, wander_radius),
+        crate::entities::EntityStatsBundle::default(), // Add stats (hunger, thirst, energy, health)
     )).id()
 }
 

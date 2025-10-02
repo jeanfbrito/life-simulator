@@ -2,6 +2,7 @@
 pub mod movement;
 pub mod wandering;
 pub mod entity_tracker;
+pub mod stats;
 
 use bevy::prelude::*;
 
@@ -17,6 +18,14 @@ pub use wandering::{
 
 pub use entity_tracker::{
     init_entity_tracker, sync_entities_to_tracker, get_entities_json,
+};
+
+pub use stats::{
+    Stat, Hunger, Thirst, Energy, Health,
+    EntityStatsBundle,
+    tick_stats_system, death_system,
+    utility_eat, utility_drink, utility_rest, utility_heal,
+    get_most_urgent_need,
 };
 
 // ============================================================================
@@ -59,8 +68,10 @@ impl Plugin for EntitiesPlugin {
             
             // Tick systems (run on fixed timestep)
             .add_systems(FixedUpdate, (
+                stats::tick_stats_system,       // Update entity stats
                 wandering::wanderer_ai_system,  // AI runs on ticks
                 movement::tick_movement_system, // Movement execution
+                stats::death_system,            // Handle death
             ).chain());
         
         // NOTE: Systems added to FixedUpdate will run at tick rate (default 10 TPS)
