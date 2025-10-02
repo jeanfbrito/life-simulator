@@ -100,24 +100,31 @@ export class ChunkManager {
     async fetchData(endpoint) {
         console.log(`Fetching: ${CONFIG.apiBaseUrl}${endpoint}`);
 
-        // Try fetch first, fallback to our proxy if CORS fails
-        const response = await fetch(`${CONFIG.apiBaseUrl}${endpoint}`, {
-            mode: 'cors',
-            credentials: 'omit'
-        });
+        try {
+            // Try fetch first, fallback to our proxy if CORS fails
+            const response = await fetch(`${CONFIG.apiBaseUrl}${endpoint}`, {
+                mode: 'cors',
+                credentials: 'omit'
+            });
 
-        console.log(`Response status: ${response.status}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            console.log(`Response status: ${response.status}`);
+            if (!response.ok) {
+                this.updateConnectionStatus(false);
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Successfully received data:', data);
+            this.updateConnectionStatus(true);
+            return data;
+        } catch (error) {
+            this.updateConnectionStatus(false);
+            throw error;
         }
-
-        const data = await response.json();
-        console.log('Successfully received data:', data);
-        return data;
     }
 
     // Function to load chunks around the visible area (debounced)
-    loadVisibleChunksDebounced(dragOffset) {
+    loadVisibleChunksDebounced(dragOffset, worldData) {
         // Clear existing timeout
         if (this.chunkLoadTimeout) {
             clearTimeout(this.chunkLoadTimeout);
@@ -125,12 +132,12 @@ export class ChunkManager {
 
         // Set new timeout
         this.chunkLoadTimeout = setTimeout(async () => {
-            await this.loadVisibleChunks(dragOffset);
+            await this.loadVisibleChunks(dragOffset, worldData);
         }, CONFIG.chunkLoadDebounce);
     }
 
     // Function to load chunks around the visible area
-    async loadVisibleChunks(dragOffset) {
+    async loadVisibleChunks(dragOffset, worldData) {
         // Calculate the center of the current view in world coordinates
         const viewCenterWorldX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_X / 2);
         const viewCenterWorldY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_Y / 2);
@@ -161,11 +168,16 @@ export class ChunkManager {
         const endChunkY = Math.floor(viewEndWorldY / 16) + 1;
 
         // Calculate radius from the bounds
-        const radiusX = Math.max(Math.abs(centerChunkX - startChunkX), Math.abs(endChunkX - centerChunkX));
-        const radiusY = Math.max(Math.abs(centerChunkY - startChunkY), Math.abs(endChunkY - centerChunkY));
+        const radiusX = Math.abs(centerChunkX - startChunkX);
+        const radiusY = Math.abs(centerChunkY - startChunkY);
         const visibleRadius = Math.max(radiusX, radiusY, 3); // Minimum radius of 3
 
-        await this.requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
+        const newData = await this.requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
+        
+        // Merge newly loaded chunks into worldData if provided
+        if (newData && worldData) {
+            this.mergeChunkData(newData, worldData);
+        }
     }
 
     async loadWorldInfo() {
@@ -206,6 +218,17 @@ export class ChunkManager {
         }
         if (newData && newData.resources) {
             Object.assign(existingWorldData.resources, newData.resources);
+        }
+    }
+
+    updateConnectionStatus(connected) {
+        const status = document.getElementById('connection-status');
+        if (connected) {
+            status.className = 'status-item connected';
+            status.innerHTML = '<span class="status-dot">🟢</span><span>Connected (HTTP)</span>';
+        } else {
+            status.className = 'status-item disconnected';
+            status.innerHTML = '<span class="status-dot">🔴</span><span>Disconnected</span>';
         }
     }
 

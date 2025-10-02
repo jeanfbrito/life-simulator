@@ -115,6 +115,10 @@ class LifeSimulatorApp {
         try {
             console.log('🚀 APP: Initializing viewer...');
 
+            // Setup initial canvas size
+            this.renderer.setupCanvasSize(this.controls.getDragOffset());
+            this.controls.updateZoomDisplay();
+
             // Load world information
             const worldInfoLoaded = await this.chunkManager.loadWorldInfo();
             console.log('📊 APP: World info loaded:', worldInfoLoaded);
@@ -132,6 +136,10 @@ class LifeSimulatorApp {
                         chunksCount: Object.keys(this.worldData.chunks).length,
                         resourcesCount: Object.keys(this.worldData.resources).length
                     });
+                    // Update stats after loading initial chunks
+                    this.updateStats();
+                    // Force an initial render
+                    this.render();
                 }
             }
 
@@ -139,8 +147,9 @@ class LifeSimulatorApp {
             console.log('🎬 APP: Starting animation loop...');
             this.startAnimationLoop();
 
-            // Try to connect via WebSocket for real-time updates
-            this.networkManager.connect();
+            // Note: WebSocket is not supported by the simple web server
+            // The viewer works perfectly with HTTP-only mode
+            // this.networkManager.connect();
 
         } catch (error) {
             console.error('❌ APP: Failed to initialize viewer:', error);
@@ -150,14 +159,14 @@ class LifeSimulatorApp {
     }
 
     render() {
-        // Trigger chunk loading for visible area
-        this.chunkManager.loadVisibleChunksDebounced(this.controls.getDragOffset());
-
         // Render the world
         const stats = this.renderer.render(this.worldData, this.controls.getDragOffset());
 
         // Update statistics display
         this.renderer.updateStatsDisplay(stats);
+        
+        // Trigger chunk loading for visible area (after first render)
+        this.chunkManager.loadVisibleChunksDebounced(this.controls.getDragOffset(), this.worldData);
     }
 
     startAnimationLoop() {

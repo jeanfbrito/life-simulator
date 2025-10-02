@@ -213,11 +213,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             }
         }
         path if path.starts_with("/js/") => {
-            // Serve JavaScript files from the js directory
-            let file_path = path.trim_start_matches('/');
-            if let Ok(content) = std::fs::read_to_string(file_path) {
+            // Serve JavaScript files from the web-viewer/js directory
+            let file_path = format!("web-viewer{}", path);
+            if let Ok(content) = std::fs::read_to_string(&file_path) {
                 send_response(&mut stream, "200 OK", "application/javascript", &content);
             } else {
+                eprintln!("❌ WEB_SERVER: JavaScript file not found: {}", file_path);
                 send_response(&mut stream, "404 Not Found", "text/plain", "JavaScript file not found");
             }
         }
