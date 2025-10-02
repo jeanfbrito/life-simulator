@@ -6,6 +6,7 @@ pub mod resources;
 pub mod world_loader;
 pub mod pathfinding;
 pub mod entities;
+pub mod simulation;
 
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,

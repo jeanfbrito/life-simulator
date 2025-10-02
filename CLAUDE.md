@@ -546,6 +546,175 @@ Extracted and adapted from `/Users/jean/Github/bevy_entitiles/src/algorithm/path
 - Added discrete tick-based execution
 - Integrated directly with our terrain system
 
+## Tick System (Simulation Heartbeat)
+
+### Architecture Overview
+
+The life simulator uses a **discrete tick-based system** inspired by Dwarf Fortress, Factorio, and RimWorld:
+
+- **Base rate**: 10 TPS (ticks per second) = 100ms per tick
+- **Fixed timestep**: Uses Bevy's FixedUpdate schedule for determinism
+- **Multi-rate updates**: Different systems run at different frequencies
+- **Pause/Speed controls**: Built-in speed multiplier and pause functionality
+- **Performance monitoring**: Real-time TPS tracking and metrics
+
+### Core Components
+
+#### SimulationTick Resource
+```rust
+#[derive(Resource)]
+pub struct SimulationTick(pub u64);  // Current tick counter
+```
+
+#### SimulationSpeed Resource
+```rust
+#[derive(Resource)]
+pub struct SimulationSpeed {
+    pub multiplier: f32,  // 0.5x, 1.0x, 2.0x, 3.0x
+    paused: bool,
+}
+```
+
+#### TickMetrics Resource
+- Tracks tick durations (last 60 ticks)
+- Calculates actual TPS
+- Reports min/max/average tick times
+
+### System Categories by Update Frequency
+
+**Fast Systems (Every Tick - 10 TPS)**
+- Movement execution
+- Combat resolution
+- Physics updates
+- Immediate interactions
+
+**Medium Systems (Every 5-10 Ticks - 1-2 TPS)**
+- AI decision making (every 5 ticks)
+- Job assignment (every 10 ticks)
+- Needs updates (hunger, thirst - every 10 ticks)
+- Social interactions (every 10 ticks)
+
+**Slow Systems (Every 100+ Ticks - 0.1 TPS)**
+- Plant growth (every 100 ticks)
+- Aging (every 1000 ticks)
+- Weather changes (every 1000 ticks)
+- World events (every 1000+ ticks)
+
+**Async Systems (Not Tick-Bound)**
+- Pathfinding calculation (runs at 60fps)
+- Terrain generation
+- Save/load operations
+
+### Integration Example
+
+```rust
+use life_simulator::simulation::{SimulationPlugin, every_n_ticks};
+
+fn main() {
+    App::new()
+        .add_plugins(SimulationPlugin)  // Adds tick system
+        
+        // Tick systems (run on fixed timestep)
+        .add_systems(FixedUpdate, (
+            // Fast: every tick
+            tick_movement_system,
+            
+            // Medium: conditional
+            ai_system.run_if(every_n_ticks(5)),
+            
+            // Slow: conditional
+            plant_growth.run_if(every_n_ticks(100)),
+        ))
+        .run();
+}
+```
+
+### Run Conditions
+
+- `every_n_ticks(n)` - Execute system every N ticks
+- `when_paused()` - Execute only when simulation is paused
+- `when_not_paused()` - Execute only when simulation is running
+- `on_tick(n)` - Execute on specific tick number
+- `after_tick(n)` - Execute after N ticks have passed
+
+### Keyboard Controls
+
+- **Space**: Pause/Unpause
+- **1**: 0.5x speed
+- **2**: 1.0x normal speed
+- **3**: 2.0x fast
+- **4**: 3.0x ultra
+
+### Performance Metrics
+
+Automatic logging every 100 ticks (10 seconds):
+```
+╔══════════════════════════════════════════╗
+║       TICK METRICS - Tick 100            ║
+╠══════════════════════════════════════════╣
+║ Actual TPS:        10.1                  ║
+║ Speed:             1.0x                  ║
+║ Status:            RUNNING               ║
+║ Tick Duration:                           ║
+║   Average:          1.23ms               ║
+║   Min:              0.98ms               ║
+║   Max:              2.45ms               ║
+║ Total Ticks:           100               ║
+║ Uptime:            00:00:10              ║
+╚══════════════════════════════════════════╝
+```
+
+### Key Design Decisions
+
+1. **10 TPS base rate**: Good balance between responsiveness and CPU usage
+2. **Deterministic ticks**: Fixed timestep ensures reproducible simulation
+3. **Decoupled rendering**: Logic at 10 TPS, rendering at 60 FPS
+4. **Multi-rate updates**: Expensive systems run less frequently
+5. **Budget-based pathfinding**: Async calculation, tick-synced application
+
+### Key Files
+
+- `src/simulation/mod.rs`: SimulationPlugin and speed controls
+- `src/simulation/tick.rs`: Core tick resources and systems
+- `docs/TICK_SYSTEM_ANALYSIS.md`: Deep analysis of tick architectures (816 lines)
+- `docs/TICK_SYSTEM_QUICKSTART.md`: Quick start guide
+
+### Integration with Pathfinding & Movement
+
+```
+Frame (60fps)                     Tick (10 TPS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                  
+Pathfinding calculation           
+  (process_pathfinding_requests)  
+        ↓                         
+  Path computed                        ↓
+                                  Movement execution
+                                  (tick_movement_system)
+                                       ↓
+                                  TilePosition updated
+```
+
+### Testing
+
+```bash
+# Run tick system tests
+cargo test --lib simulation::tick::tests
+
+# Expected: 4 tests passing
+# - test_tick_increment
+# - test_speed_control
+# - test_update_frequency
+# - test_tick_metrics
+```
+
+### References
+
+- **Dwarf Fortress**: Variable tick rate, priority queues
+- **Factorio**: Fixed 60 UPS, deterministic lockstep
+- **RimWorld**: Multi-rate "ticker" system (Normal/Rare/Long)
+- **Oxygen Not Included**: 5 TPS with sub-tick physics
+
 ## License
 
 This project is dual-licensed under either:
