@@ -10,8 +10,9 @@ pub mod action;
 pub mod consideration;
 pub mod planner;
 pub mod queue;
+pub mod behaviors;
 
-pub use action::{Action, ActionResult, ActionRequest, ActionType, DrinkWaterAction, WanderAction, create_action};
+pub use action::{Action, ActionResult, ActionRequest, ActionType, DrinkWaterAction, GrazeAction, RestAction, create_action};
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use planner::UtilityScore;
 pub use queue::{ActionQueue, QueuedAction};

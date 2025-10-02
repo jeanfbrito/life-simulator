@@ -301,6 +301,7 @@ To add new layers:
 - **URL length limits**: Large chunk requests need batching (handled by viewer)
 - **Chunk key format**: Always use "x,y" string format, not "(x,y)" or other variants
 - **Layer access**: Use multi-layer methods when working with resources or future layers
+- **❌ CRITICAL: Entity spawning**: NEVER manually spawn entities with component tuples. ALWAYS use spawn helper functions (`spawn_rabbit()`, `spawn_human()`, etc.) to ensure `BehaviorConfig` is attached. Missing `BehaviorConfig` = AI won't work. See "Entity System and AI Configuration" section below.
 
 ## Terrain Types & Features
 
@@ -1114,6 +1115,241 @@ RUST_LOG=info cargo run --bin life-simulator
 - Drink water: 70% thirst, 30% distance (weighted sum)
 - Wander: 0.01 (lowest priority)
 - Threshold: 0.05 (lowered to allow early water seeking)
+
+## Entity System and AI Configuration
+
+### Modular Entity Configuration Architecture
+
+The simulator uses a **component-based behavior configuration system** where each entity type has its own modular configuration. This allows easy addition of new entity types and tuning of behavior parameters.
+
+#### File Structure
+```
+src/entities/
+├── mod.rs                  # Entity plugin, exports
+├── entity_types.rs         # Spawn functions, entity markers
+├── movement.rs             # Movement components and systems
+├── stats.rs                # Health, thirst, hunger, energy
+└── types/                  # Behavior configurations
+    ├── mod.rs              # BehaviorConfig component definition
+    └── rabbit.rs           # RabbitBehavior preset
+```
+
+#### BehaviorConfig Component
+
+Every AI-driven entity MUST have a `BehaviorConfig` component attached:
+
+```rust
+#[derive(Component, Debug, Clone)]
+pub struct BehaviorConfig {
+    pub thirst_threshold: f32,      // 0.0-1.0, when to seek water
+    pub hunger_threshold: f32,      // 0.0-1.0, when to seek food
+    pub graze_range: (i32, i32),    // (min, max) tiles for foraging
+    pub water_search_radius: i32,   // Max tiles to search for water
+    pub food_search_radius: i32,    // Max tiles to search for food
+    pub wander_radius: i32,         // Idle wandering range
+}
+```
+
+**Why it's required:**
+- The AI planner queries: `Query<(Entity, &TilePosition, &Thirst, &BehaviorConfig), With<EntityType>>`
+- Without `BehaviorConfig`, entities won't be processed by the AI system
+- Each behavior module (drinking, grazing, etc.) uses these parameters
+
+#### Entity Behavior Presets
+
+Each entity type has a preset with optimized default values:
+
+**Rabbit** (`src/entities/types/rabbit.rs`):
+```rust
+pub struct RabbitBehavior;
+
+impl RabbitBehavior {
+    pub fn config() -> BehaviorConfig {
+        BehaviorConfig::new(
+            0.15,       // thirst_threshold: Drink at 15% thirsty
+            0.4,        // hunger_threshold: Eat at 40% hungry
+            (3, 8),     // graze_range: Short-range grazing
+            100,        // water_search_radius: Wide search
+            100,        // food_search_radius: Wide search
+            15,         // wander_radius: Small territory
+        )
+    }
+}
+```
+
+**Future entities** can follow the same pattern:
+- `src/entities/types/deer.rs` → `DeerBehavior::config()`
+- `src/entities/types/wolf.rs` → `WolfBehavior::config()`
+
+### CRITICAL: Entity Spawning Rules
+
+**❌ NEVER manually spawn entities with component tuples:**
+
+```rust
+// ❌ WRONG - Missing BehaviorConfig, will break AI!
+let rabbit = commands.spawn((
+    Creature { name: "Rabbit".to_string(), species: "Rabbit".to_string() },
+    Rabbit,
+    TilePosition::from_tile(spawn_pos),
+    MovementSpeed::custom(20),
+    EntityStatsBundle::default(),
+    // Missing BehaviorConfig!
+)).id();
+```
+
+**✅ ALWAYS use the spawn helper functions:**
+
+```rust
+// ✅ CORRECT - Uses spawn_rabbit() which attaches BehaviorConfig
+use entities::spawn_rabbit;
+let rabbit = spawn_rabbit(&mut commands, "TestRabbit", spawn_pos);
+```
+
+**Why this matters:**
+- Spawn helper functions ensure ALL required components are attached
+- They attach the correct `BehaviorConfig` preset for that entity type
+- Manual spawning can easily forget components, breaking systems
+- This is a common ECS "component dependency" bug
+
+### Available Spawn Functions
+
+Defined in `src/entities/entity_types.rs`:
+
+```rust
+// Individual entity spawning
+pub fn spawn_human(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity;
+pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity;
+
+// Batch spawning with pathfinding validation
+pub fn spawn_humans(commands: &mut Commands, count: usize, center: IVec2, 
+                    spawn_radius: i32, grid: &PathfindingGrid) -> Vec<Entity>;
+pub fn spawn_rabbits(commands: &mut Commands, count: usize, center: IVec2,
+                     spawn_radius: i32, grid: &PathfindingGrid) -> Vec<Entity>;
+```
+
+**Integration example:**
+```rust
+fn spawn_entities(
+    mut commands: Commands,
+    pathfinding_grid: Res<PathfindingGrid>,
+) {
+    // Spawn single rabbit at specific position
+    let rabbit = spawn_rabbit(&mut commands, "Fluffy", IVec2::new(5, 10));
+    
+    // Spawn multiple rabbits around a point
+    let rabbits = spawn_rabbits(&mut commands, 5, IVec2::new(0, 0), 20, &pathfinding_grid);
+}
+```
+
+### Debugging Missing BehaviorConfig
+
+If entities aren't responding to AI:
+
+1. **Check AI planner logs** (`RUST_LOG=info`):
+   ```bash
+   # Should see logs like:
+   🧠 Entity X at (5, 10) - Thirst: 15.3% - Evaluated 2 actions
+   ✅ Entity X queuing action DrinkWater { target_tile: (20, 15) } with utility 0.28
+   ```
+
+2. **If no logs appear**, entity likely missing `BehaviorConfig`:
+   - Verify entity was spawned using spawn helper function
+   - Check that `BehaviorConfig` component is attached
+   - Ensure entity has the correct marker component (`Rabbit`, `Human`, etc.)
+
+3. **Verify component attachment** in Bevy inspector or logs:
+   ```rust
+   // Query to check components
+   fn debug_entities(query: Query<(Entity, Option<&BehaviorConfig>), With<Rabbit>>) {
+       for (entity, config) in query.iter() {
+           if config.is_none() {
+               error!("❌ Entity {:?} missing BehaviorConfig!", entity);
+           }
+       }
+   }
+   ```
+
+### Adding New Entity Types
+
+To add a new entity type (e.g., Deer):
+
+1. **Create behavior preset** (`src/entities/types/deer.rs`):
+   ```rust
+   pub struct DeerBehavior;
+   
+   impl DeerBehavior {
+       pub fn config() -> BehaviorConfig {
+           BehaviorConfig::new(
+               0.2,        // Different thresholds for deer
+               0.3,
+               (5, 15),    // Wider grazing range
+               150,        // Longer water search
+               150,
+               40,         // Larger territory
+           )
+       }
+   }
+   ```
+
+2. **Export from mod.rs** (`src/entities/types/mod.rs`):
+   ```rust
+   pub mod rabbit;
+   pub mod deer;  // Add this
+   ```
+
+3. **Create spawn function** (`src/entities/entity_types.rs`):
+   ```rust
+   pub fn spawn_deer(
+       commands: &mut Commands,
+       name: impl Into<String>,
+       position: IVec2,
+   ) -> Entity {
+       let template = EntityTemplate::DEER;
+       
+       commands.spawn((
+           Creature {
+               name: name.into(),
+               species: template.species.to_string(),
+           },
+           Deer,
+           TilePosition::from_tile(position),
+           MovementSpeed::custom(template.movement_speed),
+           EntityStatsBundle::default(),
+           DeerBehavior::config(), // Attach behavior config
+       )).id()
+   }
+   ```
+
+4. **Update AI planner** (`src/ai/planner.rs`):
+   ```rust
+   // Add deer query
+   deer_query: Query<(Entity, &TilePosition, &Thirst, &BehaviorConfig), With<Deer>>,
+   
+   // Process deer entities
+   for (entity, position, thirst, behavior_config) in deer_query.iter() {
+       // ... same planning logic
+   }
+   ```
+
+### Key Lessons Learned
+
+**Component Dependencies in ECS:**
+- Systems query specific component combinations
+- Missing ONE component = entity won't be processed
+- Use spawn helpers to ensure consistency
+- Document required components clearly
+
+**AI System Requirements:**
+- Every AI-driven entity needs: `BehaviorConfig`, `TilePosition`, `Thirst`, `Hunger`, `Energy`
+- Stats components come from `EntityStatsBundle::default()`
+- Marker components (`Rabbit`, `Deer`, etc.) differentiate entity types
+- Movement requires: `TilePosition`, `MovementSpeed`, `MovementState` (auto-added)
+
+**Debugging Pattern:**
+1. No AI logs? → Check `BehaviorConfig` component
+2. Entity exists but inactive? → Verify all required components
+3. Spawn not working? → Use spawn helper, don't manually construct
+4. New entity type? → Follow the 4-step pattern above
 
 ## License
 

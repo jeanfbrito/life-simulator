@@ -4,7 +4,7 @@
 /// They can be instant (complete in one tick) or multi-tick (span multiple ticks).
 
 use bevy::prelude::*;
-use crate::entities::stats::Thirst;
+use crate::entities::stats::{Thirst, Hunger, Energy};
 use crate::entities::{TilePosition, MoveOrder};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
@@ -34,11 +34,11 @@ pub struct ActionRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActionType {
     DrinkWater { target_tile: IVec2 },
-    Wander { target_tile: IVec2 },
+    Graze { target_tile: IVec2 },   // Move to grass tile (eating happens via auto-eat system)
+    Rest { duration_ticks: u32 },
     // Future actions:
-    // EatFood { target: Entity },
+    // Hunt { target: Entity },
     // Flee { from: Entity },
-    // Rest { duration_ticks: u32 },
 }
 
 /// Core Action trait
@@ -238,22 +238,22 @@ impl Action for DrinkWaterAction {
 }
 
 // =============================================================================
-// WANDER ACTION
+// GRAZE ACTION
 // =============================================================================
 
-/// Action: Wander to a random nearby tile
+/// Action: Move to a grass tile (for grazing/eating)
 /// 
 /// Behavior:
-/// - Picks a random walkable tile nearby
-/// - Paths to it
-/// - Low priority idle behavior
+/// - Moves to target grass tile
+/// - Once there, auto-eat system will trigger eating
+/// - Used when hungry
 #[derive(Debug, Clone)]
-pub struct WanderAction {
+pub struct GrazeAction {
     pub target_tile: IVec2,
     pub started: bool,
 }
 
-impl WanderAction {
+impl GrazeAction {
     pub fn new(target_tile: IVec2) -> Self {
         Self {
             target_tile,
@@ -262,7 +262,7 @@ impl WanderAction {
     }
 }
 
-impl Action for WanderAction {
+impl Action for GrazeAction {
     fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
         // Check entity has position
         if world.get::<TilePosition>(entity).is_none() {
@@ -311,7 +311,7 @@ impl Action for WanderAction {
         // Check if we've arrived at target
         if current_pos == self.target_tile {
             debug!(
-                "🐇 Entity {:?} completed wander to {:?} on tick {}",
+                "🐇 Entity {:?} arrived at grass {:?} on tick {}",
                 entity,
                 self.target_tile,
                 tick
@@ -322,7 +322,7 @@ impl Action for WanderAction {
         // Start moving if not started yet
         if !self.started {
             debug!(
-                "🐇 Entity {:?} starting wander to {:?}",
+                "🐇 Entity {:?} moving to grass at {:?}",
                 entity,
                 self.target_tile
             );
@@ -342,7 +342,65 @@ impl Action for WanderAction {
     }
     
     fn name(&self) -> &'static str {
-        "Wander"
+        "Graze"
+    }
+}
+
+// =============================================================================
+// REST ACTION
+// =============================================================================
+
+/// Action: Rest in place to regenerate energy
+#[derive(Debug, Clone)]
+pub struct RestAction {
+    pub duration_ticks: u32,
+    pub ticks_remaining: u32,
+    pub started: bool,
+}
+
+impl RestAction {
+    pub fn new(duration_ticks: u32) -> Self {
+        Self {
+            duration_ticks,
+            ticks_remaining: duration_ticks,
+            started: false,
+        }
+    }
+}
+
+impl Action for RestAction {
+    fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
+        world.get::<Energy>(entity).is_some()
+    }
+    
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
+        if !self.started {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                if let Some(mut energy) = entity_mut.get_mut::<Energy>() {
+                    energy.set_resting();
+                    info!("😴 Entity {:?} started resting for {} ticks (energy: {:.1}%)", entity, self.duration_ticks, energy.0.percentage());
+                }
+            }
+            self.started = true;
+        }
+        
+        self.ticks_remaining = self.ticks_remaining.saturating_sub(1);
+        
+        if self.ticks_remaining == 0 {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                if let Some(mut energy) = entity_mut.get_mut::<Energy>() {
+                    energy.set_active();
+                    info!("😊 Entity {:?} finished resting on tick {}! Energy: {:.1}%", entity, tick, energy.0.percentage());
+                }
+            }
+            return ActionResult::Success;
+        }
+        
+        ActionResult::InProgress
+    }
+    
+    fn name(&self) -> &'static str {
+        "Rest"
     }
 }
 
@@ -356,8 +414,11 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
         ActionType::DrinkWater { target_tile } => {
             Box::new(DrinkWaterAction::new(target_tile))
         }
-        ActionType::Wander { target_tile } => {
-            Box::new(WanderAction::new(target_tile))
+        ActionType::Graze { target_tile } => {
+            Box::new(GrazeAction::new(target_tile))
+        }
+        ActionType::Rest { duration_ticks } => {
+            Box::new(RestAction::new(duration_ticks))
         }
     }
 }

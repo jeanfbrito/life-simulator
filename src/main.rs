@@ -144,10 +144,8 @@ fn spawn_wanderers(
 ) {
     println!("🎯 LIFE_SIMULATOR: Spawning single idle rabbit for testing...");
     
-    // Spawn 1 idle rabbit (no wandering, just AI-driven behavior)
-    use entities::entity_types::{EntityTemplate, Rabbit};
-    use entities::{Creature, TilePosition, MovementSpeed};
-    use entities::stats::EntityStatsBundle;
+    // Import the spawn function that attaches BehaviorConfig
+    use entities::spawn_rabbit;
     
     // Find a walkable spawn position near origin
     use rand::Rng;
@@ -166,23 +164,12 @@ fn spawn_wanderers(
     });
     
     if let Some(spawn_pos) = spawn_pos {
-        let template = EntityTemplate::RABBIT;
-        
-        // Spawn rabbit WITHOUT Wanderer component (no wandering behavior)
-        let rabbit = commands.spawn((
-            Creature {
-                name: "TestRabbit".to_string(),
-                species: template.species.to_string(),
-            },
-            Rabbit,
-            TilePosition::from_tile(spawn_pos),
-            MovementSpeed::custom(template.movement_speed),
-            EntityStatsBundle::default(),
-            // NOTE: No Wanderer component - rabbit will only move when driven by needs (thirst/hunger)
-        )).id();
+        // Use the proper spawn function that attaches BehaviorConfig
+        let rabbit = spawn_rabbit(&mut commands, "TestRabbit", spawn_pos);
         
         println!("✅ LIFE_SIMULATOR: Spawned 1 idle rabbit 🐇 at {:?}", spawn_pos);
         println!("   📊 Rabbit will only move when thirsty/hungry (no wandering)");
+        println!("   🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range");
         println!("🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html");
         println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
     } else {

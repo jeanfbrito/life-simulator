@@ -3,6 +3,8 @@ pub mod movement;
 pub mod entity_tracker;
 pub mod stats;
 pub mod entity_types;
+pub mod types;
+pub mod auto_eat;
 
 use bevy::prelude::*;
 
@@ -31,6 +33,10 @@ pub use entity_types::{
     spawn_human, spawn_rabbit,
     spawn_humans, spawn_rabbits,
     count_entities_by_type,
+};
+
+pub use types::{
+    BehaviorConfig,
 };
 
 // ============================================================================
@@ -75,6 +81,7 @@ impl Plugin for EntitiesPlugin {
             .add_systems(Update, (
                 stats::tick_stats_system,       // Update entity stats
                 movement::tick_movement_system, // Movement execution
+                auto_eat::auto_eat_system,      // Auto-eat when on grass
                 stats::death_system,            // Handle death
             ).chain().run_if(should_run_tick_systems));
     }

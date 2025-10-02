@@ -4,6 +4,7 @@
 /// unique properties while sharing common systems (movement, stats, AI).
 use bevy::prelude::*;
 use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature};
+use super::types::rabbit::RabbitBehavior;
 use crate::pathfinding::PathfindingGrid;
 use rand::Rng;
 
@@ -121,6 +122,7 @@ pub fn spawn_rabbit(
         TilePosition::from_tile(position),
         MovementSpeed::custom(template.movement_speed),
         EntityStatsBundle::default(),
+        RabbitBehavior::config(), // Attach behavior configuration
         // NO Wanderer component - movement driven by utility AI!
     )).id()
 }
