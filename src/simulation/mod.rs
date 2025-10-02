@@ -28,10 +28,8 @@ impl Plugin for SimulationPlugin {
             .insert_resource(SimulationState::default())
             .insert_resource(TickMetrics::default())
             
-            // Configure fixed timestep for ticks
-            .insert_resource(Time::<Fixed>::from_duration(
-                Duration::from_millis(TICK_DURATION_MS)
-            ))
+            // Configure fixed timestep for ticks using proper Bevy API
+            .insert_resource(Time::<Fixed>::from_hz(BASE_TICK_RATE))
             
             // Core tick systems (run in FixedUpdate)
             .add_systems(FixedUpdate, (
@@ -78,9 +76,10 @@ fn handle_speed_controls(
     
     // Update fixed timestep based on speed (if not paused)
     if !speed.is_paused() {
-        let adjusted_duration = Duration::from_secs_f64(
-            TICK_DURATION_MS as f64 / 1000.0 / speed.multiplier as f64
-        );
-        time.set_timestep(adjusted_duration);
+        let adjusted_hz = BASE_TICK_RATE * speed.multiplier as f64;
+        *time = Time::<Fixed>::from_hz(adjusted_hz);
+    } else {
+        // When paused, set an extremely slow timestep (effectively stopped)
+        *time = Time::<Fixed>::from_hz(0.001);
     }
 }

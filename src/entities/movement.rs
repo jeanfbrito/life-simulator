@@ -127,12 +127,14 @@ pub fn tick_movement_system(
         // Get next target tile
         if let Some(target) = path.current_target() {
             // Move to target
+            let old_pos = position.tile;
             position.tile = target;
             path.advance();
 
             debug!(
-                "Entity {:?} moved to {:?}, remaining waypoints: {}",
-                entity,
+                "Entity {:?} moved from {:?} to {:?}, {} waypoints remaining",
+                entity.index(),
+                old_pos,
                 target,
                 path.remaining().len()
             );

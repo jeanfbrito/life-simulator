@@ -55,7 +55,7 @@ impl EntityTracker {
         let entities_json: Vec<String> = self.entities.values()
             .map(|e| {
                 format!(
-                    r#"{{"id": {}, "name": "{}", "species": "{}", "x": {}, "y": {}}}"#,
+                    r#"{{"id": {}, "name": "{}", "entity_type": "{}", "position": {{"x": {}, "y": {}}}}}"#,
                     e.entity_id, e.name, e.species, e.position.x, e.position.y
                 )
             })

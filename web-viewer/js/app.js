@@ -7,6 +7,7 @@ import { Renderer } from './renderer.js';
 import { ChunkManager } from './chunk-manager.js';
 import { Controls, FPSCounter } from './controls.js';
 import { NetworkManager } from './network.js';
+import { EntityManager } from './entity-manager.js';
 
 class LifeSimulatorApp {
     constructor() {
@@ -22,6 +23,7 @@ class LifeSimulatorApp {
         this.controls = new Controls(this.canvas, this.renderer, this.chunkManager);
         this.networkManager = new NetworkManager();
         this.fpsCounter = new FPSCounter();
+        this.entityManager = new EntityManager();
 
         // Application state
         this.worldData = {
@@ -147,6 +149,10 @@ class LifeSimulatorApp {
             console.log('🎬 APP: Starting animation loop...');
             this.startAnimationLoop();
 
+            // Start entity polling
+            console.log('🎯 APP: Starting entity polling...');
+            this.entityManager.startPolling(200); // Poll every 0.2 seconds for smoother visualization
+
             // Note: WebSocket is not supported by the simple web server
             // The viewer works perfectly with HTTP-only mode
             // this.networkManager.connect();
@@ -159,11 +165,20 @@ class LifeSimulatorApp {
     }
 
     render() {
-        // Render the world
-        const stats = this.renderer.render(this.worldData, this.controls.getDragOffset());
+        // Get entities from entity manager
+        const entities = this.entityManager.getEntities();
+
+        // Render the world with entities
+        const stats = this.renderer.render(this.worldData, this.controls.getDragOffset(), entities);
 
         // Update statistics display
         this.renderer.updateStatsDisplay(stats);
+        
+        // Update entity count display
+        const entityCountElement = document.getElementById('entity-count');
+        if (entityCountElement) {
+            entityCountElement.textContent = entities.length;
+        }
         
         // Trigger chunk loading for visible area (after first render)
         // Pass render callback so new chunks trigger a re-render
@@ -210,6 +225,7 @@ class LifeSimulatorApp {
     destroy() {
         this.networkManager.disconnect();
         this.chunkManager.clear();
+        this.entityManager.clear();
     }
 }
 

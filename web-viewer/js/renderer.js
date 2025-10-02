@@ -57,7 +57,7 @@ export class Renderer {
         this.canvas.style.transform = 'none';
     }
 
-    render(worldData, dragOffset) {
+    render(worldData, dragOffset, entities = []) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Apply clipping to prevent content from rendering outside canvas
@@ -85,6 +85,9 @@ export class Renderer {
 
         // Second pass: Render resources on top (allows overflow beyond tile boundaries)
         this.renderResources(resourcesToRender);
+
+        // Third pass: Render entities on top of everything
+        this.renderEntities(entities, cameraOffsetX, cameraOffsetY);
 
         this.ctx.restore(); // Restore the translation and clipping
 
@@ -201,6 +204,57 @@ export class Renderer {
             this.ctx.shadowBlur = 0; // Reset shadow
         }
         this.ctx.restore(); // Restore context state
+    }
+
+    renderEntities(entities, cameraOffsetX, cameraOffsetY) {
+        this.ctx.save();
+
+        // Entity rendering configuration
+        const ENTITY_RADIUS = Math.max(2, CONFIG.TILE_SIZE * 0.3);
+        const ENTITY_COLORS = {
+            default: '#ff4444',
+            wanderer: '#44ff44',
+            animal: '#ffaa44',
+            person: '#4444ff'
+        };
+
+        for (const entity of entities) {
+            if (!entity.position) continue;
+
+            const entityWorldX = entity.position.x;
+            const entityWorldY = entity.position.y;
+
+            // Convert world coordinates to screen coordinates
+            const screenX = (entityWorldX - cameraOffsetX + Math.floor(CONFIG.VIEW_SIZE_X / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+            const screenY = (entityWorldY - cameraOffsetY + Math.floor(CONFIG.VIEW_SIZE_Y / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+
+            // Only render if entity is within visible bounds
+            if (screenX >= -ENTITY_RADIUS && screenX <= (CONFIG.VIEW_SIZE_X * CONFIG.TILE_SIZE) + ENTITY_RADIUS &&
+                screenY >= -ENTITY_RADIUS && screenY <= (CONFIG.VIEW_SIZE_Y * CONFIG.TILE_SIZE) + ENTITY_RADIUS) {
+
+                // Draw entity as emoji
+                this.ctx.font = `${CONFIG.TILE_SIZE * 1.2}px Arial`;
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                
+                // Add subtle shadow for better visibility
+                this.ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+                this.ctx.shadowBlur = 2;
+                this.ctx.shadowOffsetX = 1;
+                this.ctx.shadowOffsetY = 1;
+                
+                // Render the emoji
+                this.ctx.fillText('🧍‍♂️', screenX, screenY);
+            }
+        }
+
+        // Reset shadow
+        this.ctx.shadowColor = 'transparent';
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+
+        this.ctx.restore();
     }
 
     updateStatsDisplay(stats) {

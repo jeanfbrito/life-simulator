@@ -241,12 +241,12 @@ fn reconstruct_path(
     origin: IVec2,
     destination: IVec2,
 ) -> Path {
-    let mut waypoints = Vec::new();
+    let mut sparse_waypoints = Vec::new();
     let mut current = destination;
 
-    // Walk backwards from destination to origin
+    // Walk backwards from destination to origin (these are the A* nodes)
     while current != origin {
-        waypoints.push(current);
+        sparse_waypoints.push(current);
         if let Some(node) = all_nodes.get(&current) {
             if let Some(parent) = node.parent {
                 current = parent;
@@ -257,11 +257,51 @@ fn reconstruct_path(
             break;
         }
     }
+    sparse_waypoints.push(origin);
 
     // Reverse to get origin -> destination order
-    waypoints.reverse();
+    sparse_waypoints.reverse();
 
-    Path::new(waypoints)
+    // Fill in all intermediate tiles between A* waypoints
+    let mut full_waypoints = Vec::new();
+    
+    for i in 0..sparse_waypoints.len() - 1 {
+        let start = sparse_waypoints[i];
+        let end = sparse_waypoints[i + 1];
+        
+        // Add all tiles from start to end (excluding start, including end)
+        let mut intermediate = interpolate_tiles(start, end);
+        full_waypoints.append(&mut intermediate);
+    }
+
+    Path::new(full_waypoints)
+}
+
+/// Generate all tiles between two points (excluding start, including end)
+/// Assumes points are connected (A* guarantees this)
+fn interpolate_tiles(start: IVec2, end: IVec2) -> Vec<IVec2> {
+    let mut tiles = Vec::new();
+    let mut current = start;
+    
+    // Calculate direction
+    let delta = end - start;
+    let steps = delta.x.abs().max(delta.y.abs());
+    
+    if steps == 0 {
+        return tiles; // Same tile, no interpolation needed
+    }
+    
+    // Determine step direction for each axis
+    let step_x = if delta.x != 0 { delta.x.signum() } else { 0 };
+    let step_y = if delta.y != 0 { delta.y.signum() } else { 0 };
+    
+    // Generate all intermediate tiles
+    for _ in 0..steps {
+        current = IVec2::new(current.x + step_x, current.y + step_y);
+        tiles.push(current);
+    }
+    
+    tiles
 }
 
 // ============================================================================
@@ -333,6 +373,13 @@ pub fn process_pathfinding_requests(
             request.allow_diagonal,
             request.max_steps,
         ) {
+            debug!(
+                "Path found for entity {:?}: {} waypoints from {:?} to {:?}",
+                entity.index(),
+                path.waypoints.len(),
+                request.origin,
+                request.destination
+            );
             // Path found - attach to entity and remove request
             commands.entity(entity).insert(path);
         } else {

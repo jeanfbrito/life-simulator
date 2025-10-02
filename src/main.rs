@@ -39,6 +39,7 @@ fn main() {
         .init_resource::<PathfindingGrid>()
         .add_systems(Startup, (setup, spawn_wanderers.after(setup)))
         .add_systems(Update, (
+            run_fixed_update_schedule,     // Manually run FixedUpdate
             process_pathfinding_requests,  // Async pathfinding
             simulation_system,
             save_load_system.after(simulation_system),
@@ -107,6 +108,12 @@ fn spawn_wanderers(
     println!("✅ LIFE_SIMULATOR: Spawned {} wandering people", entities.len());
     println!("🌐 LIFE_SIMULATOR: View them at http://127.0.0.1:54321/viewer.html");
     println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
+}
+
+/// System that manually runs the FixedUpdate schedule
+/// This is needed because ScheduleRunnerPlugin doesn't run it automatically
+fn run_fixed_update_schedule(world: &mut World) {
+    world.run_schedule(FixedUpdate);
 }
 
 fn simulation_system(
