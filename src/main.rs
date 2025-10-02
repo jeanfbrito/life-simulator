@@ -12,6 +12,7 @@ mod world_loader;
 mod pathfinding;
 mod entities;
 mod simulation;
+mod ai;
 
 use tilemap::{TilemapPlugin, WorldConfig};
 use serialization::{WorldSerializationPlugin, WorldSaveRequest, WorldLoadRequest};
@@ -20,6 +21,7 @@ use world_loader::WorldLoader;
 use pathfinding::{PathfindingGrid, process_pathfinding_requests};
 use entities::{EntitiesPlugin, spawn_humans, spawn_rabbits};
 use simulation::SimulationPlugin;
+use ai::TQUAIPlugin;
 
 mod web_server_simple;
 
@@ -35,6 +37,7 @@ fn main() {
         .add_plugins(CachedWorldPlugin)
         .add_plugins(SimulationPlugin)  // Tick system
         .add_plugins(EntitiesPlugin)     // Movement & AI
+        .add_plugins(TQUAIPlugin)        // Utility AI system
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
