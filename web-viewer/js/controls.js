@@ -13,7 +13,14 @@ export class Controls {
         // Map panning state
         this.isDragging = false;
         this.dragStart = { x: 0, y: 0 };
+        // Smoothed camera position used for rendering
         this.dragOffset = { x: 0, y: 0 };
+        // Target camera position (follows the mouse while dragging)
+        this.targetOffset = { x: 0, y: 0 };
+        // Inertia velocity for smooth deceleration after mouseup
+        this.inertiaVelocity = { x: 0, y: 0 };
+        // Track last mouse position to compute velocity while dragging
+        this.lastMouse = { x: 0, y: 0 };
 
         this.setupEventListeners();
     }
@@ -131,6 +138,10 @@ export class Controls {
             this.isDragging = true;
             this.dragStart.x = e.clientX - this.dragOffset.x;
             this.dragStart.y = e.clientY - this.dragOffset.y;
+            this.lastMouse.x = e.clientX;
+            this.lastMouse.y = e.clientY;
+            // Stop any existing inertia
+            this.inertiaVelocity = { x: 0, y: 0 };
             this.canvas.style.cursor = 'grabbing';
         }
     }
@@ -138,11 +149,21 @@ export class Controls {
     handleDrag(e) {
         if (this.isDragging) {
             e.preventDefault();
-            this.dragOffset.x = e.clientX - this.dragStart.x;
-            this.dragOffset.y = e.clientY - this.dragStart.y;
+            // Update target offset from mouse position
+            this.targetOffset.x = e.clientX - this.dragStart.x;
+            this.targetOffset.y = e.clientY - this.dragStart.y;
+
+            // Compute instantaneous velocity for inertia
+            const dx = e.clientX - this.lastMouse.x;
+            const dy = e.clientY - this.lastMouse.y;
+            this.inertiaVelocity.x = dx;
+            this.inertiaVelocity.y = dy;
+            this.lastMouse.x = e.clientX;
+            this.lastMouse.y = e.clientY;
+
             // Trigger chunk loading during drag for smoother experience
             if (this.worldData && this.onRender) {
-                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
+                this.chunkManager.loadVisibleChunksDebounced(this.targetOffset, this.worldData, this.onRender);
             }
         }
     }
@@ -152,6 +173,7 @@ export class Controls {
             e.preventDefault();
             this.isDragging = false;
             this.canvas.style.cursor = 'pointer';
+            // On release, keep current target so inertia moves from current velocity
             // Load chunks for the new position immediately when dragging stops
             if (this.worldData && this.onRender) {
                 this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
@@ -201,6 +223,31 @@ export class Controls {
         // Trigger re-render via the main app
         if (this.onRender) {
             this.onRender();
+        }
+    }
+
+    // Smooth update called each animation frame
+    update() {
+        // Smoothly move current offset toward target while dragging
+        if (this.isDragging) {
+            this.dragOffset.x += (this.targetOffset.x - this.dragOffset.x) * CONFIG.panSmoothing;
+            this.dragOffset.y += (this.targetOffset.y - this.dragOffset.y) * CONFIG.panSmoothing;
+        } else {
+            // Apply inertia when not dragging
+            if (Math.abs(this.inertiaVelocity.x) > CONFIG.inertiaMinSpeed || Math.abs(this.inertiaVelocity.y) > CONFIG.inertiaMinSpeed) {
+                this.dragOffset.x += this.inertiaVelocity.x;
+                this.dragOffset.y += this.inertiaVelocity.y;
+                this.inertiaVelocity.x *= CONFIG.inertiaFriction;
+                this.inertiaVelocity.y *= CONFIG.inertiaFriction;
+
+                // While inertia is moving, keep loading chunks
+                if (this.worldData && this.onRender) {
+                    this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
+                }
+            } else {
+                // Stop inertia when velocity is small
+                this.inertiaVelocity = { x: 0, y: 0 };
+            }
         }
     }
 

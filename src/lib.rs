@@ -4,6 +4,8 @@ pub mod serialization;
 pub mod cached_world;
 pub mod resources;
 pub mod world_loader;
+pub mod pathfinding;
+pub mod entities;
 
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,

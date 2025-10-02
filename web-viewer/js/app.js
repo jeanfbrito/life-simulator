@@ -176,6 +176,9 @@ class LifeSimulatorApp {
 
     startAnimationLoop() {
         const animate = (currentTime) => {
+            // Always update controls (for smoothing/inertia)
+            this.controls.update();
+
             // Check if we should render this frame (FPS limiting)
             if (this.fpsCounter.update(currentTime)) {
                 // Render the map

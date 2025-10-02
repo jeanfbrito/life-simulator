@@ -10,8 +10,13 @@ export const CONFIG = {
     VIEW_SIZE_Y: 100, // Dynamic view height based on container
 
     // Performance settings
-    targetFPS: 30,
-    frameDelay: 1000 / 30,
+    targetFPS: 60,
+    frameDelay: 1000 / 60,
+
+    // Panning smoothing
+    panSmoothing: 0.2,      // 0..1 how fast the camera catches up to the target
+    inertiaFriction: 0.90,  // 0..1 how quickly inertia slows down
+    inertiaMinSpeed: 0.15,  // px/frame threshold to stop inertia
 
     // Chunk loading settings
     chunkLoadRadius: 5,

@@ -6,6 +6,12 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 Life Simulator is a headless life simulation game built with Bevy 0.16 that features a **separated architecture** where world generation is completely independent from the running simulation engine. Maps are generated as a separate CLI step, and the life simulator loads pre-generated worlds for consistent, reproducible simulations.
 
+## Prerequisites
+
+- Rust 1.70+ (recommended to use [rustup](https://rustup.rs/))
+- Git
+- A modern web browser
+
 ## Common Commands
 
 ### Development Build & Run
@@ -64,6 +70,12 @@ cargo run --bin life-simulator
 # Access the web viewer
 # Open http://127.0.0.1:54321/viewer.html in your browser
 ```
+
+#### Web Viewer Features
+- **Interactive Map**: Click and drag to pan around the island
+- **Zoom**: Mouse wheel to zoom in/out
+- **Terrain Display**: 12 different terrain types with distinct colors
+- **Dark Theme**: Optimized for comfortable viewing
 
 ### API Testing
 ```bash
@@ -269,3 +281,273 @@ To add new layers:
 - **URL length limits**: Large chunk requests need batching (handled by viewer)
 - **Chunk key format**: Always use "x,y" string format, not "(x,y)" or other variants
 - **Layer access**: Use multi-layer methods when working with resources or future layers
+
+## Terrain Types & Features
+
+### Available Terrain Types
+- **Deep Water**: Outer ocean (#003366)
+- **Shallow Water**: Coastal transition zone (#4a7ba7)
+- **Sand**: Beach areas (#f4e4bc)
+- **Grass**: Common land terrain
+- **Forest**: Wooded areas
+- **Desert**: Dry, sandy terrain
+- **Dirt**: Barren land
+- **Mountains**: Elevated terrain
+- **Snow**: Cold, snowy peaks
+- **Stone**: Rocky areas
+- **Swamps**: Wetland areas
+
+### Terrain Generation Features
+- **Circular Islands**: Mathematical distance-based island generation
+- **Realistic Beaches**: Proper water transitions (Deep Water → Shallow Water → Sand → Land)
+- **Natural Variations**: Controlled irregularity using sine/cosine functions
+- **Biome Diversity**: Multiple terrain types with smooth transitions
+
+### Terrain Zones
+1. **Circular Island Base**
+   - Distance-based calculations from center point
+   - Controlled irregularity using sine/cosine functions
+   - Distinct terrain zones with smooth transitions
+
+2. **Terrain Transition Layers**
+   - Deep Water: Outer ocean
+   - Shallow Water: Coastal transition zone
+   - Sand Beach: Island border
+   - Land Interior: Various biomes with grass center
+
+3. **Chunk-Based Architecture**
+   - 16×16 tile chunks for efficient memory usage
+   - Procedural generation on-demand by map_generator
+   - HTTP API for terrain data access
+
+## Map Generator Options
+
+The standalone map generator provides these options:
+
+```bash
+cargo run --bin map_generator -- --help
+
+Options:
+  -n, --name <NAME>         World name [default: generated_world]
+  -s, --seed <SEED>         World generation seed (random if not specified)
+  -r, --radius <RADIUS>     World size in chunks radius [default: 5]
+  -o, --output-dir <DIR>    Output directory [default: maps]
+  -p, --preview             Generate HTML preview
+  -v, --verbose             Verbose output
+```
+
+### Example Map Generation Commands
+```bash
+# Generate a default world (radius 5, random seed)
+cargo run --bin map_generator
+
+# Generate with custom parameters
+cargo run --bin map_generator -- --name "my_world" --seed 12345 --radius 10 --verbose
+
+# Generate with preview HTML
+cargo run --bin map_generator -- --name "test_world" --preview
+```
+
+## Testing Checklist
+
+Before considering map viewer functionality complete, verify:
+
+### Basic Functionality
+- [ ] Server starts successfully on `http://127.0.0.1:54321`
+- [ ] Web viewer loads at `http://127.0.0.1:54321/viewer.html`
+- [ ] World info API returns correct center chunk and size
+
+### Terrain Display
+- [ ] Complete 7×7 grid loads correctly (49 chunks total)
+- [ ] Both terrain and resources layers display properly
+- [ ] Chunk boundaries render without artifacts
+- [ ] Terrain colors match expected types (water, sand, grass, forest, etc.)
+
+### Performance and Reliability
+- [ ] Batched requests work without connection reset errors
+- [ ] Map loads within reasonable time (< 5 seconds)
+- [ ] No JavaScript console errors during map loading
+- [ ] Edge chunks (outside saved world) show deep water correctly
+
+### Interactive Features
+- [ ] Pan functionality works (click and drag)
+- [ ] Zoom functionality works (mouse wheel)
+- [ ] Layer toggle (if implemented) works correctly
+- [ ] Coordinate display updates correctly during navigation
+
+### Data Integrity
+- [ ] Saved world data matches displayed terrain
+- [ ] Resources layer data loads correctly when `layers=true` parameter is used
+- [ ] Chunk coordinates are calculated correctly from center point
+- [ ] No missing or corrupted chunks in the displayed area
+
+## References and Inspiration
+
+- [Bevy Game Engine](https://bevyengine.org/) - The game engine powering this project
+- `/Users/jean/Github/world-simulator` - Terrain generation inspiration
+- `/Users/jean/Github/dogoap` - AI and behavior tree reference
+- `/Users/jean/Github/big-brain` - AI planning and decision-making reference
+- `/Users/jean/Github/bevy_entitiles` - Tile-based entity system reference
+- Procedural content generation techniques for realistic island formation
+
+## Future Development Ideas
+
+This project serves as a foundation for:
+- Advanced life simulation mechanics
+- AI-driven entity behavior
+- Complex ecosystem interactions
+- Multi-user web-based simulation
+- Real-time terrain modification
+
+## Pathfinding and Movement System
+
+### Architecture Overview
+
+The life simulator uses a **tick-based discrete movement system** with A* pathfinding:
+
+- **Pathfinding**: Runs asynchronously every frame (not tick-synced) for responsive path calculation
+- **Movement**: Discrete tile-by-tile movement that executes only on simulation ticks
+- **No smooth interpolation**: Entities jump from tile to tile (discrete simulation)
+
+### Core Components
+
+#### Pathfinding Module (`src/pathfinding.rs`)
+
+**Key Types:**
+- `PathfindingGrid`: Resource storing movement costs for all tiles (built from terrain)
+- `PathRequest`: Component requesting path calculation (origin → destination)
+- `Path`: Component containing computed waypoints
+- `PathNode`: Internal A* algorithm node (g_cost, h_cost, parent)
+
+**Algorithm:**
+- Pure A* with Manhattan distance heuristic
+- BinaryHeap priority queue for O(E log V) performance
+- Respects terrain costs (Grass=1, Forest=3, DeepWater=impassable)
+- Supports diagonal movement (optional)
+- max_steps limit to prevent infinite searches
+
+**Systems (Non-Tick):**
+- `process_pathfinding_requests()`: Computes paths using A* algorithm
+
+#### Movement Module (`src/entities/movement.rs`)
+
+**Key Components:**
+- `TilePosition`: Entity's discrete tile position (IVec2)
+- `MoveOrder`: High-level movement command (destination)
+- `MovementSpeed`: Ticks per tile (1=fast, 2=normal, 4=slow)
+- `MovementState`: Internal tick counter for speed control
+
+**Systems:**
+- **Non-Tick**: `initiate_pathfinding()` - converts MoveOrder to PathRequest
+- **Non-Tick**: `initialize_movement_state()` - prepares entity for movement
+- **TICK-SYNCED**: `tick_movement_system()` - executes discrete movement steps
+
+### Movement Flow
+
+```
+1. Entity gets MoveOrder(destination)         [User/AI decision]
+2. → PathRequest(origin, dest)               [initiate_pathfinding]
+3. → Path(waypoints)                          [process_pathfinding_requests]
+4. → MovementState initialized                [initialize_movement_state]
+5. Each tick: advance one waypoint            [tick_movement_system]
+6. Path complete → components removed         [tick_movement_system]
+```
+
+### Integration Example
+
+```rust
+fn main() {
+    App::new()
+        .init_resource::<PathfindingGrid>()
+        .add_plugins(EntitiesPlugin)
+        .add_systems(Startup, setup_pathfinding_grid)
+        .add_systems(Update, process_pathfinding_requests)  // Every frame
+        .add_systems(FixedUpdate, tick_movement_system)     // On ticks only
+        .run();
+}
+
+fn setup_pathfinding_grid(
+    world_loader: Res<WorldLoader>,
+    mut grid: ResMut<PathfindingGrid>,
+) {
+    *grid = build_pathfinding_grid_from_world(&world_loader);
+}
+```
+
+### Usage Example
+
+```rust
+use life_simulator::entities::{spawn_creature, issue_move_order, MovementSpeed};
+
+fn spawn_and_move(mut commands: Commands) {
+    let entity = spawn_creature(
+        &mut commands,
+        "Bob",
+        "Human",
+        IVec2::new(0, 0),
+        MovementSpeed::normal(),  // 1 tile per 2 ticks
+    );
+    
+    issue_move_order(&mut commands, entity, IVec2::new(10, 10));
+}
+```
+
+### Terrain Movement Costs
+
+Defined in `TerrainType::movement_cost()`:
+- Grass: 1 (easy)
+- Sand/Dirt: 2 (normal)
+- Forest/Stone: 3 (trees/rocks)
+- Desert: 4 (hot, tiring)
+- ShallowWater: 5 (wading)
+- Snow: 6 (cold, deep)
+- Mountain: 8 (very difficult)
+- Swamp: 10 (very slow)
+- DeepWater: u32::MAX (impassable)
+
+### Performance Notes
+
+- **PathfindingGrid**: ~8 bytes per tile, ~80KB for 100×100 grid
+- **A* complexity**: O(E log V), typically <1ms for 100×100 with obstacles
+- **Memory efficient**: Chunked storage for world data
+- **Pathfinding not tick-synced**: Can take multiple frames without blocking ticks
+
+### Key Files
+
+- `src/pathfinding.rs`: A* algorithm, PathfindingGrid, terrain costs
+- `src/entities/mod.rs`: Entity types, plugin, spawn helpers
+- `src/entities/movement.rs`: Tick-based movement execution
+- `docs/MOVEMENT_INTEGRATION.md`: Complete integration guide
+
+### Important Design Decisions
+
+1. **Discrete movement**: Entities don't interpolate - they teleport tile-by-tile on ticks
+2. **Tick-synced execution**: Only `tick_movement_system` runs on simulation ticks
+3. **Async pathfinding**: Path calculation happens off-tick for responsiveness
+4. **Terrain-based costs**: Movement cost derived from TerrainType, not separate data
+5. **Speed via tick budgets**: MovementSpeed controls ticks-per-tile, not tiles-per-second
+
+### Testing
+
+```bash
+# Run pathfinding unit tests
+cargo test --lib pathfinding
+
+# Enable debug logging
+RUST_LOG=life_simulator=debug cargo run --bin life-simulator
+```
+
+### Source Inspiration
+
+Extracted and adapted from `/Users/jean/Github/bevy_entitiles/src/algorithm/pathfinding.rs` but simplified:
+- Removed bevy_entitiles dependency
+- Removed multi-threaded task system
+- Removed tilemap entity associations
+- Added discrete tick-based execution
+- Integrated directly with our terrain system
+
+## License
+
+This project is dual-licensed under either:
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
