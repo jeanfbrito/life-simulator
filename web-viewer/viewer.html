@@ -342,28 +342,28 @@
         const RESOURCE_SYMBOLS = {
             'TreeOak': '🌳',
             'TreePine': '🌲',
-            'TreeBirch': '🌳',
+            'TreeBirch': '🪾',
             'Rock': '🪨',
-            'Bush': '🌿',
+            'Bush': '🌳',
             'Flower': '🌸'
         };
 
         // Resource rendering configuration with size and positioning
         const RESOURCE_CONFIG = {
             'TreeOak': {
-                sizeMultiplier: 0.7,
+                sizeMultiplier: 1.4,
                 offsetX: 0,
-                offsetY: 0.1
+                offsetY: -0.3
             },
             'TreePine': {
                 sizeMultiplier: 1.6, // Double size (0.8 * 2.0 = 1.6)
                 offsetX: 0,
-                offsetY: 0 // Perfectly centered
+                offsetY: -0.5 // Perfectly centered the base of the tree on the grid
             },
             'TreeBirch': {
-                sizeMultiplier: 0.7,
+                sizeMultiplier: 1.4,
                 offsetX: 0,
-                offsetY: 0.1
+                offsetY: -0.3
             },
             'Rock': {
                 sizeMultiplier: 0.6,
@@ -399,13 +399,15 @@
             // Calculate tile size based on zoom
             TILE_SIZE = Math.max(4, Math.floor(8 * renderScale));
 
-            // Calculate view size based on container dimensions
+            // Calculate view size based on container dimensions and tile size
+            // This ensures we see more tiles when zoomed in, fewer when zoomed out
             const viewWidth = Math.floor(containerRect.width / TILE_SIZE);
             const viewHeight = Math.floor(containerRect.height / TILE_SIZE);
 
-            // Use non-square view to fill container completely
-            VIEW_SIZE_X = Math.max(50, Math.min(300, viewWidth)); // Clamp between 50-300 tiles
-            VIEW_SIZE_Y = Math.max(50, Math.min(300, viewHeight)); // Clamp between 50-300 tiles
+            // Set view size to match container dimensions exactly
+            // Remove artificial limits to prevent cutting when zoomed in
+            VIEW_SIZE_X = Math.max(10, viewWidth); // Minimum 10 tiles to prevent issues
+            VIEW_SIZE_Y = Math.max(10, viewHeight); // Minimum 10 tiles to prevent issues
 
             // Set canvas resolution to match container dimensions
             canvas.width = containerRect.width;
@@ -839,8 +841,8 @@
                 tooltip.style.top = top + 'px';
 
                 // Convert to world coordinates (matching render function)
-                const worldX = x - VIEW_SIZE_X/2 + centerCoord.x * 16;
-                const worldY = y - VIEW_SIZE_Y/2 + centerCoord.y * 16;
+                const worldX = x - Math.floor(VIEW_SIZE_X / 2);
+                const worldY = y - Math.floor(VIEW_SIZE_Y / 2);
 
                 // Get chunk coordinates
                 const chunkX = Math.floor(worldX / 16);
