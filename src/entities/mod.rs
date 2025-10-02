@@ -1,6 +1,5 @@
 /// Entities module - manages creatures and their behaviors
 pub mod movement;
-pub mod wandering;
 pub mod entity_tracker;
 pub mod stats;
 pub mod entity_types;
@@ -12,10 +11,7 @@ pub use movement::{
     issue_move_order, stop_movement, is_moving, get_position,
 };
 
-pub use wandering::{
-    Wanderer, wanderer_ai_system,
-    spawn_wandering_person, spawn_wandering_people,
-};
+// Wandering component REMOVED - use utility AI Wander action instead!
 
 pub use entity_tracker::{
     init_entity_tracker, sync_entities_to_tracker, get_entities_json,
@@ -78,7 +74,6 @@ impl Plugin for EntitiesPlugin {
             // Tick systems (run when should_tick is true)
             .add_systems(Update, (
                 stats::tick_stats_system,       // Update entity stats
-                wandering::wanderer_ai_system,  // AI runs on ticks
                 movement::tick_movement_system, // Movement execution
                 stats::death_system,            // Handle death
             ).chain().run_if(should_run_tick_systems));

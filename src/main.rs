@@ -142,29 +142,52 @@ fn spawn_wanderers(
     mut commands: Commands,
     pathfinding_grid: Res<PathfindingGrid>,
 ) {
-    println!("🎯 LIFE_SIMULATOR: Spawning entities...");
+    println!("🎯 LIFE_SIMULATOR: Spawning single idle rabbit for testing...");
     
-    // Spawn 2 humans around the origin
-    let humans = spawn_humans(
-        &mut commands,
-        2,                    // Count
-        bevy::math::IVec2::ZERO,  // Center
-        20,                   // Spawn radius
-        &pathfinding_grid,
-    );
+    // Spawn 1 idle rabbit (no wandering, just AI-driven behavior)
+    use entities::entity_types::{EntityTemplate, Rabbit};
+    use entities::{Creature, TilePosition, MovementSpeed};
+    use entities::stats::EntityStatsBundle;
     
-    // Spawn 5 rabbits around the origin
-    let rabbits = spawn_rabbits(
-        &mut commands,
-        5,                    // Count
-        bevy::math::IVec2::ZERO,  // Center
-        25,                   // Spawn radius (slightly larger)
-        &pathfinding_grid,
-    );
+    // Find a walkable spawn position near origin
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
     
-    println!("✅ LIFE_SIMULATOR: Spawned {} humans 🧍‍♂️ and {} rabbits 🐇", humans.len(), rabbits.len());
-    println!("🌐 LIFE_SIMULATOR: View them at http://127.0.0.1:54321/viewer.html");
-    println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
+    // Try to find a walkable tile near origin
+    let spawn_pos = (0..20).find_map(|_| {
+        let x = rng.gen_range(-10..=10);
+        let y = rng.gen_range(-10..=10);
+        let candidate = bevy::math::IVec2::new(x, y);
+        if pathfinding_grid.is_walkable(candidate) {
+            Some(candidate)
+        } else {
+            None
+        }
+    });
+    
+    if let Some(spawn_pos) = spawn_pos {
+        let template = EntityTemplate::RABBIT;
+        
+        // Spawn rabbit WITHOUT Wanderer component (no wandering behavior)
+        let rabbit = commands.spawn((
+            Creature {
+                name: "TestRabbit".to_string(),
+                species: template.species.to_string(),
+            },
+            Rabbit,
+            TilePosition::from_tile(spawn_pos),
+            MovementSpeed::custom(template.movement_speed),
+            EntityStatsBundle::default(),
+            // NOTE: No Wanderer component - rabbit will only move when driven by needs (thirst/hunger)
+        )).id();
+        
+        println!("✅ LIFE_SIMULATOR: Spawned 1 idle rabbit 🐇 at {:?}", spawn_pos);
+        println!("   📊 Rabbit will only move when thirsty/hungry (no wandering)");
+        println!("🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html");
+        println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
+    } else {
+        eprintln!("❌ LIFE_SIMULATOR: Failed to find walkable spawn position!");
+    }
 }
 
 

@@ -3,8 +3,9 @@
 /// This module defines different entity types (humans, animals, etc.) with their
 /// unique properties while sharing common systems (movement, stats, AI).
 use bevy::prelude::*;
-use super::{TilePosition, MovementSpeed, Wanderer, EntityStatsBundle, Creature};
+use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature};
 use crate::pathfinding::PathfindingGrid;
+use rand::Rng;
 
 // ============================================================================
 // ENTITY TYPE MARKERS
@@ -98,8 +99,8 @@ pub fn spawn_human(
         Human,
         TilePosition::from_tile(position),
         MovementSpeed::custom(template.movement_speed),
-        Wanderer::new(position, template.wander_radius),
         EntityStatsBundle::default(),
+        // NO Wanderer component - movement driven by utility AI!
     )).id()
 }
 
@@ -119,8 +120,8 @@ pub fn spawn_rabbit(
         Rabbit,
         TilePosition::from_tile(position),
         MovementSpeed::custom(template.movement_speed),
-        Wanderer::new(position, template.wander_radius),
         EntityStatsBundle::default(),
+        // NO Wanderer component - movement driven by utility AI!
     )).id()
 }
 
@@ -136,7 +137,7 @@ pub fn spawn_humans(
     let mut rng = rand::thread_rng();
     
     for i in 0..count {
-        if let Some(spawn_pos) = super::wandering::pick_random_walkable_tile_pub(center, spawn_radius, grid, &mut rng) {
+        if let Some(spawn_pos) = pick_random_walkable_tile(center, spawn_radius, grid, &mut rng) {
             let name = format!("Human_{}", i);
             let entity = spawn_human(commands, name, spawn_pos);
             entities.push(entity);
@@ -161,7 +162,7 @@ pub fn spawn_rabbits(
     let mut rng = rand::thread_rng();
     
     for i in 0..count {
-        if let Some(spawn_pos) = super::wandering::pick_random_walkable_tile_pub(center, spawn_radius, grid, &mut rng) {
+        if let Some(spawn_pos) = pick_random_walkable_tile(center, spawn_radius, grid, &mut rng) {
             let name = format!("Rabbit_{}", i);
             let entity = spawn_rabbit(commands, name, spawn_pos);
             entities.push(entity);
@@ -205,4 +206,39 @@ pub fn count_entities_by_type(
     rabbits: Query<(), With<Rabbit>>,
 ) -> (usize, usize) {
     (humans.iter().count(), rabbits.iter().count())
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Pick a random walkable tile within radius
+fn pick_random_walkable_tile(
+    center: IVec2,
+    radius: i32,
+    grid: &PathfindingGrid,
+    rng: &mut impl Rng,
+) -> Option<IVec2> {
+    // Try up to 20 random positions
+    for _ in 0..20 {
+        let offset_x = rng.gen_range(-radius..=radius);
+        let offset_y = rng.gen_range(-radius..=radius);
+        let candidate = center + IVec2::new(offset_x, offset_y);
+        
+        if grid.is_walkable(candidate) {
+            return Some(candidate);
+        }
+    }
+    
+    // If we couldn't find anything, try a simple grid search
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            let candidate = center + IVec2::new(dx, dy);
+            if grid.is_walkable(candidate) {
+                return Some(candidate);
+            }
+        }
+    }
+    
+    None
 }
