@@ -142,38 +142,49 @@ fn spawn_wanderers(
     mut commands: Commands,
     pathfinding_grid: Res<PathfindingGrid>,
 ) {
-    println!("🎯 LIFE_SIMULATOR: Spawning single idle rabbit for testing...");
+    println!("🎯 LIFE_SIMULATOR: Spawning 5 rabbits for testing...");
     
     // Import the spawn function that attaches BehaviorConfig
     use entities::spawn_rabbit;
     
-    // Find a walkable spawn position near origin
+    // Find walkable spawn positions near origin
     use rand::Rng;
     let mut rng = rand::thread_rng();
     
-    // Try to find a walkable tile near origin
-    let spawn_pos = (0..20).find_map(|_| {
-        let x = rng.gen_range(-10..=10);
-        let y = rng.gen_range(-10..=10);
-        let candidate = bevy::math::IVec2::new(x, y);
-        if pathfinding_grid.is_walkable(candidate) {
-            Some(candidate)
-        } else {
-            None
-        }
-    });
+    let rabbit_names = ["Bugs", "Roger", "Thumper", "Peter", "Clover"];
+    let mut spawned_count = 0;
     
-    if let Some(spawn_pos) = spawn_pos {
-        // Use the proper spawn function that attaches BehaviorConfig
-        let rabbit = spawn_rabbit(&mut commands, "TestRabbit", spawn_pos);
+    for (idx, name) in rabbit_names.iter().enumerate() {
+        // Try to find a walkable tile near origin
+        let spawn_pos = (0..30).find_map(|_| {
+            let x = rng.gen_range(-15..=15);
+            let y = rng.gen_range(-15..=15);
+            let candidate = bevy::math::IVec2::new(x, y);
+            if pathfinding_grid.is_walkable(candidate) {
+                Some(candidate)
+            } else {
+                None
+            }
+        });
         
-        println!("✅ LIFE_SIMULATOR: Spawned 1 idle rabbit 🐇 at {:?}", spawn_pos);
-        println!("   📊 Rabbit will only move when thirsty/hungry (no wandering)");
+        if let Some(spawn_pos) = spawn_pos {
+            // Use the proper spawn function that attaches BehaviorConfig
+            let rabbit = spawn_rabbit(&mut commands, *name, spawn_pos);
+            spawned_count += 1;
+            println!("   ✅ Spawned rabbit #{}: {} 🐇 at {:?}", idx + 1, name, spawn_pos);
+        } else {
+            eprintln!("   ❌ Failed to find walkable spawn position for {}!", name);
+        }
+    }
+    
+    if spawned_count > 0 {
+        println!("✅ LIFE_SIMULATOR: Spawned {} rabbits successfully!", spawned_count);
+        println!("   📊 Rabbits will only move when thirsty/hungry (no wandering)");
         println!("   🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range");
         println!("🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html");
         println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
     } else {
-        eprintln!("❌ LIFE_SIMULATOR: Failed to find walkable spawn position!");
+        eprintln!("❌ LIFE_SIMULATOR: Failed to spawn any rabbits!");
     }
 }
 

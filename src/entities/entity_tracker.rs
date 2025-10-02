@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
-use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}};
+use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}, CurrentAction};
 
 // ============================================================================
 // GLOBAL STATE
@@ -21,6 +21,7 @@ pub struct EntityData {
     pub thirst: Option<f32>,
     pub energy: Option<f32>,
     pub health: Option<f32>,
+    pub current_action: Option<String>,
 }
 
 /// Global entity tracker
@@ -78,6 +79,9 @@ impl EntityTracker {
                 if let Some(health) = e.health {
                     parts.push(format!(r#""health": {:.1}"#, health));
                 }
+                if let Some(ref action) = e.current_action {
+                    parts.push(format!(r#""current_action": "{}""#, action));
+                }
                 
                 format!(r#"{{{}}}"#, parts.join(", "))
             })
@@ -107,6 +111,7 @@ pub fn sync_entities_to_tracker(
         Option<&Thirst>,
         Option<&Energy>,
         Option<&Health>,
+        Option<&CurrentAction>,
     )>,
 ) {
     if let Some(tracker) = EntityTracker::global() {
@@ -114,7 +119,7 @@ pub fn sync_entities_to_tracker(
             // Clear and rebuild (simple approach)
             tracker.entities.clear();
             
-            for (entity, creature, position, hunger, thirst, energy, health) in query.iter() {
+            for (entity, creature, position, hunger, thirst, energy, health, current_action) in query.iter() {
                 let data = EntityData {
                     entity_id: entity.index(),
                     name: creature.name.clone(),
@@ -124,6 +129,7 @@ pub fn sync_entities_to_tracker(
                     thirst: thirst.map(|t| t.0.percentage()),
                     energy: energy.map(|e| e.0.percentage()),
                     health: health.map(|h| h.0.percentage()),
+                    current_action: current_action.map(|a| a.action_name.clone()),
                 };
                 tracker.update(entity.index(), data);
             }
@@ -168,6 +174,7 @@ mod tests {
             thirst: Some(30.0),
             energy: Some(80.0),
             health: Some(100.0),
+            current_action: None,
         };
         
         tracker.update(1, data);
@@ -190,6 +197,7 @@ mod tests {
             thirst: Some(30.0),
             energy: Some(80.0),
             health: Some(100.0),
+            current_action: None,
         });
         
         let json = tracker.to_json();

@@ -179,15 +179,17 @@ impl Action for DrinkWaterAction {
             // We're close enough to drink!
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 if let Some(mut thirst) = entity_mut.get_mut::<Thirst>() {
-                    // Reduce thirst
-                    thirst.0.change(-30.0);
+                    // Fully restore thirst (reduce to 0%)
+                    let old_thirst = thirst.0.percentage();
+                    thirst.0.set(0.0);
                     
                     info!(
-                        "🐇 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst: {:.1}%",
+                        "💧 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst: {:.1}% -> {:.1}%",
                         entity,
                         self.target_tile,
                         current_pos,
                         tick,
+                        old_thirst,
                         thirst.0.percentage()
                     );
                     

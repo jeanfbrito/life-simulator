@@ -60,6 +60,7 @@ export class EntityStatsManager {
 
     renderEntityCard(entity) {
         const emoji = this.getEntityEmoji(entity.entity_type);
+        const actionLabel = entity.current_action ? this.renderCurrentAction(entity.current_action) : '';
         
         return `
             <div class="entity-card">
@@ -67,7 +68,16 @@ export class EntityStatsManager {
                     <div class="entity-name">${entity.name}</div>
                     <div class="entity-type">${emoji}</div>
                 </div>
+                ${actionLabel}
                 ${this.renderStats(entity)}
+            </div>
+        `;
+    }
+
+    renderCurrentAction(action) {
+        return `
+            <div class="entity-action">
+                <span class="action-label">Action:</span> <span class="action-value">${action}</span>
             </div>
         `;
     }

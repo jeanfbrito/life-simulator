@@ -8,6 +8,7 @@ use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Ordering;
 
 use super::action::{Action, ActionResult, ActionType, create_action};
+use crate::entities::CurrentAction;
 
 /// A queued action waiting to be executed
 pub struct QueuedAction {
@@ -144,6 +145,10 @@ impl ActionQueue {
                         active.action.name(),
                         tick - active.started_at_tick
                     );
+                    // Clear current action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
                     to_remove.push(*entity);
                     self.stats.actions_completed += 1;
                 }
@@ -153,11 +158,15 @@ impl ActionQueue {
                         entity,
                         active.action.name()
                     );
+                    // Clear current action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
                     to_remove.push(*entity);
                     self.stats.actions_failed += 1;
                 }
                 ActionResult::InProgress => {
-                    // Continue next tick
+                    // Continue next tick - action already set
                 }
             }
         }
@@ -204,6 +213,12 @@ impl ActionQueue {
             let result = queued.action.execute(world, queued.entity, tick);
             self.stats.actions_executed += 1;
             
+            // Set current action on entity
+            let action_name = queued.action.name().to_string();
+            if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
+                entity_mut.insert(CurrentAction::new(action_name.clone()));
+            }
+            
             match result {
                 ActionResult::Success => {
                     debug!(
@@ -211,6 +226,10 @@ impl ActionQueue {
                         queued.entity,
                         queued.action.name()
                     );
+                    // Clear current action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
                     self.stats.actions_completed += 1;
                 }
                 ActionResult::Failed => {
@@ -219,6 +238,10 @@ impl ActionQueue {
                         queued.entity,
                         queued.action.name()
                     );
+                    // Clear current action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
                     self.stats.actions_failed += 1;
                 }
                 ActionResult::InProgress => {

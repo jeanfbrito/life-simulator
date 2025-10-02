@@ -5,6 +5,7 @@ pub mod stats;
 pub mod entity_types;
 pub mod types;
 pub mod auto_eat;
+pub mod current_action;
 
 use bevy::prelude::*;
 
@@ -38,6 +39,8 @@ pub use entity_types::{
 pub use types::{
     BehaviorConfig,
 };
+
+pub use current_action::CurrentAction;
 
 // ============================================================================
 // ENTITY TYPES

@@ -3,7 +3,7 @@
 /// This module defines different entity types (humans, animals, etc.) with their
 /// unique properties while sharing common systems (movement, stats, AI).
 use bevy::prelude::*;
-use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature};
+use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature, CurrentAction};
 use super::types::rabbit::RabbitBehavior;
 use crate::pathfinding::PathfindingGrid;
 use rand::Rng;
@@ -123,6 +123,7 @@ pub fn spawn_rabbit(
         MovementSpeed::custom(template.movement_speed),
         EntityStatsBundle::default(),
         RabbitBehavior::config(), // Attach behavior configuration
+        CurrentAction::none(), // Track current action for viewer
         // NO Wanderer component - movement driven by utility AI!
     )).id()
 }

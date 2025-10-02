@@ -284,6 +284,31 @@ export class Renderer {
         this.ctx.shadowBlur = 0;
         this.ctx.shadowOffsetX = 0;
         this.ctx.shadowOffsetY = 0;
+        
+        // Draw current action label if present (and zoom is sufficient)
+        if (entity.current_action && CONFIG.TILE_SIZE >= 8) {
+            const fontSize = Math.max(8, CONFIG.TILE_SIZE * 0.5);
+            this.ctx.font = `${fontSize}px Arial`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'bottom';
+            
+            // Draw text background for better readability
+            const labelY = entityY - (CONFIG.TILE_SIZE * 0.6);
+            const textMetrics = this.ctx.measureText(entity.current_action);
+            const padding = 2;
+            
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(
+                entityX - textMetrics.width / 2 - padding,
+                labelY - fontSize - padding,
+                textMetrics.width + padding * 2,
+                fontSize + padding * 2
+            );
+            
+            // Draw text
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillText(entity.current_action, entityX, labelY);
+        }
     }
 
     renderEntities(entities, cameraOffsetX, cameraOffsetY) {
