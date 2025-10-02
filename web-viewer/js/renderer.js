@@ -77,17 +77,14 @@ export class Renderer {
         // Apply sub-pixel translation for smooth movement
         this.ctx.translate(pixelOffsetX, pixelOffsetY);
 
-        // Collect resource data for third pass rendering
+        // Collect resource data for Y-sorted rendering
         const resourcesToRender = [];
 
         // First pass: Render terrain layers with camera offset
         const stats = this.renderTerrain(worldData, resourcesToRender, cameraOffsetX, cameraOffsetY);
 
-        // Second pass: Render entities (between terrain and resources)
-        this.renderEntities(entities, cameraOffsetX, cameraOffsetY);
-
-        // Third pass: Render resources on top (allows trees to cover entities below them)
-        this.renderResources(resourcesToRender);
+        // Second pass: Y-sorted rendering of entities and resources for proper depth
+        this.renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY);
 
         this.ctx.restore(); // Restore the translation and clipping
 
@@ -175,35 +172,111 @@ export class Renderer {
         return stats;
     }
 
-    renderResources(resourcesToRender) {
-        this.ctx.save(); // Save context state
+    renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY) {
+        // Create a combined list of entities and resources with Y-coordinates for sorting
+        const renderList = [];
+
+        // Add resources to render list with their Y positions
         for (const resource of resourcesToRender) {
-            // Get resource configuration or use defaults
-            const config = RESOURCE_CONFIG[resource.type] || {
-                sizeMultiplier: 0.8,
-                offsetX: 0,
-                offsetY: 0
-            };
-
-            // Calculate position with offsets
-            const baseX = resource.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
-            const baseY = resource.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
-            const centerX = baseX + (config.offsetX * CONFIG.TILE_SIZE);
-            const centerY = baseY + (config.offsetY * CONFIG.TILE_SIZE);
-
-            // Draw resource emoji with dynamic sizing
-            this.ctx.font = `${CONFIG.TILE_SIZE * config.sizeMultiplier}px Arial`;
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-
-            // Add subtle shadow for better visibility
-            this.ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-            this.ctx.shadowBlur = 1;
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.fillText(RESOURCE_SYMBOLS[resource.type] || '•', centerX, centerY);
-            this.ctx.shadowBlur = 0; // Reset shadow
+            renderList.push({
+                type: 'resource',
+                data: resource,
+                y: resource.y  // Screen Y coordinate
+            });
         }
-        this.ctx.restore(); // Restore context state
+
+        // Add entities to render list with their Y positions
+        for (const entity of entities) {
+            if (!entity.position) continue;
+
+            const entityWorldX = entity.position.x;
+            const entityWorldY = entity.position.y;
+
+            // Convert world coordinates to screen coordinates
+            const screenX = (entityWorldX - cameraOffsetX + Math.floor(CONFIG.VIEW_SIZE_X / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+            const screenY = (entityWorldY - cameraOffsetY + Math.floor(CONFIG.VIEW_SIZE_Y / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+            const screenTileY = entityWorldY - cameraOffsetY + Math.floor(CONFIG.VIEW_SIZE_Y / 2);
+
+            // Only add if within visible bounds
+            const ENTITY_RADIUS = Math.max(2, CONFIG.TILE_SIZE * 0.3);
+            if (screenX >= -ENTITY_RADIUS && screenX <= (CONFIG.VIEW_SIZE_X * CONFIG.TILE_SIZE) + ENTITY_RADIUS &&
+                screenY >= -ENTITY_RADIUS && screenY <= (CONFIG.VIEW_SIZE_Y * CONFIG.TILE_SIZE) + ENTITY_RADIUS) {
+                
+                renderList.push({
+                    type: 'entity',
+                    data: entity,
+                    y: screenTileY,  // Use tile Y for sorting
+                    screenX: screenX,
+                    screenY: screenY
+                });
+            }
+        }
+
+        // Sort by Y coordinate (back to front)
+        renderList.sort((a, b) => a.y - b.y);
+
+        // Render in sorted order
+        this.ctx.save();
+
+        for (const item of renderList) {
+            if (item.type === 'resource') {
+                this.renderSingleResource(item.data);
+            } else if (item.type === 'entity') {
+                this.renderSingleEntity(item.data, item.screenX, item.screenY);
+            }
+        }
+
+        this.ctx.restore();
+    }
+
+    renderSingleResource(resource) {
+        // Get resource configuration or use defaults
+        const config = RESOURCE_CONFIG[resource.type] || {
+            sizeMultiplier: 0.8,
+            offsetX: 0,
+            offsetY: 0
+        };
+
+        // Calculate position with offsets
+        const baseX = resource.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+        const baseY = resource.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
+        const centerX = baseX + (config.offsetX * CONFIG.TILE_SIZE);
+        const centerY = baseY + (config.offsetY * CONFIG.TILE_SIZE);
+
+        // Draw resource emoji with dynamic sizing
+        this.ctx.font = `${CONFIG.TILE_SIZE * config.sizeMultiplier}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        // Add subtle shadow for better visibility
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        this.ctx.shadowBlur = 1;
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillText(RESOURCE_SYMBOLS[resource.type] || '•', centerX, centerY);
+        this.ctx.shadowBlur = 0; // Reset shadow
+    }
+
+    renderSingleEntity(entity, screenX, screenY) {
+        // Draw entity as emoji
+        this.ctx.font = `${CONFIG.TILE_SIZE * 1.2}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        // Add subtle shadow for better visibility
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.shadowBlur = 2;
+        this.ctx.shadowOffsetX = 1;
+        this.ctx.shadowOffsetY = 1;
+        
+        // Render the emoji with Y offset to position feet above
+        const entityY = screenY + (CONFIG.TILE_SIZE * -0.2); // Move up 0.2 tiles
+        this.ctx.fillText('🧍‍♂️', screenX, entityY);
+        
+        // Reset shadow
+        this.ctx.shadowColor = 'transparent';
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
     }
 
     renderEntities(entities, cameraOffsetX, cameraOffsetY) {
