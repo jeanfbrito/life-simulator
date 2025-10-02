@@ -8,6 +8,7 @@ import { ChunkManager } from './chunk-manager.js';
 import { Controls, FPSCounter } from './controls.js';
 import { NetworkManager } from './network.js';
 import { EntityManager } from './entity-manager.js';
+import { initEntityStats } from './entity-stats.js';
 
 class LifeSimulatorApp {
     constructor() {
@@ -152,6 +153,10 @@ class LifeSimulatorApp {
             // Start entity polling
             console.log('🎯 APP: Starting entity polling...');
             this.entityManager.startPolling(200); // Poll every 0.2 seconds for smoother visualization
+            
+            // Start entity stats display
+            console.log('📊 APP: Starting entity stats display...');
+            initEntityStats();
 
             // Note: WebSocket is not supported by the simple web server
             // The viewer works perfectly with HTTP-only mode

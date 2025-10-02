@@ -74,6 +74,10 @@
             position: relative;
             z-index: 10;
         }
+        
+        .sidebar.right {
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+        }
 
         .map-container {
             flex: 1;
@@ -183,6 +187,65 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
+        
+        .entity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        
+        .entity-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .entity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .entity-name {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        
+        .entity-type {
+            font-size: 1.2rem;
+        }
+        
+        .stat-bar-container {
+            margin: 0.35rem 0;
+        }
+        
+        .stat-bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 0.15rem;
+            opacity: 0.9;
+        }
+        
+        .stat-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .stat-bar-fill {
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 4px;
+        }
+        
+        .stat-hunger .stat-bar-fill { background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%); }
+        .stat-thirst .stat-bar-fill { background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 100%); }
+        .stat-energy .stat-bar-fill { background: linear-gradient(90deg, #10b981 0%, #22c55e 100%); }
+        .stat-health .stat-bar-fill { background: linear-gradient(90deg, #ef4444 0%, #22c55e 100%); }
     </style>
 </head>
 <body>
@@ -324,6 +387,21 @@
             <canvas id="mapCanvas"></canvas>
             <div class="tooltip" id="tooltip"></div>
         </div>
+        
+        <div class="sidebar right">
+            <div class="controls">
+                <h2>🎯 Entity Stats</h2>
+                <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 1rem;">
+                    Live entity statistics and needs
+                </div>
+            </div>
+            
+            <div id="entity-list" class="entity-list">
+                <div style="text-align: center; opacity: 0.5; padding: 2rem;">
+                    Loading entities...
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Modular JavaScript components -->
@@ -332,6 +410,7 @@
     <script type="module" src="js/chunk-manager.js"></script>
     <script type="module" src="js/network.js"></script>
     <script type="module" src="js/controls.js"></script>
+    <script type="module" src="js/entity-stats.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
-use crate::entities::{Creature, movement::TilePosition};
+use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}};
 
 // ============================================================================
 // GLOBAL STATE
@@ -17,6 +17,10 @@ pub struct EntityData {
     pub name: String,
     pub species: String,
     pub position: IVec2,
+    pub hunger: Option<f32>,
+    pub thirst: Option<f32>,
+    pub energy: Option<f32>,
+    pub health: Option<f32>,
 }
 
 /// Global entity tracker
@@ -54,10 +58,28 @@ impl EntityTracker {
     pub fn to_json(&self) -> String {
         let entities_json: Vec<String> = self.entities.values()
             .map(|e| {
-                format!(
-                    r#"{{"id": {}, "name": "{}", "entity_type": "{}", "position": {{"x": {}, "y": {}}}}}"#,
-                    e.entity_id, e.name, e.species, e.position.x, e.position.y
-                )
+                let mut parts = vec![
+                    format!(r#""id": {}"#, e.entity_id),
+                    format!(r#""name": "{}""#, e.name),
+                    format!(r#""entity_type": "{}""#, e.species),
+                    format!(r#""position": {{"x": {}, "y": {}}}"#, e.position.x, e.position.y),
+                ];
+                
+                // Add stats if present
+                if let Some(hunger) = e.hunger {
+                    parts.push(format!(r#""hunger": {:.1}"#, hunger));
+                }
+                if let Some(thirst) = e.thirst {
+                    parts.push(format!(r#""thirst": {:.1}"#, thirst));
+                }
+                if let Some(energy) = e.energy {
+                    parts.push(format!(r#""energy": {:.1}"#, energy));
+                }
+                if let Some(health) = e.health {
+                    parts.push(format!(r#""health": {:.1}"#, health));
+                }
+                
+                format!(r#"{{{}}}"#, parts.join(", "))
             })
             .collect();
         
@@ -77,19 +99,31 @@ impl EntityTracker {
 /// System that syncs entity data to the global tracker
 /// Runs every frame to keep web API up to date
 pub fn sync_entities_to_tracker(
-    query: Query<(Entity, &Creature, &TilePosition)>,
+    query: Query<(
+        Entity,
+        &Creature,
+        &TilePosition,
+        Option<&Hunger>,
+        Option<&Thirst>,
+        Option<&Energy>,
+        Option<&Health>,
+    )>,
 ) {
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {
             // Clear and rebuild (simple approach)
             tracker.entities.clear();
             
-            for (entity, creature, position) in query.iter() {
+            for (entity, creature, position, hunger, thirst, energy, health) in query.iter() {
                 let data = EntityData {
                     entity_id: entity.index(),
                     name: creature.name.clone(),
                     species: creature.species.clone(),
                     position: position.tile,
+                    hunger: hunger.map(|h| h.0.percentage()),
+                    thirst: thirst.map(|t| t.0.percentage()),
+                    energy: energy.map(|e| e.0.percentage()),
+                    health: health.map(|h| h.0.percentage()),
                 };
                 tracker.update(entity.index(), data);
             }
@@ -130,6 +164,10 @@ mod tests {
             name: "Test".to_string(),
             species: "Human".to_string(),
             position: IVec2::new(5, 10),
+            hunger: Some(50.0),
+            thirst: Some(30.0),
+            energy: Some(80.0),
+            health: Some(100.0),
         };
         
         tracker.update(1, data);
@@ -148,6 +186,10 @@ mod tests {
             name: "Bob".to_string(),
             species: "Human".to_string(),
             position: IVec2::new(0, 0),
+            hunger: Some(50.0),
+            thirst: Some(30.0),
+            energy: Some(80.0),
+            health: Some(100.0),
         });
         
         let json = tracker.to_json();
