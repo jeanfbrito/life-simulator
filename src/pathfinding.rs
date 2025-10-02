@@ -113,6 +113,13 @@ pub struct PathRequest {
     pub max_steps: Option<u32>, // Prevent infinite loops
 }
 
+/// Component: Pathfinding failed for this entity
+/// This is added when a path cannot be found
+#[derive(Component, Debug)]
+pub struct PathfindingFailed {
+    pub attempted_destination: IVec2,
+}
+
 /// Resource: Grid of movement costs for pathfinding
 /// This is built once from the terrain and updated when terrain changes
 #[derive(Resource, Default)]
@@ -383,11 +390,14 @@ pub fn process_pathfinding_requests(
             // Path found - attach to entity and remove request
             commands.entity(entity).insert(path);
         } else {
-            // Path not found - could add PathFailed component
+            // Path not found - add PathfindingFailed component
             info!(
                 "Pathfinding failed for entity {:?}: {:?} -> {:?}",
                 entity, request.origin, request.destination
             );
+            commands.entity(entity).insert(PathfindingFailed {
+                attempted_destination: request.destination,
+            });
         }
 
         // Remove request (processed)
