@@ -15,11 +15,12 @@ export class ChunkManager {
     async requestChunks(centerCoord) {
         // Request initial chunks around the center
         const radius = CONFIG.initialChunkRadius; // Load 7x7 chunks (from -3 to +3)
-        await this.requestChunksInArea(centerCoord.x, centerCoord.y, radius);
+        return await this.requestChunksInArea(centerCoord.x, centerCoord.y, radius);
     }
 
     async requestChunksInArea(centerX, centerY, radius) {
         const neededChunks = new Set();
+        const allLoadedData = { chunks: {}, resources: {} };
 
         // Calculate which chunks we need
         for (let dx = -radius; dx <= radius; dx++) {
@@ -35,7 +36,7 @@ export class ChunkManager {
         }
 
         if (neededChunks.size === 0) {
-            return; // No new chunks to load
+            return allLoadedData; // No new chunks to load
         }
 
         // Mark chunks as being loaded
@@ -46,26 +47,36 @@ export class ChunkManager {
 
         for (let i = 0; i < chunkArray.length; i += CONFIG.chunkBatchSize) {
             const batch = chunkArray.slice(i, i + CONFIG.chunkBatchSize);
-            await this.loadChunkBatch(batch);
+            const batchData = await this.loadChunkBatch(batch);
+            if (batchData) {
+                // Merge batch data with accumulated data
+                Object.assign(allLoadedData.chunks, batchData.chunks);
+                Object.assign(allLoadedData.resources, batchData.resources);
+            }
         }
+
+        return allLoadedData;
     }
 
     async loadChunkBatch(batch) {
         const coordsQuery = batch.map(c => `coords=${c}`).join('&');
 
+        console.log('📦 CHUNK_MANAGER: Loading batch:', batch);
+
         try {
             const data = await this.fetchData(`/api/chunks?${coordsQuery}&layers=true`);
+            console.log('📦 CHUNK_MANAGER: Received data:', data);
 
             if (data && data.chunk_data) {
-                const worldData = { chunks: {}, resources: {} };
+                const newWorldData = { chunks: {}, resources: {} };
 
                 for (const [chunkKey, chunkData] of Object.entries(data.chunk_data)) {
                     // Store the chunk data
                     if (chunkData.terrain) {
-                        worldData.chunks[chunkKey] = chunkData.terrain;
+                        newWorldData.chunks[chunkKey] = chunkData.terrain;
                     }
                     if (chunkData.resources) {
-                        worldData.resources[chunkKey] = chunkData.resources;
+                        newWorldData.resources[chunkKey] = chunkData.resources;
                     }
 
                     // Mark as loaded
@@ -73,10 +84,11 @@ export class ChunkManager {
                     this.loadingChunks.delete(chunkKey);
                 }
 
-                return worldData;
+                console.log('📦 CHUNK_MANAGER: Loaded chunks:', Object.keys(newWorldData.chunks));
+                return newWorldData;
             }
         } catch (error) {
-            console.error('Error loading chunks:', error);
+            console.error('❌ CHUNK_MANAGER: Error loading chunks:', error);
             // Remove from loading set on error
             batch.forEach(chunkKey => this.loadingChunks.delete(chunkKey));
         }

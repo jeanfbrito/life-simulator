@@ -113,22 +113,37 @@ class LifeSimulatorApp {
 
     async initialize() {
         try {
+            console.log('🚀 APP: Initializing viewer...');
+
             // Load world information
             const worldInfoLoaded = await this.chunkManager.loadWorldInfo();
+            console.log('📊 APP: World info loaded:', worldInfoLoaded);
 
             if (worldInfoLoaded) {
                 // Load initial chunks
-                await this.chunkManager.requestChunks(this.centerCoord);
+                console.log('📦 APP: Requesting chunks around center:', this.centerCoord);
+                const chunkData = await this.chunkManager.requestChunks(this.centerCoord);
+                console.log('📦 APP: Chunk data received:', chunkData);
+
+                if (chunkData) {
+                    console.log('🔗 APP: Merging chunk data into worldData...');
+                    this.chunkManager.mergeChunkData(chunkData, this.worldData);
+                    console.log('🗺️ APP: World data after merge:', {
+                        chunksCount: Object.keys(this.worldData.chunks).length,
+                        resourcesCount: Object.keys(this.worldData.resources).length
+                    });
+                }
             }
 
             // Start the animation loop
+            console.log('🎬 APP: Starting animation loop...');
             this.startAnimationLoop();
 
             // Try to connect via WebSocket for real-time updates
             this.networkManager.connect();
 
         } catch (error) {
-            console.error('Failed to initialize viewer:', error);
+            console.error('❌ APP: Failed to initialize viewer:', error);
             // Still start animation loop even if initialization fails
             this.startAnimationLoop();
         }
