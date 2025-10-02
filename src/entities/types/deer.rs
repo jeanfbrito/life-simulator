@@ -21,6 +21,19 @@ impl DeerBehavior {
         )
     }
 
+    /// Species-specific stats preset for deer (initial values and rates)
+    /// Keeps stat components generic, only the preset lives here.
+    pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
+        use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        EntityStatsBundle {
+            // For now, use same defaults as Rabbit; tweak here if deer needs differ
+            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.10)),
+            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.15)),
+            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),
+        }
+    }
+
     /// Evaluate Deer actions in one place (the Deer's module)
     /// Includes following the nearest rabbit as an example social behavior.
     pub fn evaluate_actions(

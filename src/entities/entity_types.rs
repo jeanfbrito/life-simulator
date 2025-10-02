@@ -122,7 +122,7 @@ pub fn spawn_rabbit(
         Rabbit,
         TilePosition::from_tile(position),
         MovementSpeed::custom(template.movement_speed),
-        EntityStatsBundle::default(),
+        RabbitBehavior::stats_bundle(),
         RabbitBehavior::config(), // Attach behavior configuration
         CurrentAction::none(), // Track current action for viewer
         // NO Wanderer component - movement driven by utility AI!
@@ -145,7 +145,7 @@ pub fn spawn_deer(
         Deer,
         TilePosition::from_tile(position),
         MovementSpeed::custom(template.movement_speed),
-        EntityStatsBundle::default(),
+        DeerBehavior::stats_bundle(),
         DeerBehavior::config(), // Attach behavior configuration
         CurrentAction::none(), // Track current action for viewer
     )).id()

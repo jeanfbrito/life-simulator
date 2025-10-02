@@ -29,6 +29,18 @@ impl RabbitBehavior {
         )
     }
 
+    /// Species-specific stats preset for rabbits (initial values and rates)
+    /// Keeps stat components generic, only the preset lives here.
+    pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
+        use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        EntityStatsBundle {
+            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.10)),  // default rabbit hunger rate
+            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.15)),  // default thirst rate
+            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),
+        }
+    }
+
     /// Evaluate Rabbit actions in one place (the Rabbit's module)
     /// Delegates to generic behavior evaluators but centralizes Rabbit logic.
     pub fn evaluate_actions(
