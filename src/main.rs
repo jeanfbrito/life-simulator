@@ -8,11 +8,17 @@ mod serialization;
 mod cached_world;
 mod resources;
 mod world_loader;
+mod pathfinding;
+mod entities;
+mod simulation;
 
 use tilemap::{TilemapPlugin, WorldConfig};
 use serialization::{WorldSerializationPlugin, WorldSaveRequest, WorldLoadRequest};
 use cached_world::CachedWorldPlugin;
 use world_loader::WorldLoader;
+use pathfinding::{PathfindingGrid, process_pathfinding_requests};
+use entities::{EntitiesPlugin, spawn_wandering_people};
+use simulation::SimulationPlugin;
 
 mod web_server_simple;
 
@@ -26,10 +32,14 @@ fn main() {
         .add_plugins(TilemapPlugin)
         .add_plugins(WorldSerializationPlugin)
         .add_plugins(CachedWorldPlugin)
+        .add_plugins(SimulationPlugin)  // Tick system
+        .add_plugins(EntitiesPlugin)     // Movement & AI
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
-        .add_systems(Startup, setup)
+        .init_resource::<PathfindingGrid>()
+        .add_systems(Startup, (setup, spawn_wanderers.after(setup)))
         .add_systems(Update, (
+            process_pathfinding_requests,  // Async pathfinding
             simulation_system,
             save_load_system.after(simulation_system),
         ))
@@ -38,6 +48,7 @@ fn main() {
 
 fn setup(
     mut commands: Commands,
+    mut pathfinding_grid: ResMut<PathfindingGrid>,
 ) {
     println!("🔧 LIFE_SIMULATOR: Setting up headless life simulation");
 
@@ -55,25 +66,47 @@ fn setup(
         }
     };
 
+    // Build pathfinding grid from terrain
+    println!("🧭 LIFE_SIMULATOR: Building pathfinding grid...");
+    // For now, manually populate a small area around spawn
+    // TODO: Implement proper world loader iteration
+    for y in -50..=50 {
+        for x in -50..=50 {
+            // Assume all tiles are walkable for now (cost=1)
+            // In production, this should query actual terrain
+            pathfinding_grid.set_cost(bevy::math::IVec2::new(x, y), 1);
+        }
+    }
+    println!("✅ LIFE_SIMULATOR: Pathfinding grid ready");
+
     // Start the web server
     println!("🌐 LIFE_SIMULATOR: Starting web server...");
     web_server_simple::start_simple_web_server();
     println!("✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:54321");
 
-    // Create a test entity at spawn point
-    if let Some((spawn_x, spawn_y)) = world_loader.find_spawn_point() {
-        let _spawn_entity = commands.spawn_empty().id();
-        println!("📍 LIFE_SIMULATOR: Spawn entity created at ({}, {})", spawn_x, spawn_y);
+    // Insert world loader as a resource for systems to use
+    commands.insert_resource(world_loader);
+}
 
-        // Log terrain information at spawn point
-        println!("🌍 LIFE_SIMULATOR: Ready to simulate life at world coordinates ({}, {})", spawn_x, spawn_y);
-
-        // Insert world loader as a resource for systems to use
-        commands.insert_resource(world_loader);
-    } else {
-        println!("⚠️ LIFE_SIMULATOR: Could not find spawn point, using origin");
-        commands.insert_resource(world_loader);
-    }
+fn spawn_wanderers(
+    mut commands: Commands,
+    pathfinding_grid: Res<PathfindingGrid>,
+) {
+    println!("🚶 LIFE_SIMULATOR: Spawning wandering people...");
+    
+    // Spawn 3 wandering people around the origin
+    let entities = spawn_wandering_people(
+        &mut commands,
+        3,                    // Count
+        bevy::math::IVec2::ZERO,  // Center
+        20,                   // Spawn radius
+        30,                   // Wander radius
+        &pathfinding_grid,
+    );
+    
+    println!("✅ LIFE_SIMULATOR: Spawned {} wandering people", entities.len());
+    println!("🌐 LIFE_SIMULATOR: View them at http://127.0.0.1:54321/viewer.html");
+    println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
 }
 
 fn simulation_system(

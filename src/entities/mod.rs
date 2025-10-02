@@ -1,12 +1,22 @@
 /// Entities module - manages creatures and their behaviors
 pub mod movement;
+pub mod wandering;
+pub mod entity_tracker;
 
 use bevy::prelude::*;
-use crate::pathfinding::PathfindingGrid;
 
 pub use movement::{
     TilePosition, MoveOrder, MovementSpeed, MovementState,
     issue_move_order, stop_movement, is_moving, get_position,
+};
+
+pub use wandering::{
+    Wanderer, wanderer_ai_system,
+    spawn_wandering_person, spawn_wandering_people,
+};
+
+pub use entity_tracker::{
+    init_entity_tracker, sync_entities_to_tracker, get_entities_json,
 };
 
 // ============================================================================
@@ -37,15 +47,23 @@ pub struct EntitiesPlugin;
 impl Plugin for EntitiesPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Startup
+            .add_systems(Startup, entity_tracker::init_entity_tracker)
+            
             // Non-tick systems (run every frame)
             .add_systems(Update, (
                 movement::initiate_pathfinding,
                 movement::initialize_movement_state,
-            ));
+                entity_tracker::sync_entities_to_tracker,  // Sync for web API
+            ))
+            
+            // Tick systems (run on fixed timestep)
+            .add_systems(FixedUpdate, (
+                wandering::wanderer_ai_system,  // AI runs on ticks
+                movement::tick_movement_system, // Movement execution
+            ).chain());
         
-        // NOTE: tick_movement_system should be added to your TICK schedule
-        // Example in main.rs:
-        // .add_systems(SimulationTick, movement::tick_movement_system)
+        // NOTE: Systems added to FixedUpdate will run at tick rate (default 10 TPS)
     }
 }
 
