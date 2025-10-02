@@ -8,6 +8,7 @@ use crate::entities::stats::Thirst;
 use crate::entities::{TilePosition, MoveOrder};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
+use crate::pathfinding::PathfindingFailed;
 
 /// Result of executing an action
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -52,6 +53,43 @@ pub trait Action: Send + Sync {
     
     /// Get action name for debugging
     fn name(&self) -> &'static str;
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+/// Find a walkable tile adjacent to a water tile
+fn find_adjacent_walkable_tile(
+    water_pos: IVec2,
+    world_loader: &WorldLoader,
+) -> Option<IVec2> {
+    // Check all 8 adjacent tiles (including diagonals)
+    let adjacent_offsets = [
+        IVec2::new(0, 1),
+        IVec2::new(1, 0),
+        IVec2::new(0, -1),
+        IVec2::new(-1, 0),
+        IVec2::new(1, 1),
+        IVec2::new(1, -1),
+        IVec2::new(-1, 1),
+        IVec2::new(-1, -1),
+    ];
+    
+    for offset in adjacent_offsets {
+        let check_pos = water_pos + offset;
+        
+        if let Some(terrain_str) = world_loader.get_terrain_at(check_pos.x, check_pos.y) {
+            if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+                // Must be walkable but NOT water
+                if terrain.is_walkable() && !matches!(terrain, TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water) {
+                    return Some(check_pos);
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 // =============================================================================
@@ -111,18 +149,37 @@ impl Action for DrinkWaterAction {
         
         let current_pos = position.tile;
         
-        // Check if we're already at the water tile
-        if current_pos == self.target_tile {
-            // We're at the water! Drink!
+        // Check if pathfinding failed for this entity
+        if world.get::<PathfindingFailed>(entity).is_some() {
+            warn!(
+                "Entity {:?} pathfinding failed to reach water at {:?}, aborting DrinkWater action",
+                entity,
+                self.target_tile
+            );
+            // Remove the PathfindingFailed component
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.remove::<PathfindingFailed>();
+            }
+            return ActionResult::Failed;
+        }
+        
+        // Check if we're adjacent to the water tile (or standing in it)
+        let distance = (current_pos - self.target_tile).abs();
+        let is_adjacent = distance.x <= 1 && distance.y <= 1 && (distance.x + distance.y) > 0;
+        let is_on_water = current_pos == self.target_tile;
+        
+        if is_adjacent || is_on_water {
+            // We're close enough to drink!
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 if let Some(mut thirst) = entity_mut.get_mut::<Thirst>() {
                     // Reduce thirst
                     thirst.0.change(-30.0);
                     
                     info!(
-                        "🐇 Entity {:?} drank water at {:?} on tick {}! Thirst: {:.1}%",
+                        "🐇 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst: {:.1}%",
                         entity,
                         self.target_tile,
+                        current_pos,
                         tick,
                         thirst.0.percentage()
                     );
@@ -134,33 +191,38 @@ impl Action for DrinkWaterAction {
             return ActionResult::Failed;
         }
         
-        // We need to move to the water
+        // We need to move closer to the water
         if !self.started {
             // Issue move order on first execution
-            info!(
-                "🐇 Entity {:?} starting journey to water at {:?}",
-                entity,
-                self.target_tile
-            );
-            
-            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
-                entity_mut.insert(MoveOrder {
-                    destination: self.target_tile,
-                    allow_diagonal: false,
-                });
+            // Find a walkable tile adjacent to the water
+            if let Some(world_loader) = world.get_resource::<WorldLoader>() {
+                if let Some(adjacent_pos) = find_adjacent_walkable_tile(self.target_tile, world_loader) {
+                    info!(
+                        "🐇 Entity {:?} starting journey to water at {:?} (will stop at adjacent tile {:?})",
+                        entity,
+                        self.target_tile,
+                        adjacent_pos
+                    );
+                    
+                    if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                        entity_mut.insert(MoveOrder {
+                            destination: adjacent_pos,
+                            allow_diagonal: true,  // Enable diagonal pathfinding
+                        });
+                    }
+                    
+                    self.started = true;
+                } else {
+                    warn!("No adjacent walkable tile found for water at {:?}", self.target_tile);
+                    return ActionResult::Failed;
+                }
+            } else {
+                return ActionResult::Failed;
             }
-            
-            self.started = true;
         }
         
-        // Check if we've arrived
-        if current_pos == self.target_tile {
-            // Arrived! Will drink next tick
-            ActionResult::InProgress
-        } else {
-            // Still traveling
-            ActionResult::InProgress
-        }
+        // Still traveling
+        ActionResult::InProgress
     }
     
     fn name(&self) -> &'static str {
@@ -225,6 +287,20 @@ impl Action for WanderAction {
         
         let current_pos = position.tile;
         
+        // Check if pathfinding failed for this entity
+        if world.get::<PathfindingFailed>(entity).is_some() {
+            debug!(
+                "Entity {:?} pathfinding failed to reach wander target {:?}, aborting Wander action",
+                entity,
+                self.target_tile
+            );
+            // Remove the PathfindingFailed component
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.remove::<PathfindingFailed>();
+            }
+            return ActionResult::Failed;
+        }
+        
         // Check if we've arrived at target
         if current_pos == self.target_tile {
             debug!(
@@ -247,7 +323,7 @@ impl Action for WanderAction {
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 entity_mut.insert(MoveOrder {
                     destination: self.target_tile,
-                    allow_diagonal: false,
+                    allow_diagonal: true,  // Enable diagonal pathfinding
                 });
             }
             

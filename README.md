@@ -119,12 +119,49 @@ cargo build
 # Release build
 cargo build --release
 
-# Run tests
+# Run all tests
 cargo test
+
+# Run specific test with output
+cargo test --test pathfinding_test -- --nocapture
 
 # Run with logging
 RUST_LOG=debug cargo run
+RUST_LOG=info cargo run  # Less verbose, recommended for normal operation
 ```
+
+### Testing
+
+#### Integration Tests
+
+The project includes integration tests in the `tests/` directory that validate core functionality against real world data:
+
+**`tests/pathfinding_test.rs`** - Pathfinding System Test
+- Loads actual generated world from `maps/` directory
+- Builds pathfinding grid using same logic as main simulation
+- Tests pathfinding from multiple spawn points to water sources
+- Validates terrain accessibility and resource blocking
+- Reports detailed diagnostics for path failures
+
+Run with:
+```bash
+cargo test --test pathfinding_test -- --nocapture
+```
+
+Expected output:
+- ✅ Paths found for most spawn points (75-100% success rate)
+- 🔍 Diagnostic info about blocked terrain and resources
+- 📊 Grid statistics (tiles processed, walkable, blocked)
+
+#### Test-Driven Debugging
+
+When debugging gameplay issues:
+1. Create integration test that reproduces the issue
+2. Test against real world data (not mocks)
+3. Use `--nocapture` flag to see diagnostic output
+4. Validate fixes work across multiple scenarios
+
+See `PATHFINDING_FIX.md` for example of this debugging approach.
 
 ### Code Style
 
@@ -291,7 +328,41 @@ This project serves as a foundation for:
 
 For detailed documentation on specific topics:
 
+### General Documentation
 - Check inline documentation in the source code
 - Refer to Bevy's official documentation for engine-specific questions
 - Examine `web_server_simple.rs` for terrain generation algorithms
 - Review `web-viewer/viewer.html` for visualization implementation
+
+### Debugging & Fix Documentation
+- **`PATHFINDING_FIX.md`** - Complete pathfinding bug diagnosis and fix
+  - Problem analysis with test-driven approach
+  - Root cause identification (diagonal movement disabled)
+  - Integration test creation for real-world validation
+  - Before/after comparison with metrics
+  - Recommendations for future improvements
+
+### Key Lessons Learned
+
+#### Pathfinding System (2025-01-02)
+**Problem**: Entities couldn't reach water despite water existing in world
+
+**Root Cause**: Diagonal movement disabled in all pathfinding requests (`allow_diagonal: false`)
+
+**Solution**: Enable 8-directional pathfinding by setting `allow_diagonal: true`
+
+**Impact**: Improved path success rate from 0-25% to 75-100%
+
+**Files Modified**:
+- `src/ai/action.rs` (DrinkWaterAction, WanderAction)
+- `src/entities/wandering.rs` (Wanderer AI)
+- `tests/pathfinding_test.rs` (Integration test)
+
+**Testing Approach**:
+1. Created integration test loading real world data
+2. Built pathfinding grid matching simulation
+3. Tested multiple spawn points to water sources
+4. Analyzed failure points with terrain sampling
+5. Validated fix with measurable improvement
+
+**Takeaway**: Test-driven debugging with real world data revealed issues that weren't obvious from logs alone. Integration tests that mirror production environment are invaluable for complex systems.

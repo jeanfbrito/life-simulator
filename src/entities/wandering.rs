@@ -87,7 +87,7 @@ pub fn wanderer_ai_system(
                 
                 commands.entity(entity).insert(MoveOrder {
                     destination: dest,
-                    allow_diagonal: false,
+                    allow_diagonal: true,  // Enable diagonal pathfinding
                 });
             }
         } else {
