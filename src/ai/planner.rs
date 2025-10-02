@@ -120,18 +120,22 @@ fn evaluate_drink_water_action(
     thirst: &Thirst,
     world_loader: &WorldLoader,
 ) -> Option<UtilityScore> {
+    // Only seek water when thirst is above 10% (prevents spam drinking)
+    let thirst_level = thirst.0.normalized();
+    if thirst_level < 0.1 {
+        return None; // Not thirsty enough
+    }
+    
     // Find nearest water tile
     let water_tile = find_nearest_water(position.tile, MAX_SEARCH_RADIUS, world_loader)?;
     
     // Calculate utility based on thirst and distance
-    let thirst_score = thirst.0.normalized();
     let distance = position.tile.as_vec2().distance(water_tile.as_vec2());
     let distance_score = (1.0 - (distance / MAX_SEARCH_RADIUS as f32)).max(0.0);
     
-    // Use weighted combination instead of multiplication
-    // This ensures water sources are considered even with low thirst
-    // Thirst weighted at 70%, distance at 30%
-    let utility = (thirst_score * 0.7 + distance_score * 0.3).max(0.1);
+    // Use weighted combination
+    // Thirst weighted at 80%, distance at 20%
+    let utility = (thirst_level * 0.8 + distance_score * 0.2);
     
     // Calculate priority based on urgency
     // Higher thirst = higher priority
@@ -154,20 +158,22 @@ fn evaluate_drink_water_action(
 }
 
 /// Evaluate the utility of wandering to a random location
+/// This represents natural idle behavior - grazing, foraging, exploring nearby
 fn evaluate_wander_action(
     position: &TilePosition,
     world_loader: &WorldLoader,
 ) -> Option<UtilityScore> {
     use rand::Rng;
     
-    // Pick a random nearby tile (within 5-15 tiles)
+    // Pick a random nearby tile for grazing/foraging (short range: 3-8 tiles)
+    // Rabbits don't wander far - they graze in a small area
     let mut rng = rand::thread_rng();
-    let wander_distance = rng.gen_range(5..=15);
+    let graze_distance = rng.gen_range(3..=8);
     let angle = rng.gen::<f32>() * std::f32::consts::TAU;
     
     let offset = IVec2::new(
-        (angle.cos() * wander_distance as f32) as i32,
-        (angle.sin() * wander_distance as f32) as i32,
+        (angle.cos() * graze_distance as f32) as i32,
+        (angle.sin() * graze_distance as f32) as i32,
     );
     
     let target = position.tile + offset;
@@ -179,27 +185,28 @@ fn evaluate_wander_action(
                 // Try to find a nearby walkable tile
                 let adjusted_target = find_nearest_walkable(target, 5, world_loader)?;
                 
-                // Wander has constant low utility (idle behavior)
-                // Priority is very low - any other action should override it
+                // Grazing/foraging has moderate utility - it's natural idle behavior
+                // Priority is low but not trivial - rabbits should graze when not doing important things
                 return Some(UtilityScore {
                     action_type: ActionType::Wander {
                         target_tile: adjusted_target,
                     },
-                    utility: 0.01, // Absolute lowest - only when nothing else to do
-                    priority: 1,  // Lowest priority
+                    utility: 0.15, // Moderate - natural idle behavior
+                    priority: 10,  // Low priority but beats doing nothing
                 });
             }
         }
     }
     
-    // Wander has constant low utility (idle behavior)
-    // Should only happen when there's absolutely nothing else to do
+    // Grazing/foraging is natural idle behavior
+    // Rabbits graze when they have nothing urgent to do
+    // This creates realistic "eating grass around" behavior
     Some(UtilityScore {
         action_type: ActionType::Wander {
             target_tile: target,
         },
-        utility: 0.01, // Absolute lowest - only when nothing else to do
-        priority: 1,  // Lowest priority
+        utility: 0.15, // Moderate - natural idle behavior like grazing
+        priority: 10,  // Low priority - urgent needs override this
     })
 }
 
