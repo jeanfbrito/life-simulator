@@ -48,7 +48,7 @@ pub trait Action: Send + Sync {
     
     /// Execute the action for this tick
     /// Returns Success/Failed/InProgress
-    fn execute(&mut self, commands: &mut Commands, world: &World, entity: Entity, tick: u64) -> ActionResult;
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult;
     
     /// Get action name for debugging
     fn name(&self) -> &'static str;
@@ -102,9 +102,9 @@ impl Action for DrinkWaterAction {
         }
     }
     
-    fn execute(&mut self, commands: &mut Commands, world: &World, entity: Entity, tick: u64) -> ActionResult {
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         // Get entity position
-        let Some(position) = world.get::<TilePosition>(entity) else {
+        let Some(position) = world.get::<TilePosition>(entity).copied() else {
             warn!("Entity {:?} has no position, cannot drink", entity);
             return ActionResult::Failed;
         };
@@ -114,22 +114,21 @@ impl Action for DrinkWaterAction {
         // Check if we're already at the water tile
         if current_pos == self.target_tile {
             // We're at the water! Drink!
-            if let Some(mut thirst) = world.get::<Thirst>(entity).cloned() {
-                // Reduce thirst
-                thirst.0.change(-30.0);
-                
-                // Update the component
-                commands.entity(entity).insert(thirst.clone());
-                
-                info!(
-                    "🐇 Entity {:?} drank water at {:?} on tick {}! Thirst: {:.1}%",
-                    entity,
-                    self.target_tile,
-                    tick,
-                    thirst.0.percentage()
-                );
-                
-                return ActionResult::Success;
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                if let Some(mut thirst) = entity_mut.get_mut::<Thirst>() {
+                    // Reduce thirst
+                    thirst.0.change(-30.0);
+                    
+                    info!(
+                        "🐇 Entity {:?} drank water at {:?} on tick {}! Thirst: {:.1}%",
+                        entity,
+                        self.target_tile,
+                        tick,
+                        thirst.0.percentage()
+                    );
+                    
+                    return ActionResult::Success;
+                }
             }
             
             return ActionResult::Failed;
@@ -144,10 +143,12 @@ impl Action for DrinkWaterAction {
                 self.target_tile
             );
             
-            commands.entity(entity).insert(MoveOrder {
-                destination: self.target_tile,
-                allow_diagonal: false,
-            });
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: self.target_tile,
+                    allow_diagonal: false,
+                });
+            }
             
             self.started = true;
         }
@@ -215,9 +216,9 @@ impl Action for WanderAction {
         }
     }
     
-    fn execute(&mut self, commands: &mut Commands, world: &World, entity: Entity, tick: u64) -> ActionResult {
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         // Get entity position
-        let Some(position) = world.get::<TilePosition>(entity) else {
+        let Some(position) = world.get::<TilePosition>(entity).copied() else {
             warn!("Entity {:?} has no position, cannot wander", entity);
             return ActionResult::Failed;
         };
@@ -243,10 +244,12 @@ impl Action for WanderAction {
                 self.target_tile
             );
             
-            commands.entity(entity).insert(MoveOrder {
-                destination: self.target_tile,
-                allow_diagonal: false,
-            });
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: self.target_tile,
+                    allow_diagonal: false,
+                });
+            }
             
             self.started = true;
         }

@@ -46,11 +46,10 @@ fn should_tick(state: Res<crate::simulation::SimulationState>) -> bool {
 
 /// System that executes queued actions on each tick
 /// CRITICAL: This runs synchronously with other tick systems
-fn execute_queued_actions(
-    mut commands: Commands,
-    mut queue: ResMut<ActionQueue>,
-    tick: Res<crate::simulation::SimulationTick>,
-    world: &World,
-) {
-    queue.execute_tick(&mut commands, tick.0, world);
+/// Uses exclusive system to get mutable World access
+fn execute_queued_actions(world: &mut World) {
+    world.resource_scope(|world, mut queue: Mut<ActionQueue>| {
+        let tick = world.resource::<crate::simulation::SimulationTick>().0;
+        queue.execute_tick(world, tick);
+    });
 }

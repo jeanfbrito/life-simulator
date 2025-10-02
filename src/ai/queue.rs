@@ -114,16 +114,16 @@ impl ActionQueue {
     }
     
     /// Execute all queued and active actions for this tick
-    pub fn execute_tick(&mut self, commands: &mut Commands, tick: u64, world: &World) {
+    pub fn execute_tick(&mut self, world: &mut World, tick: u64) {
         // First, continue any active multi-tick actions
-        self.execute_active_actions(commands, tick, world);
+        self.execute_active_actions(world, tick);
         
         // Then execute new actions from the queue
-        self.execute_pending_actions(commands, tick, world);
+        self.execute_pending_actions(world, tick);
     }
     
     /// Execute active multi-tick actions
-    fn execute_active_actions(&mut self, commands: &mut Commands, tick: u64, world: &World) {
+    fn execute_active_actions(&mut self, world: &mut World, tick: u64) {
         let mut to_remove = Vec::new();
         
         for (entity, active) in self.active.iter_mut() {
@@ -134,7 +134,7 @@ impl ActionQueue {
             }
             
             // Execute the action
-            let result = active.action.execute(commands, world, *entity, tick);
+            let result = active.action.execute(world, *entity, tick);
             
             match result {
                 ActionResult::Success => {
@@ -169,7 +169,7 @@ impl ActionQueue {
     }
     
     /// Execute pending actions from the queue
-    fn execute_pending_actions(&mut self, commands: &mut Commands, tick: u64, world: &World) {
+    fn execute_pending_actions(&mut self, world: &mut World, tick: u64) {
         let mut executed_this_tick = Vec::new();
         
         // Process actions in priority order
@@ -201,7 +201,7 @@ impl ActionQueue {
             }
             
             // Execute the action!
-            let result = queued.action.execute(commands, world, queued.entity, tick);
+            let result = queued.action.execute(world, queued.entity, tick);
             self.stats.actions_executed += 1;
             
             match result {

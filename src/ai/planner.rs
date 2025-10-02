@@ -30,7 +30,6 @@ pub fn plan_entity_actions(
     rabbit_query: Query<(Entity, &TilePosition, &Thirst), With<Rabbit>>,
     world_loader: Res<WorldLoader>,
     tick: Res<crate::simulation::SimulationTick>,
-    world: &World,
 ) {
     // Plan for each rabbit
     for (entity, position, thirst) in rabbit_query.iter() {
@@ -40,7 +39,7 @@ pub fn plan_entity_actions(
         }
         
         // Evaluate all possible actions
-        let actions = evaluate_rabbit_actions(entity, position, thirst, &world_loader, world);
+        let actions = evaluate_rabbit_actions(entity, position, thirst, &world_loader);
         
         // Queue the best action if it's above threshold
         if let Some(best_action) = actions.into_iter()
@@ -67,21 +66,20 @@ pub fn plan_entity_actions(
 
 /// Evaluate all possible actions for a rabbit
 fn evaluate_rabbit_actions(
-    entity: Entity,
+    _entity: Entity,
     position: &TilePosition,
     thirst: &Thirst,
     world_loader: &WorldLoader,
-    world: &World,
 ) -> Vec<UtilityScore> {
     let mut actions = Vec::new();
     
     // Action: Drink Water
-    if let Some(drink_utility) = evaluate_drink_water_action(entity, position, thirst, world_loader, world) {
+    if let Some(drink_utility) = evaluate_drink_water_action(position, thirst, world_loader) {
         actions.push(drink_utility);
     }
     
     // Action: Wander (idle behavior)
-    if let Some(wander_utility) = evaluate_wander_action(entity, position, world_loader, world) {
+    if let Some(wander_utility) = evaluate_wander_action(position, world_loader) {
         actions.push(wander_utility);
     }
     
@@ -96,26 +94,20 @@ fn evaluate_rabbit_actions(
 
 /// Evaluate the utility of drinking water
 fn evaluate_drink_water_action(
-    entity: Entity,
     position: &TilePosition,
     thirst: &Thirst,
     world_loader: &WorldLoader,
-    world: &World,
 ) -> Option<UtilityScore> {
     // Find nearest water tile
     let water_tile = find_nearest_water(position.tile, MAX_SEARCH_RADIUS, world_loader)?;
     
-    // Build consideration set for this action
-    let mut considerations = ConsiderationSet::new(CombinationMethod::Multiply);
+    // Calculate utility based on thirst and distance
+    let thirst_score = thirst.0.normalized();
+    let distance = position.tile.as_vec2().distance(water_tile.as_vec2());
+    let distance_score = (1.0 - (distance / MAX_SEARCH_RADIUS as f32)).max(0.0);
     
-    // Consideration 1: How thirsty are we?
-    considerations.add(ThirstConsideration::new());
-    
-    // Consideration 2: How far is the water?
-    considerations.add(DistanceConsideration::new(water_tile, MAX_SEARCH_RADIUS as f32));
-    
-    // Evaluate combined utility
-    let utility = considerations.evaluate(world, entity);
+    // Multiply considerations (both must be good for high utility)
+    let utility = thirst_score * distance_score;
     
     // Calculate priority based on urgency
     // Higher thirst = higher priority
@@ -139,10 +131,8 @@ fn evaluate_drink_water_action(
 
 /// Evaluate the utility of wandering to a random location
 fn evaluate_wander_action(
-    entity: Entity,
     position: &TilePosition,
     world_loader: &WorldLoader,
-    world: &World,
 ) -> Option<UtilityScore> {
     use rand::Rng;
     
