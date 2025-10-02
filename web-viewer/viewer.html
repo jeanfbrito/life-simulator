@@ -71,18 +71,19 @@
             padding: 1rem;
             overflow-y: auto;
             backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 10;
         }
 
         .map-container {
             flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 1rem;
             position: relative;
+            z-index: 1;
+            overflow: hidden;
         }
 
         canvas {
+            position: absolute;
             border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
@@ -308,7 +309,8 @@
         // Configuration
         let TILE_SIZE = 8; // Dynamic tile size for zoom functionality
         let renderScale = 1.0; // Scale factor for rendering
-        const VIEW_SIZE = 100; // Show 100x100 tiles
+        let VIEW_SIZE_X = 100; // Dynamic view width based on container
+        let VIEW_SIZE_Y = 100; // Dynamic view height based on container
 
         // Terrain colors with improved visibility and contrast
         const TERRAIN_COLORS = {
@@ -394,18 +396,27 @@
             const container = canvas.parentElement;
             const containerRect = container.getBoundingClientRect();
 
-            // Calculate optimal tile size to fill container space
-            const maxCanvasSize = Math.min(containerRect.width - 40, containerRect.height - 40, 900);
-            const baseTileSize = Math.max(4, Math.floor(maxCanvasSize / VIEW_SIZE));
-            TILE_SIZE = Math.floor(baseTileSize * renderScale);
+            // Calculate tile size based on zoom
+            TILE_SIZE = Math.max(4, Math.floor(8 * renderScale));
 
-            // Set canvas resolution
-            canvas.width = VIEW_SIZE * TILE_SIZE;
-            canvas.height = VIEW_SIZE * TILE_SIZE;
+            // Calculate view size based on container dimensions
+            const viewWidth = Math.floor(containerRect.width / TILE_SIZE);
+            const viewHeight = Math.floor(containerRect.height / TILE_SIZE);
 
-            // Set canvas display size
-            canvas.style.width = canvas.width + 'px';
-            canvas.style.height = canvas.height + 'px';
+            // Use non-square view to fill container completely
+            VIEW_SIZE_X = Math.max(50, Math.min(300, viewWidth)); // Clamp between 50-300 tiles
+            VIEW_SIZE_Y = Math.max(50, Math.min(300, viewHeight)); // Clamp between 50-300 tiles
+
+            // Set canvas resolution to match container dimensions
+            canvas.width = containerRect.width;
+            canvas.height = containerRect.height;
+
+            // Make canvas fill entire container
+            canvas.style.width = containerRect.width + 'px';
+            canvas.style.height = containerRect.height + 'px';
+            canvas.style.left = '0';
+            canvas.style.top = '0';
+            canvas.style.transform = 'none';
 
             // Update zoom display
             updateZoomDisplay();
@@ -428,6 +439,11 @@
             }
         };
         let centerCoord = { x: 0, y: 0 };
+
+        // Map panning state
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragOffset = { x: 0, y: 0 };
 
         // HTTP-based data fetching with CORS workaround
         function fetchData(endpoint) {
@@ -556,7 +572,7 @@
                     }
                 }
 
-  
+        
                 updateStats();
                 updateConnectionStatus(true);
             }
@@ -587,14 +603,18 @@
         function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // Apply drag offset by translating the canvas
+            ctx.save();
+            ctx.translate(dragOffset.x, dragOffset.y);
+
             // Collect resource data for second pass rendering
             const resourcesToRender = [];
 
             // First pass: Render terrain layers
             const startX = 0;
             const startY = 0;
-            const endX = VIEW_SIZE;
-            const endY = VIEW_SIZE;
+            const endX = VIEW_SIZE_X;
+            const endY = VIEW_SIZE_Y;
 
             // Track terrain statistics for display
             let totalTiles = 0;
@@ -605,10 +625,10 @@
 
             for (let y = startY; y < endY; y++) {
                 for (let x = startX; x < endX; x++) {
-                    // Convert view coordinates to world coordinates
-                    // This should map center of view (50,50) to world (0,0) when centerCoord is (0,0)
-                    const worldX = x - VIEW_SIZE/2 + centerCoord.x * 16;
-                    const worldY = y - VIEW_SIZE/2 + centerCoord.y * 16;
+                    // Simple fixed coordinate system: render area around chunk 0,0
+                    // Each tile in our view corresponds to a world tile
+                    const worldX = x - Math.floor(VIEW_SIZE_X / 2);
+                    const worldY = y - Math.floor(VIEW_SIZE_Y / 2);
 
                     // Get chunk coordinates
                     const chunkX = Math.floor(worldX / 16);
@@ -695,7 +715,8 @@
                 ctx.fillText(RESOURCE_SYMBOLS[resource.type] || '•', centerX, centerY);
                 ctx.shadowBlur = 0; // Reset shadow
             }
-            ctx.restore(); // Restore context state
+            ctx.restore(); // Restore context state (this also restores the drag offset)
+            ctx.restore(); // Restore the drag offset translation
 
             // Update statistics display
             if (totalTiles > 0) {
@@ -733,12 +754,13 @@
             const rect = canvas.getBoundingClientRect();
 
             // Convert mouse position to canvas coordinates
-            const canvasX = e.clientX - rect.left;
-            const canvasY = e.clientY - rect.top;
+            const canvasX = e.clientX - rect.left - dragOffset.x;
+            const canvasY = e.clientY - rect.top - dragOffset.y;
             const x = Math.floor(canvasX / TILE_SIZE);
             const y = Math.floor(canvasY / TILE_SIZE);
 
-            if (x >= 0 && x < VIEW_SIZE && y >= 0 && y < VIEW_SIZE) {
+  
+            if (x >= 0 && x < VIEW_SIZE_X && y >= 0 && y < VIEW_SIZE_Y) {
                 const tooltip = document.getElementById('tooltip');
                 tooltip.style.display = 'block';
 
@@ -763,8 +785,8 @@
                 tooltip.style.top = top + 'px';
 
                 // Convert to world coordinates (matching render function)
-                const worldX = x - VIEW_SIZE/2 + centerCoord.x * 16;
-                const worldY = y - VIEW_SIZE/2 + centerCoord.y * 16;
+                const worldX = x - VIEW_SIZE_X/2 + centerCoord.x * 16;
+                const worldY = y - VIEW_SIZE_Y/2 + centerCoord.y * 16;
 
                 // Get chunk coordinates
                 const chunkX = Math.floor(worldX / 16);
@@ -802,7 +824,47 @@
             document.getElementById('tooltip').style.display = 'none';
         });
 
-       
+        // Middle mouse button drag functionality
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                e.preventDefault();
+                isDragging = true;
+                dragStart.x = e.clientX - dragOffset.x;
+                dragStart.y = e.clientY - dragOffset.y;
+                canvas.style.cursor = 'grabbing';
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                e.preventDefault();
+                dragOffset.x = e.clientX - dragStart.x;
+                dragOffset.y = e.clientY - dragStart.y;
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                e.preventDefault();
+                isDragging = false;
+                canvas.style.cursor = 'pointer';
+            }
+        });
+
+        // Handle context menu (right click) to prevent interference
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Reset drag offset on reset view
+        function resetView() {
+            renderScale = 1.0;
+            dragOffset = { x: 0, y: 0 };
+            setupCanvasSize();
+            render(); // Re-render immediately
+        }
+
+
         // Animation loop with FPS limiting
         let lastTime = 0;
         let frameCount = 0;
@@ -851,12 +913,7 @@
             render(); // Re-render immediately
         }
 
-        function resetView() {
-            renderScale = 1.0;
-            setupCanvasSize();
-            render(); // Re-render immediately
-        }
-
+    
         // Add event listeners for zoom controls
         document.getElementById('zoom-in').addEventListener('click', zoomIn);
         document.getElementById('zoom-out').addEventListener('click', zoomOut);
