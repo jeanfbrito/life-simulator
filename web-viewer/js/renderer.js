@@ -60,8 +60,13 @@ export class Renderer {
     render(worldData, dragOffset) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Apply drag offset by translating the canvas
+        // Apply clipping to prevent content from rendering outside canvas
         this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.rect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clip();
+
+        // Apply drag offset by translating the canvas
         this.ctx.translate(dragOffset.x, dragOffset.y);
 
         // Collect resource data for second pass rendering
@@ -73,7 +78,7 @@ export class Renderer {
         // Second pass: Render resources on top (allows overflow beyond tile boundaries)
         this.renderResources(resourcesToRender);
 
-        this.ctx.restore(); // Restore the drag offset translation
+        this.ctx.restore(); // Restore the drag offset translation and clipping
 
         return stats;
     }
