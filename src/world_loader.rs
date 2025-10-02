@@ -171,6 +171,44 @@ impl WorldLoader {
         }
         layers.into_iter().collect()
     }
+
+    /// Get terrain type at a specific world tile position
+    pub fn get_terrain_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+        
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+        
+        // Get terrain layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "terrain")
+            .and_then(|terrain| {
+                terrain.get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
+
+    /// Get resource at a specific world tile position (empty string if no resource)
+    pub fn get_resource_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+        
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+        
+        // Get resources layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "resources")
+            .and_then(|resources| {
+                resources.get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
 }
 
 /// Find the most recent map file in a directory

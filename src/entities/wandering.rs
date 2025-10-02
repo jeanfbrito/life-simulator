@@ -145,7 +145,7 @@ pub fn spawn_wandering_person(
             species: "Human".to_string(),
         },
         TilePosition::from_tile(position),
-        MovementSpeed::custom(10), // 1 tile per 10 ticks = 1 tile/sec (very slow for debugging)
+        MovementSpeed::custom(15), // 1 tile per 15 ticks = 0.67 tiles/sec (walking speed)
         Wanderer::new(position, wander_radius),
     )).id()
 }

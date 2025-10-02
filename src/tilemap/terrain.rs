@@ -17,6 +17,25 @@ pub enum TerrainType {
 }
 
 impl TerrainType {
+    /// Parse terrain type from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "Grass" => Some(TerrainType::Grass),
+            "Stone" => Some(TerrainType::Stone),
+            "Sand" => Some(TerrainType::Sand),
+            "Water" => Some(TerrainType::Water),
+            "Dirt" => Some(TerrainType::Dirt),
+            "Snow" => Some(TerrainType::Snow),
+            "Forest" => Some(TerrainType::Forest),
+            "Mountain" => Some(TerrainType::Mountain),
+            "DeepWater" => Some(TerrainType::DeepWater),
+            "ShallowWater" => Some(TerrainType::ShallowWater),
+            "Swamp" => Some(TerrainType::Swamp),
+            "Desert" => Some(TerrainType::Desert),
+            _ => None,
+        }
+    }
+
     pub fn is_walkable(&self) -> bool {
         !matches!(
             self,

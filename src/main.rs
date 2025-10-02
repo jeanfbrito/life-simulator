@@ -67,18 +67,64 @@ fn setup(
         }
     };
 
-    // Build pathfinding grid from terrain
+    // Build pathfinding grid from terrain and resources
     println!("🧭 LIFE_SIMULATOR: Building pathfinding grid...");
-    // For now, manually populate a small area around spawn
-    // TODO: Implement proper world loader iteration
-    for y in -50..=50 {
-        for x in -50..=50 {
-            // Assume all tiles are walkable for now (cost=1)
-            // In production, this should query actual terrain
-            pathfinding_grid.set_cost(bevy::math::IVec2::new(x, y), 1);
+    
+    use tilemap::TerrainType;
+    
+    // Get world bounds
+    let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
+    let tile_min_x = min_x * 16 - 16; // Extra padding
+    let tile_min_y = min_y * 16 - 16;
+    let tile_max_x = (max_x + 1) * 16 + 16;
+    let tile_max_y = (max_y + 1) * 16 + 16;
+    
+    let mut tiles_processed = 0;
+    let mut tiles_blocked = 0;
+    
+    for y in tile_min_y..=tile_max_y {
+        for x in tile_min_x..=tile_max_x {
+            let pos = bevy::math::IVec2::new(x, y);
+            
+            // Get terrain at this position
+            let terrain_str = world_loader.get_terrain_at(x, y);
+            let terrain_cost = if let Some(terrain_str) = terrain_str {
+                if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+                    let cost = terrain.movement_cost();
+                    if cost >= 1000.0 {
+                        u32::MAX // Impassable terrain
+                    } else {
+                        cost as u32
+                    }
+                } else {
+                    // Unknown terrain type, assume impassable
+                    u32::MAX
+                }
+            } else {
+                // No terrain data, assume impassable (outside world bounds)
+                u32::MAX
+            };
+            
+            // Check if there's a resource blocking this tile
+            let has_resource = world_loader.get_resource_at(x, y)
+                .map(|r| !r.is_empty())
+                .unwrap_or(false);
+            
+            // If terrain is passable but has resource, make it impassable
+            let final_cost = if has_resource && terrain_cost != u32::MAX {
+                tiles_blocked += 1;
+                u32::MAX // Resources block movement
+            } else {
+                terrain_cost
+            };
+            
+            pathfinding_grid.set_cost(pos, final_cost);
+            tiles_processed += 1;
         }
     }
+    
     println!("✅ LIFE_SIMULATOR: Pathfinding grid ready");
+    println!("   📊 Processed {} tiles, {} blocked by resources", tiles_processed, tiles_blocked);
 
     // Start the web server
     println!("🌐 LIFE_SIMULATOR: Starting web server...");

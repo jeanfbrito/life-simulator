@@ -244,8 +244,28 @@ The viewer is built with modular JavaScript:
 - **`js/renderer.js`**: Canvas rendering with pan/zoom
 - **`js/controls.js`**: Mouse input handling
 - **`js/app.js`**: Main application initialization
+- **`js/entity-manager.js`**: Entity polling and management (200ms interval)
 
 Rendering pattern: Fetch chunks in batches → Cache locally → Render visible area to canvas
+
+### Entity Rendering Standards
+
+**IMPORTANT**: All entities (emojis, sprites) must be rendered with a **Y offset of -0.2 tiles** (upward) to keep the feet/base inside the grid square. This ensures:
+- Entity feet remain within the tile boundaries visually
+- Proper alignment with grid-based pathfinding
+- Consistent appearance across all entity types
+
+**Example in `renderer.js`:**
+```javascript
+// Render the emoji with Y offset to position feet above
+const entityY = screenY + (CONFIG.TILE_SIZE * -0.2); // Move up 0.2 tiles
+this.ctx.fillText('🧍‍♂️', screenX, entityY);
+```
+
+**Default for new entities:**
+- All future entity types (animals, NPCs, etc.) should use this same -0.2 Y offset
+- Entity emojis render at 1.2× tile size
+- Current entity polling rate: 200ms (5 times per second)
 
 ## Development Notes
 
@@ -671,6 +691,89 @@ Automatic logging every 100 ticks (10 seconds):
 3. **Decoupled rendering**: Logic at 10 TPS, rendering at 60 FPS
 4. **Multi-rate updates**: Expensive systems run less frequently
 5. **Budget-based pathfinding**: Async calculation, tick-synced application
+
+## CRITICAL: Simulation vs. Viewer Separation
+
+### Pure Discrete Simulation Philosophy
+
+This simulator follows a **strict separation between simulation logic and visualization**:
+
+#### Simulation Side (Rust/Bevy)
+- ✅ **DISCRETE, TICK-BASED ONLY**: All movement and logic happens on discrete ticks
+- ✅ **NO INTERPOLATION**: Entities teleport from tile A to tile B instantly
+- ✅ **GRID-LOCKED**: Positions are always exact tile coordinates (IVec2)
+- ✅ **DETERMINISTIC**: Same inputs always produce same outputs
+- ✅ **ROGUELIKE STYLE**: Think Dwarf Fortress, NetHack, CDDA - pure grid movement
+
+**Example:** Entity at tile (5, 5) waits 15 ticks, then **instantly jumps** to tile (5, 6).
+
+#### Viewer Side (JavaScript/Web)
+- ✅ **POLLS STATE**: Fetches entity positions via HTTP every 200ms
+- ✅ **DISPLAYS CURRENT STATE**: Shows entities at their exact tile positions
+- ✅ **NO CLIENT-SIDE INTERPOLATION**: Entities jump from tile to tile in the viewer too
+- ✅ **OPTIONAL SMOOTHING**: Could add interpolation in future, but NOT required
+
+**Example:** Viewer polls every 200ms, sees entity at (5,5) three times, then sees it at (5,6).
+
+### Why This Matters
+
+**NEVER try to add interpolation or smooth movement to the simulation engine.**
+- Movement interpolation belongs ONLY in the viewer (if desired at all)
+- The simulation must remain pure, discrete, and deterministic
+- This is a feature, not a bug - it's how roguelikes and simulation games work
+
+### Current Movement Behavior (AS DESIGNED)
+
+```
+Tick:    0    1    2    3 ... 14   15   16   17 ... 29   30
+Pos:     A    A    A    A     A    B    B    B      B    C
+         └─── Counting ticks ──┘    └─── Counting ──┘
+                               ▲                      ▲
+                            JUMP                   JUMP
+```
+
+With `MovementSpeed::custom(15)`:
+- Entity stays at tile A for 15 ticks (1.5 seconds at 10 TPS)
+- On tick 15, entity **instantly teleports** to tile B
+- Entity stays at tile B for 15 ticks
+- On tick 30, entity **instantly teleports** to tile C
+
+### Web Viewer Polling
+
+With 200ms polling (5 times per second):
+- Viewer polls at 0ms, 200ms, 400ms, 600ms, etc.
+- Sees entity position at exact moment of poll
+- Entity appears to "jump" because it does jump - **this is correct behavior**
+
+### If You Want Smoother Visuals
+
+**Option 1: Faster polling (already at 200ms)**
+- More frequent updates show more of the jumps
+- Still discrete, just more frequent samples
+
+**Option 2: Client-side interpolation (NOT IMPLEMENTED, not required)**
+- JavaScript could interpolate between known positions
+- **Never add this to the simulation engine**
+- Optional future enhancement for viewer only
+
+**Option 3: Faster movement (adjust ticks_per_move)**
+- Lower `ticks_per_move` = more frequent jumps
+- Still discrete, just more frequent
+
+### What NOT To Do
+
+❌ **Do NOT add smooth position interpolation to the Rust simulation**
+❌ **Do NOT use f32 positions in the simulation (always IVec2)**
+❌ **Do NOT try to "fix" the jumping - it's intentional**
+❌ **Do NOT add delta-time based movement to the core simulation**
+
+### What TO Do
+
+✅ **Keep simulation discrete and tick-based**
+✅ **Keep entity positions as exact tile coordinates**
+✅ **All movement happens instantly on specific ticks**
+✅ **Add interpolation only to viewer if truly needed**
+✅ **Embrace the discrete, roguelike style**
 
 ### Key Files
 

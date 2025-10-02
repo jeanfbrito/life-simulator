@@ -243,8 +243,9 @@ export class Renderer {
                 this.ctx.shadowOffsetX = 1;
                 this.ctx.shadowOffsetY = 1;
                 
-                // Render the emoji
-                this.ctx.fillText('🧍‍♂️', screenX, screenY);
+                // Render the emoji with Y offset to position feet above
+                const entityY = screenY + (CONFIG.TILE_SIZE * -0.2); // Move up 0.2 tiles
+                this.ctx.fillText('🧍‍♂️', screenX, entityY);
             }
         }
 
