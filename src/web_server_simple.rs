@@ -212,6 +212,15 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
                 send_response(&mut stream, "404 Not Found", "application/json", r#"{"error": "No world loaded. Please load a world first."}"#);
             }
         }
+        path if path.starts_with("/js/") => {
+            // Serve JavaScript files from the js directory
+            let file_path = path.trim_start_matches('/');
+            if let Ok(content) = std::fs::read_to_string(file_path) {
+                send_response(&mut stream, "200 OK", "application/javascript", &content);
+            } else {
+                send_response(&mut stream, "404 Not Found", "text/plain", "JavaScript file not found");
+            }
+        }
         _ => {
             send_response(&mut stream, "404 Not Found", "text/plain", "Not Found");
         }
