@@ -5,8 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
 use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}, CurrentAction};
-use crate::entities::reproduction::{Sex, Age, WellFedStreak, ReproductionCooldown, Pregnancy};
-use crate::entities::types::rabbit::RabbitReproductionConfig;
+use crate::entities::reproduction::{Sex, Age, WellFedStreak, ReproductionCooldown, Pregnancy, ReproductionConfig};
 
 // ============================================================================
 // GLOBAL STATE
@@ -143,7 +142,7 @@ pub fn sync_entities_to_tracker(
         Option<&ReproductionCooldown>,
         Option<&Pregnancy>,
     )>,
-    rabbit_cfg: Option<Res<RabbitReproductionConfig>>,
+rabbit_cfg: Option<Res<ReproductionConfig>>,
 ) {
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {

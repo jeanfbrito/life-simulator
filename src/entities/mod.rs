@@ -38,11 +38,13 @@ pub use entity_types::{
 };
 
 pub use reproduction::{
-    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak, Mother, MatingIntent,
+    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak, Mother, MatingIntent, ReproductionConfig,
     update_age_and_wellfed_system,
     tick_reproduction_timers_system,
     rabbit_mate_matching_system,
     rabbit_birth_system,
+    deer_mate_matching_system,
+    deer_birth_system,
 };
 
 pub use types::{
@@ -96,8 +98,10 @@ impl Plugin for EntitiesPlugin {
                 auto_eat::auto_eat_system,      // Auto-eat when on grass
                 update_age_and_wellfed_system,  // Age and WellFed
                 tick_reproduction_timers_system, // Timers for repro
-                rabbit_mate_matching_system,    // Pairing (MVP)
-                rabbit_birth_system,            // Handle births
+                rabbit_mate_matching_system,    // Pairing (rabbits)
+                deer_mate_matching_system,      // Pairing (deer)
+                rabbit_birth_system,            // Rabbit births
+                deer_birth_system,              // Deer births
                 stats::death_system,            // Handle death
             ).run_if(should_run_tick_systems));
     }

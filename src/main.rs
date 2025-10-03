@@ -137,8 +137,8 @@ fn setup(
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);
 
-    // Insert reproduction config resource for rabbits
-    commands.insert_resource(entities::types::rabbit::RabbitBehavior::reproduction_config());
+// Insert reproduction config resource - use fast deer config for quick test
+    commands.insert_resource(entities::types::deer::DeerBehavior::reproduction_config());
 }
 
 fn spawn_wanderers(
@@ -184,22 +184,31 @@ fn spawn_wanderers(
         }
     }
     
-    // Spawn one deer near the first rabbit as a following example
-    if let Some(base_pos) = first_rabbit_pos {
-        // Try to find a walkable tile within 6 tiles of the first rabbit
-        let deer_pos = (0..30).find_map(|_| {
-            let dx = rng.gen_range(-6..=6);
-            let dy = rng.gen_range(-6..=6);
-            let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
-            if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
-        });
-        if let Some(deer_pos) = deer_pos {
-            let deer = spawn_deer(&mut commands, "Bambi", deer_pos);
-            println!("   🦌 Spawned deer 'Bambi' near first rabbit at {:?}", deer_pos);
-            println!("   🦌 Deer will follow the nearest rabbit while needs are low");
-        } else {
-            eprintln!("   ⚠️ Failed to find a walkable spawn position for deer near first rabbit");
-        }
+// Spawn a male and a female deer near origin for quick reproduction test
+    use crate::entities::reproduction::Sex;
+    // Find two nearby walkable tiles around origin
+    let base_pos = bevy::math::IVec2::new(0, 0);
+    let male_pos = (0..50).find_map(|_| {
+        let dx = rng.gen_range(-5..=5);
+        let dy = rng.gen_range(-5..=5);
+        let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
+        if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
+    });
+    let female_pos = (0..50).find_map(|_| {
+        let dx = rng.gen_range(-5..=5);
+        let dy = rng.gen_range(-5..=5);
+        let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
+        if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
+    });
+    if let (Some(mpos), Some(fpos)) = (male_pos, female_pos) {
+        let male = spawn_deer(&mut commands, "Stag", mpos);
+        let female = spawn_deer(&mut commands, "Doe", fpos);
+        // Force explicit sexes to ensure pairing
+        commands.entity(male).insert(Sex::Male);
+        commands.entity(female).insert(Sex::Female);
+        println!("   🦌 Spawned deer pair: Stag at {:?}, Doe at {:?}", mpos, fpos);
+    } else {
+        eprintln!("   ⚠️ Failed to find walkable positions for deer pair");
     }
     
     if spawned_count > 0 {

@@ -3,11 +3,32 @@
 /// Defines behavior parameters and action evaluation for deer entities.
 
 use super::BehaviorConfig;
+use crate::entities::reproduction::ReproductionConfig;
 
 /// Deer behavior preset
 pub struct DeerBehavior;
 
 impl DeerBehavior {
+    /// Fast reproduction parameters for deer (for testing)
+    pub fn reproduction_config() -> ReproductionConfig {
+        // Extremely fast for testing: near-instant maturity/gestation, minimal requirements
+        ReproductionConfig {
+            maturity_ticks: 10,                // Adult almost immediately
+            gestation_ticks: 80,               // ~8s at 10 TPS
+            mating_cooldown_ticks: 50,         // ~5s
+            postpartum_cooldown_ticks: 80,     // ~8s
+            litter_size_range: (1, 2),         // 1-2 fawns
+            mating_search_radius: 8,           // Close range to ensure quick pairing
+            well_fed_hunger_norm: 0.6,         // Allow mating at moderate needs
+            well_fed_thirst_norm: 0.6,
+            well_fed_required_ticks: 10,       // ~1s
+            matching_interval_ticks: 10,       // Check every second
+            mating_duration_ticks: 10,         // ~1s
+            min_energy_norm: 0.2,              // Low requirement
+            min_health_norm: 0.3,              // Low requirement
+        }
+    }
+
     /// Get the default behavior configuration for deer
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(

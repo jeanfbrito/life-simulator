@@ -148,19 +148,30 @@ pub fn spawn_deer(
 ) -> Entity {
     let template = EntityTemplate::DEER;
     
-    commands.spawn((
-        Creature {
-            name: name.into(),
-            species: template.species.to_string(),
-        },
-        Deer,
-        TilePosition::from_tile(position),
-        MovementSpeed::custom(template.movement_speed),
-        DeerBehavior::stats_bundle(),
-        DeerBehavior::config(), // Attach behavior configuration
-        DeerBehavior::needs(),   // SpeciesNeeds profile
-        CurrentAction::none(), // Track current action for viewer
-)).id()
+    {
+        use crate::entities::reproduction::{Sex, Age, ReproductionCooldown, WellFedStreak};
+        // Use deer reproduction config for maturity
+        let cfg = DeerBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) { Sex::Male } else { Sex::Female };
+        commands.spawn((
+            Creature {
+                name: name.into(),
+                species: template.species.to_string(),
+            },
+            Deer,
+            TilePosition::from_tile(position),
+            MovementSpeed::custom(template.movement_speed),
+            DeerBehavior::stats_bundle(),
+            DeerBehavior::config(), // Attach behavior configuration
+            DeerBehavior::needs(),   // SpeciesNeeds profile
+            sex,
+            Age { ticks_alive: cfg.maturity_ticks as u64, mature_at_ticks: cfg.maturity_ticks }, // spawn as adult
+            ReproductionCooldown::default(),
+            WellFedStreak::default(),
+            CurrentAction::none(), // Track current action for viewer
+        )).id()
+    }
 }
 
 /// Spawn multiple humans at random positions

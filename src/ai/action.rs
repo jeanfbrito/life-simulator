@@ -514,7 +514,7 @@ impl Action for MateAction {
     }
 
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
-        use crate::entities::types::rabbit::RabbitReproductionConfig;
+        use crate::entities::reproduction::ReproductionConfig;
         use crate::entities::reproduction::{Pregnancy, ReproductionCooldown, Sex, MatingIntent};
         // Abort if partner missing
         if world.get::<TilePosition>(self.partner).is_none() {
@@ -551,7 +551,7 @@ impl Action for MateAction {
         }
 
         // Duration complete: apply pregnancy and cooldowns (female only)
-        if let Some(cfg) = world.get_resource::<RabbitReproductionConfig>().cloned() {
+        if let Some(cfg) = world.get_resource::<ReproductionConfig>().cloned() {
             // Determine if self is female
             let me_female = world.get::<Sex>(entity).is_some_and(|s| matches!(s, Sex::Female));
             let partner_female = world.get::<Sex>(self.partner).is_some_and(|s| matches!(s, Sex::Female));

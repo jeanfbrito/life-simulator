@@ -121,11 +121,11 @@ export const ENTITY_CONFIG = {
         offsetX: 0,
         offsetY: -0.05  // Slightly less offset for smaller creature
     },
-    'Deer': {
+'Deer': {
         emoji: '🦌',
-        sizeMultiplier: 1.3,  // Larger than humans
+        sizeMultiplier: 0.9,  // Smaller for clearer testing
         offsetX: 0,
-        offsetY: -0.25  // More offset for tall creature
+        offsetY: -0.18
     },
     'Wolf': {
         emoji: '🐺',
