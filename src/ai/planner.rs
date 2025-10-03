@@ -1,24 +1,20 @@
 use super::action::ActionType;
-use super::behaviors::{
-    evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_follow_behavior,
-    evaluate_grazing_behavior, evaluate_resting_behavior,
-};
-use super::consideration::{
-    CombinationMethod, ConsiderationSet, DistanceConsideration, ThirstConsideration,
-};
 use super::queue::ActionQueue;
+use crate::ai::herbivore_toolkit::{
+    maybe_add_follow_mother, maybe_add_mate_action, FollowConfig, MateActionParams,
+};
 use crate::entities::{
-    reproduction::{MatingIntent, ReproductionConfig},
+    reproduction::{Age, MatingIntent, Mother, ReproductionConfig},
     stats::{Energy, Hunger, Thirst},
     BehaviorConfig, Deer, Rabbit, TilePosition,
 };
-use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 /// Utility Planner for TQUAI
 ///
 /// Evaluates entity needs and available actions asynchronously (every frame),
 /// queues high-utility actions for execution on ticks.
 use bevy::prelude::*;
+use std::collections::HashMap;
 
 /// Utility score with associated action
 #[derive(Debug, Clone)]
@@ -73,7 +69,6 @@ pub fn plan_entity_actions(
 ) {
     // Plan for each rabbit
     // Build a quick lookup for rabbit positions (used for mother lookups)
-    use std::collections::HashMap;
     let mut rabbit_pos_map: HashMap<u32, IVec2> = HashMap::new();
     for (e, pos) in rabbit_positions.iter() {
         rabbit_pos_map.insert(e.index(), pos.tile);
@@ -106,64 +101,52 @@ pub fn plan_entity_actions(
             &world_loader,
         );
 
-        // If there is a mating intent, add a Mate action to rendezvous
-        if let (Some(intent), Some(cfg)) = (mating_intent, repro_cfg) {
-            let thirst_level = thirst.0.normalized();
-            let hunger_level = hunger.0.normalized();
-            let energy_level = energy.0.normalized();
-
-            let thirst_safe = thirst_level <= cfg.well_fed_thirst_norm + 0.05;
-            let hunger_safe = hunger_level <= cfg.well_fed_hunger_norm + 0.05;
-            let energy_safe = energy_level >= (cfg.min_energy_norm + 0.05).min(1.0);
-
-            if thirst_safe && hunger_safe && energy_safe {
-                actions.push(UtilityScore {
-                    action_type: ActionType::Mate {
-                        partner: intent.partner,
-                        meeting_tile: intent.meeting_tile,
-                        duration_ticks: intent.duration_ticks,
-                    },
-                    utility: 0.45, // Below survival needs
-                    priority: 350, // Lower than critical hunger/thirst, above idle
-                });
-            } else {
-                debug!(
-                    "⏸️ Entity {:?} delaying mating due to needs (thirst {:.2}, hunger {:.2}, energy {:.2})",
-                    entity,
-                    thirst_level,
-                    hunger_level,
-                    energy_level
-                );
-            }
+        let mate_added = maybe_add_mate_action(
+            &mut actions,
+            mating_intent,
+            repro_cfg,
+            thirst,
+            hunger,
+            energy,
+            MateActionParams {
+                utility: 0.45,
+                priority: 350,
+                threshold_margin: 0.05,
+                energy_margin: 0.05,
+            },
+        );
+        if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
+            debug!(
+                "⏸️ Entity {:?} delaying mating due to needs (thirst {:.2}, hunger {:.2}, energy {:.2})",
+                entity,
+                thirst.0.normalized(),
+                hunger.0.normalized(),
+                energy.0.normalized()
+            );
         }
 
-        // Juvenile follow-mother behavior (when not doing necessities)
-        if let (Some(age), Some(mother)) = (age, mother) {
-            if !age.is_adult() {
-                // Only follow when needs are not urgent
-                let hunger_ok = hunger.0.normalized() < behavior_config.hunger_threshold;
-                let thirst_ok = thirst.0.normalized() < behavior_config.thirst_threshold;
-                let energy_ok = energy.0.normalized() > behavior_config.energy_threshold;
-                if hunger_ok && thirst_ok && energy_ok {
-                    if let Some(&mpos) = rabbit_pos_map.get(&mother.0.index()) {
-                        let rabbits_slice = [(mother.0, mpos)];
-                        if let Some(follow) = crate::ai::behaviors::evaluate_follow_behavior(
-                            entity,
-                            position,
-                            &rabbits_slice,
-                            2,  // stop_distance: stay within 2 tiles of mother
-                            20, // max_follow_distance for utility scaling
-                        ) {
-                            actions.push(follow);
-                        }
-                    } else {
-                        // Mother missing (likely dead or despawned). Remove Mother component to avoid stale refs.
-                        commands
-                            .entity(entity)
-                            .remove::<crate::entities::reproduction::Mother>();
-                    }
-                }
-            }
+        let mother_position = mother.and_then(|m| rabbit_pos_map.get(&m.0.index()).copied());
+        let followed = maybe_add_follow_mother(
+            &mut actions,
+            entity,
+            position,
+            hunger,
+            thirst,
+            energy,
+            behavior_config,
+            age,
+            mother,
+            mother_position,
+            FollowConfig {
+                stop_distance: 2,
+                max_distance: 20,
+            },
+        );
+
+        if mother.is_some() && !followed && mother_position.is_none() {
+            commands
+                .entity(entity)
+                .remove::<crate::entities::reproduction::Mother>();
         }
 
         if !actions.is_empty() {
@@ -250,54 +233,51 @@ pub fn plan_entity_actions(
             &rabbit_list,
         );
 
-        if let (Some(intent), Some(cfg)) = (mating_intent, repro_cfg) {
-            let thirst_level = thirst.0.normalized();
-            let hunger_level = hunger.0.normalized();
-            let energy_level = energy.0.normalized();
-
-            let thirst_safe = thirst_level <= cfg.well_fed_thirst_norm + 0.05;
-            let hunger_safe = hunger_level <= cfg.well_fed_hunger_norm + 0.05;
-            let energy_safe = energy_level >= (cfg.min_energy_norm + 0.05).min(1.0);
-
-            if thirst_safe && hunger_safe && energy_safe {
-                actions.push(UtilityScore {
-                    action_type: ActionType::Mate {
-                        partner: intent.partner,
-                        meeting_tile: intent.meeting_tile,
-                        duration_ticks: intent.duration_ticks,
-                    },
-                    utility: 0.45,
-                    priority: 350,
-                });
-            } else {
-                debug!(
-                    "🦌⏸️ Deer {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
-                    entity, thirst_level, hunger_level, energy_level
-                );
-            }
+        let mate_added = maybe_add_mate_action(
+            &mut actions,
+            mating_intent,
+            repro_cfg,
+            thirst,
+            hunger,
+            energy,
+            MateActionParams {
+                utility: 0.45,
+                priority: 350,
+                threshold_margin: 0.05,
+                energy_margin: 0.05,
+            },
+        );
+        if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
+            debug!(
+                "🦌⏸️ Deer {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
+                entity,
+                thirst.0.normalized(),
+                hunger.0.normalized(),
+                energy.0.normalized()
+            );
         }
 
-        if let (Some(age), Some(mother)) = (age, mother) {
-            if !age.is_adult() {
-                let hunger_ok = hunger.0.normalized() < behavior_config.hunger_threshold;
-                let thirst_ok = thirst.0.normalized() < behavior_config.thirst_threshold;
-                let energy_ok = energy.0.normalized() > behavior_config.energy_threshold;
-
-                if hunger_ok && thirst_ok && energy_ok {
-                    if let Some(&mpos) = deer_pos_map.get(&mother.0.index()) {
-                        let deer_slice = [(mother.0, mpos)];
-                        if let Some(follow) =
-                            evaluate_follow_behavior(entity, position, &deer_slice, 2, 25)
-                        {
-                            actions.push(follow);
-                        }
-                    } else {
-                        commands
-                            .entity(entity)
-                            .remove::<crate::entities::reproduction::Mother>();
-                    }
-                }
-            }
+        let mother_position = mother.and_then(|m| deer_pos_map.get(&m.0.index()).copied());
+        let followed = maybe_add_follow_mother(
+            &mut actions,
+            entity,
+            position,
+            hunger,
+            thirst,
+            energy,
+            behavior_config,
+            age,
+            mother,
+            mother_position,
+            FollowConfig {
+                stop_distance: 2,
+                max_distance: 25,
+            },
+        );
+        if mother.is_some() && !followed && mother_position.is_none() {
+            commands
+                .entity(entity)
+                .remove::<crate::entities::reproduction::Mother>();
         }
 
         if !actions.is_empty() {
@@ -342,65 +322,6 @@ pub fn plan_entity_actions(
             );
         }
     }
-}
-
-/// Evaluate all possible actions for an entity using its behavior configuration
-fn evaluate_entity_actions(
-    _entity: Entity,
-    position: &TilePosition,
-    thirst: &Thirst,
-    hunger: &Hunger,
-    energy: &Energy,
-    behavior_config: &BehaviorConfig,
-    world_loader: &WorldLoader,
-) -> Vec<UtilityScore> {
-    let mut actions = Vec::new();
-
-    // Behavior: Drinking (when thirsty)
-    // Use entity's configured thirst threshold and search radius
-    if let Some(drink_utility) = evaluate_drinking_behavior(
-        position,
-        thirst,
-        world_loader,
-        behavior_config.thirst_threshold,
-        behavior_config.water_search_radius,
-    ) {
-        actions.push(drink_utility);
-    }
-
-    // Behavior: Eating (when hungry)
-    // Use entity's configured hunger threshold and search radius
-    if let Some(eat_utility) = evaluate_eating_behavior(
-        position,
-        hunger,
-        world_loader,
-        behavior_config.hunger_threshold,
-        behavior_config.food_search_radius,
-    ) {
-        actions.push(eat_utility);
-    }
-
-    // Behavior: Resting (when tired)
-    // Use entity's configured energy threshold
-    if let Some(rest_utility) =
-        evaluate_resting_behavior(position, energy, behavior_config.energy_threshold)
-    {
-        actions.push(rest_utility);
-    }
-
-    // Behavior: Grazing (idle herbivore behavior)
-    // Use entity's configured graze range
-    if let Some(graze_utility) =
-        evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
-    {
-        actions.push(graze_utility);
-    }
-
-    // Future behaviors:
-    // - Flee from predators (when wolf nearby)
-    // - Socialize with other rabbits
-
-    actions
 }
 
 #[cfg(test)]

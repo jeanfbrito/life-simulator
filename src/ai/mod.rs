@@ -8,6 +8,7 @@
 pub mod action;
 pub mod behaviors;
 pub mod consideration;
+pub mod herbivore_toolkit;
 pub mod planner;
 pub mod queue;
 
