@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
-use crate::entities::{Rabbit, Raccoon, TilePosition};
+use crate::entities::TilePosition;
 
 // -----------------------------
 // Config
@@ -156,7 +156,7 @@ mod systems {
         }
     }
 
-    fn mate_matching_system_inner<M: Component>(
+    pub fn mate_matching_system<M: Component, const EMOJI: char>(
         commands: &mut Commands,
         animals: &Query<
             (
@@ -175,7 +175,6 @@ mod systems {
             With<M>,
         >,
         current_tick: u64,
-        species_emoji: &str,
     ) {
         use std::collections::HashSet;
 
@@ -266,37 +265,17 @@ mod systems {
                 duration_ticks: mcfg.mating_duration_ticks,
             });
             info!(
-                "{}💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
-                species_emoji, female_e, male_e, meet
+                "{emoji}💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
+                female_e,
+                male_e,
+                meet,
+                emoji = EMOJI,
             );
         }
     }
 
-    pub fn rabbit_mate_matching_system(
-        mut commands: Commands,
-        rabbits: Query<
-            (
-                Entity,
-                &TilePosition,
-                &Age,
-                &ReproductionCooldown,
-                &Energy,
-                &Health,
-                &WellFedStreak,
-                Option<&Pregnancy>,
-                Option<&Sex>,
-                Option<&MatingIntent>,
-                &ReproductionConfig,
-            ),
-            With<Rabbit>,
-        >,
-        tick: Res<crate::simulation::SimulationTick>,
-    ) {
-        mate_matching_system_inner(&mut commands, &rabbits, tick.0, "🐇");
-    }
-
-    // Shared birth helper
-    fn birth_common<E: Component>(
+    // Shared birth helper used by species modules
+    pub fn birth_common<E: Component>(
         commands: &mut Commands,
         mothers: &mut Query<(Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig), With<E>>,
         mut spawn_fn: impl FnMut(&mut Commands, String, IVec2) -> Entity,
@@ -304,7 +283,7 @@ mod systems {
         baby_prefix: &str,
     ) {
         let mut to_clear: Vec<Entity> = Vec::new();
-        for (mother, pos, mut preg, cfg) in mothers.iter_mut() {
+        for (mother, pos, preg, cfg) in mothers.iter_mut() {
             if preg.remaining_ticks == 0 {
                 let litter = preg.litter_size as usize;
                 for i in 0..litter {
@@ -339,99 +318,7 @@ mod systems {
         }
     }
 
-    pub fn rabbit_birth_system(
-        mut commands: Commands,
-        mut mothers: Query<
-            (Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig),
-            With<Rabbit>,
-        >,
-    ) {
-        birth_common::<Rabbit>(
-            &mut commands,
-            &mut mothers,
-            |cmds, name, pos| crate::entities::entity_types::spawn_rabbit(cmds, name, pos),
-            "🐇🍼",
-            "Kit",
-        );
-    }
-
-    pub fn deer_mate_matching_system(
-        mut commands: Commands,
-        deer: Query<
-            (
-                Entity,
-                &TilePosition,
-                &Age,
-                &ReproductionCooldown,
-                &Energy,
-                &Health,
-                &WellFedStreak,
-                Option<&Pregnancy>,
-                Option<&Sex>,
-                Option<&MatingIntent>,
-                &ReproductionConfig,
-            ),
-            With<crate::entities::Deer>,
-        >,
-        tick: Res<crate::simulation::SimulationTick>,
-    ) {
-        mate_matching_system_inner(&mut commands, &deer, tick.0, "🦌");
-    }
-
-    pub fn deer_birth_system(
-        mut commands: Commands,
-        mut mothers: Query<
-            (Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig),
-            With<crate::entities::Deer>,
-        >,
-    ) {
-        birth_common::<crate::entities::Deer>(
-            &mut commands,
-            &mut mothers,
-            |cmds, name, pos| crate::entities::entity_types::spawn_deer(cmds, name, pos),
-            "🦌🍼",
-            "Fawn",
-        );
-    }
-
-    pub fn raccoon_mate_matching_system(
-        mut commands: Commands,
-        raccoons: Query<
-            (
-                Entity,
-                &TilePosition,
-                &Age,
-                &ReproductionCooldown,
-                &Energy,
-                &Health,
-                &WellFedStreak,
-                Option<&Pregnancy>,
-                Option<&Sex>,
-                Option<&MatingIntent>,
-                &ReproductionConfig,
-            ),
-            With<Raccoon>,
-        >,
-        tick: Res<crate::simulation::SimulationTick>,
-    ) {
-        mate_matching_system_inner(&mut commands, &raccoons, tick.0, "🦝");
-    }
-
-    pub fn raccoon_birth_system(
-        mut commands: Commands,
-        mut mothers: Query<
-            (Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig),
-            With<Raccoon>,
-        >,
-    ) {
-        birth_common::<Raccoon>(
-            &mut commands,
-            &mut mothers,
-            |cmds, name, pos| crate::entities::entity_types::spawn_raccoon(cmds, name, pos),
-            "🦝🍼",
-            "Kit",
-        );
-    }
+    // Species-specific systems live in species modules; only the helper stays shared here.
 }
 
 // -----------------------------
@@ -442,7 +329,6 @@ pub use components::{
 };
 pub use config::ReproductionConfig;
 pub use systems::{
-    deer_birth_system, deer_mate_matching_system, rabbit_birth_system, rabbit_mate_matching_system,
-    raccoon_birth_system, raccoon_mate_matching_system, tick_reproduction_timers_system,
+    birth_common, mate_matching_system, tick_reproduction_timers_system,
     update_age_and_wellfed_system,
 };

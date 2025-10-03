@@ -30,12 +30,13 @@ pub use entity_types::{
 };
 
 pub use reproduction::{
-    deer_birth_system, deer_mate_matching_system, rabbit_birth_system, rabbit_mate_matching_system,
-    raccoon_birth_system, raccoon_mate_matching_system, tick_reproduction_timers_system,
-    update_age_and_wellfed_system, Age, MatingIntent, Mother, Pregnancy, ReproductionConfig,
-    ReproductionCooldown, Sex, WellFedStreak,
+    mate_matching_system, tick_reproduction_timers_system, update_age_and_wellfed_system, Age,
+    MatingIntent, Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 
+pub use types::deer::{deer_birth_system, deer_mate_matching_system};
+pub use types::rabbit::{rabbit_birth_system, rabbit_mate_matching_system};
+pub use types::raccoon::{raccoon_birth_system, raccoon_mate_matching_system};
 pub use types::{BehaviorConfig, SpeciesNeeds};
 
 pub use current_action::CurrentAction;

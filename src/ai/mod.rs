@@ -36,7 +36,11 @@ impl Plugin for TQUAIPlugin {
             // Wait for WorldLoader resource to be available before planning
             .add_systems(
                 Update,
-                (planner::plan_entity_actions,)
+                (
+                    crate::entities::types::rabbit::plan_rabbit_actions,
+                    crate::entities::types::deer::plan_deer_actions,
+                    crate::entities::types::raccoon::plan_raccoon_actions,
+                )
                     .run_if(resource_exists::<crate::world_loader::WorldLoader>),
             );
     }

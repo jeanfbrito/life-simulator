@@ -2,8 +2,22 @@
 ///
 /// Defines behavior parameters optimized for rabbit entities.
 use super::BehaviorConfig;
-use crate::entities::reproduction::ReproductionConfig;
-use bevy::prelude::Resource;
+use bevy::prelude::*;
+
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::planner::plan_species_actions;
+use crate::ai::queue::ActionQueue;
+use crate::entities::entity_types;
+use crate::entities::reproduction::{
+    birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
+    ReproductionCooldown, Sex, WellFedStreak,
+};
+use crate::entities::stats::{Energy, Health, Hunger, Thirst};
+use crate::entities::Mother;
+use crate::entities::Rabbit;
+use crate::entities::TilePosition;
+use crate::simulation::SimulationTick;
+use crate::world_loader::WorldLoader;
 
 /// Rabbit behavior preset
 pub struct RabbitBehavior;
@@ -93,6 +107,90 @@ impl RabbitBehavior {
             world_loader,
         )
     }
+}
+
+pub fn plan_rabbit_actions(
+    mut commands: Commands,
+    mut queue: ResMut<ActionQueue>,
+    rabbits: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Thirst,
+            &Hunger,
+            &Energy,
+            &BehaviorConfig,
+            Option<&Age>,
+            Option<&Mother>,
+            Option<&MatingIntent>,
+            Option<&ReproductionConfig>,
+        ),
+        With<Rabbit>,
+    >,
+    rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
+    world_loader: Res<WorldLoader>,
+    tick: Res<SimulationTick>,
+) {
+    let loader = world_loader.as_ref();
+
+    plan_species_actions(
+        &mut commands,
+        queue.as_mut(),
+        &rabbits,
+        &rabbit_positions,
+        |_, position, thirst, hunger, energy, behavior| {
+            RabbitBehavior::evaluate_actions(position, thirst, hunger, energy, behavior, loader)
+        },
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 20,
+        }),
+        "🐇",
+        "Rabbit",
+        tick.0,
+    );
+}
+
+pub fn rabbit_mate_matching_system(
+    mut commands: Commands,
+    animals: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            Option<&Pregnancy>,
+            Option<&Sex>,
+            Option<&MatingIntent>,
+            &ReproductionConfig,
+        ),
+        With<Rabbit>,
+    >,
+    tick: Res<SimulationTick>,
+) {
+    mate_matching_system::<Rabbit, '🐇'>(&mut commands, &animals, tick.0);
+}
+
+pub fn rabbit_birth_system(
+    mut commands: Commands,
+    mut mothers: Query<(Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig), With<Rabbit>>,
+) {
+    birth_common::<Rabbit>(
+        &mut commands,
+        &mut mothers,
+        |cmds, name, pos| entity_types::spawn_rabbit(cmds, name, pos),
+        "🐇🍼",
+        "Kit",
+    );
 }
 
 #[cfg(test)]

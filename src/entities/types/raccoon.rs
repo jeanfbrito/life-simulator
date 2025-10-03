@@ -1,5 +1,19 @@
 use super::BehaviorConfig;
-use crate::entities::reproduction::ReproductionConfig;
+use bevy::prelude::*;
+
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::planner::plan_species_actions;
+use crate::ai::queue::ActionQueue;
+use crate::entities::entity_types;
+use crate::entities::reproduction::{
+    birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
+    ReproductionCooldown, Sex, WellFedStreak,
+};
+use crate::entities::stats::{Energy, Health, Hunger, Thirst};
+use crate::entities::Mother;
+use crate::entities::{Raccoon, TilePosition};
+use crate::simulation::SimulationTick;
+use crate::world_loader::WorldLoader;
 
 /// Raccoon behavior preset
 pub struct RaccoonBehavior;
@@ -77,4 +91,88 @@ impl RaccoonBehavior {
             world_loader,
         )
     }
+}
+
+pub fn plan_raccoon_actions(
+    mut commands: Commands,
+    mut queue: ResMut<ActionQueue>,
+    raccoons: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Thirst,
+            &Hunger,
+            &Energy,
+            &BehaviorConfig,
+            Option<&Age>,
+            Option<&Mother>,
+            Option<&MatingIntent>,
+            Option<&ReproductionConfig>,
+        ),
+        With<Raccoon>,
+    >,
+    raccoon_positions: Query<(Entity, &TilePosition), With<Raccoon>>,
+    world_loader: Res<WorldLoader>,
+    tick: Res<SimulationTick>,
+) {
+    let loader = world_loader.as_ref();
+
+    plan_species_actions(
+        &mut commands,
+        queue.as_mut(),
+        &raccoons,
+        &raccoon_positions,
+        |_, position, thirst, hunger, energy, behavior| {
+            RaccoonBehavior::evaluate_actions(position, thirst, hunger, energy, behavior, loader)
+        },
+        Some(MateActionParams {
+            utility: 0.42,
+            priority: 320,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 18,
+        }),
+        "🦝",
+        "Raccoon",
+        tick.0,
+    );
+}
+
+pub fn raccoon_mate_matching_system(
+    mut commands: Commands,
+    animals: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            Option<&Pregnancy>,
+            Option<&Sex>,
+            Option<&MatingIntent>,
+            &ReproductionConfig,
+        ),
+        With<Raccoon>,
+    >,
+    tick: Res<SimulationTick>,
+) {
+    mate_matching_system::<Raccoon, '🦝'>(&mut commands, &animals, tick.0);
+}
+
+pub fn raccoon_birth_system(
+    mut commands: Commands,
+    mut mothers: Query<(Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig), With<Raccoon>>,
+) {
+    birth_common::<Raccoon>(
+        &mut commands,
+        &mut mothers,
+        |cmds, name, pos| entity_types::spawn_raccoon(cmds, name, pos),
+        "🦝🍼",
+        "Kit",
+    );
 }

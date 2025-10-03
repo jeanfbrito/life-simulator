@@ -2,7 +2,21 @@
 ///
 /// Defines behavior parameters and action evaluation for deer entities.
 use super::BehaviorConfig;
-use crate::entities::reproduction::ReproductionConfig;
+use bevy::prelude::*;
+
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::planner::plan_species_actions;
+use crate::ai::queue::ActionQueue;
+use crate::entities::entity_types;
+use crate::entities::reproduction::{
+    birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
+    ReproductionCooldown, Sex, WellFedStreak,
+};
+use crate::entities::stats::{Energy, Health, Hunger, Thirst};
+use crate::entities::Mother;
+use crate::entities::{Deer, Rabbit, TilePosition};
+use crate::simulation::SimulationTick;
+use crate::world_loader::WorldLoader;
 
 /// Deer behavior preset
 pub struct DeerBehavior;
@@ -88,4 +102,102 @@ impl DeerBehavior {
             world_loader,
         )
     }
+}
+
+pub fn plan_deer_actions(
+    mut commands: Commands,
+    mut queue: ResMut<ActionQueue>,
+    deer: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Thirst,
+            &Hunger,
+            &Energy,
+            &BehaviorConfig,
+            Option<&Age>,
+            Option<&Mother>,
+            Option<&MatingIntent>,
+            Option<&ReproductionConfig>,
+        ),
+        With<Deer>,
+    >,
+    deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
+    rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
+    world_loader: Res<WorldLoader>,
+    tick: Res<SimulationTick>,
+) {
+    let loader = world_loader.as_ref();
+    let rabbit_list: Vec<(Entity, IVec2)> = rabbit_positions
+        .iter()
+        .map(|(entity, pos)| (entity, pos.tile))
+        .collect();
+
+    plan_species_actions(
+        &mut commands,
+        queue.as_mut(),
+        &deer,
+        &deer_positions,
+        |entity, position, thirst, hunger, energy, behavior| {
+            DeerBehavior::evaluate_actions(
+                entity,
+                position,
+                thirst,
+                hunger,
+                energy,
+                behavior,
+                loader,
+                &rabbit_list,
+            )
+        },
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 25,
+        }),
+        "🦌",
+        "Deer",
+        tick.0,
+    );
+}
+
+pub fn deer_mate_matching_system(
+    mut commands: Commands,
+    animals: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            Option<&Pregnancy>,
+            Option<&Sex>,
+            Option<&MatingIntent>,
+            &ReproductionConfig,
+        ),
+        With<Deer>,
+    >,
+    tick: Res<SimulationTick>,
+) {
+    mate_matching_system::<Deer, '🦌'>(&mut commands, &animals, tick.0);
+}
+
+pub fn deer_birth_system(
+    mut commands: Commands,
+    mut mothers: Query<(Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig), With<Deer>>,
+) {
+    birth_common::<Deer>(
+        &mut commands,
+        &mut mothers,
+        |cmds, name, pos| entity_types::spawn_deer(cmds, name, pos),
+        "🦌🍼",
+        "Fawn",
+    );
 }
