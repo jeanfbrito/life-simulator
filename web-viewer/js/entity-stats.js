@@ -70,6 +70,7 @@ export class EntityStatsManager {
                 </div>
                 ${actionLabel}
                 ${this.renderStats(entity)}
+                ${this.renderReproduction(entity)}
             </div>
         `;
     }
@@ -155,6 +156,74 @@ export class EntityStatsManager {
             'Wolf': '🐺'
         };
         return emojis[entityType] || '❓';
+    }
+
+    // Collapsible reproduction diagnostics (for rabbits)
+    renderReproduction(entity) {
+        if (entity.entity_type !== 'Rabbit') return '';
+        const TPS = 10; // display conversion
+
+        const wf = entity.well_fed_streak ?? null;
+        const wfReq = entity.well_fed_required_ticks ?? null;
+        const wfPct = (wf !== null && wfReq) ? Math.max(0, Math.min(100, (wf / wfReq) * 100)) : null;
+
+        const pregLeft = entity.pregnancy_remaining_ticks ?? null;
+        const gestTotal = entity.gestation_total_ticks ?? null;
+        const pregPct = (pregLeft !== null && gestTotal) ? Math.max(0, Math.min(100, ((gestTotal - pregLeft) / gestTotal) * 100)) : null;
+
+        const cd = entity.reproduction_cooldown_ticks ?? null;
+        const eligible = entity.eligible_to_mate ?? null;
+        const ticksToAdult = entity.ticks_to_adult ?? null;
+
+        const status = pregLeft !== null ? `Pregnant (${Math.ceil(pregLeft / TPS)}s left)`
+                      : (eligible ? 'Eligible to mate' : (cd ? `Cooldown: ${Math.ceil(cd / TPS)}s` : 'Not eligible'));
+
+        const wfSection = (wf !== null && wfReq !== null) ? `
+            <div class="stat-bar-container">
+                <div class="stat-bar-label">
+                    <span>Well-fed streak</span>
+                    <span>${wf}/${wfReq}</span>
+                </div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${wfPct.toFixed(0)}%"></div></div>
+            </div>` : '';
+
+        const pregSection = (pregLeft !== null && gestTotal !== null) ? `
+            <div class="stat-bar-container">
+                <div class="stat-bar-label">
+                    <span>Gestation</span>
+                    <span>${Math.ceil((gestTotal - pregLeft)/TPS)}s / ${Math.ceil(gestTotal/TPS)}s</span>
+                </div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${pregPct.toFixed(0)}%"></div></div>
+            </div>` : '';
+
+        const cdSection = (cd !== null && cd > 0) ? `
+            <div class="stat-bar-container">
+                <div class="stat-bar-label">
+                    <span>Cooldown</span>
+                    <span>${Math.ceil(cd / TPS)}s</span>
+                </div>
+                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.max(0, Math.min(100, (1 - (cd / (wfReq || cd))) * 100)).toFixed(0)}%"></div></div>
+            </div>` : '';
+
+        const maturitySection = (ticksToAdult !== null && ticksToAdult > 0) ? `
+            <div class="stat-bar-container">
+                <div class="stat-bar-label">
+                    <span>Maturity</span>
+                    <span>${Math.ceil(ticksToAdult / TPS)}s</span>
+                </div>
+            </div>` : '';
+
+        return `
+            <details class="entity-repro" style="margin-top:0.5rem;">
+              <summary style="cursor:pointer; opacity:0.9;">Reproduction · <span style="font-weight:600;">${status}</span></summary>
+              <div style="margin-top:0.35rem;">
+                ${wfSection}
+                ${pregSection}
+                ${cdSection}
+                ${maturitySection}
+              </div>
+            </details>
+        `;
     }
 }
 
