@@ -2,7 +2,7 @@
  * Main application controller for the Life Simulator Viewer
  */
 
-import { CONFIG } from './config.js';
+import { CONFIG, loadSpeciesConfig } from './config.js';
 import { Renderer } from './renderer.js';
 import { ChunkManager } from './chunk-manager.js';
 import { Controls, FPSCounter } from './controls.js';
@@ -121,6 +121,10 @@ class LifeSimulatorApp {
             // Setup initial canvas size
             this.renderer.setupCanvasSize(this.controls.getDragOffset());
             this.controls.updateZoomDisplay();
+
+            // Load species configuration from backend
+            const speciesConfigLoaded = await loadSpeciesConfig();
+            console.log('🦎 APP: Species config loaded:', speciesConfigLoaded);
 
             // Load world information
             const worldInfoLoaded = await this.chunkManager.loadWorldInfo();

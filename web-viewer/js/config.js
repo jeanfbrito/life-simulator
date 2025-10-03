@@ -104,49 +104,60 @@ export const RESOURCE_CONFIG = {
     }
 };
 
-// Entity rendering configuration with size and positioning
-// sizeMultiplier: Size relative to tile (1.0 = tile size, 0.5 = half tile, etc.)
-// offsetX/Y: Position offset in tiles (-0.2 = move up 20% of a tile)
-// Adjust these values to make entities look right at different scales!
-export const ENTITY_CONFIG = {
-    'Human': {
-        emoji: '🧍‍♂️',
-        sizeMultiplier: 1.2,  // Standard human size
-        offsetX: 0,
-        offsetY: -0.2  // Move up to keep feet in grid
-    },
-    'Rabbit': {
-        emoji: '🐇',
-        sizeMultiplier: 0.5,  // Smaller than humans
-        offsetX: 0,
-        offsetY: -0.05  // Slightly less offset for smaller creature
-    },
-'Deer': {
-        emoji: '🦌',
-        sizeMultiplier: 0.9,  // Smaller for clearer testing
-        offsetX: 0,
-        offsetY: -0.18
-    },
-'Raccoon': {
-        emoji: '🦝',
-        sizeMultiplier: 0.65,
-        offsetX: 0,
-        offsetY: -0.12
-    },
-    'Wolf': {
-        emoji: '🐺',
-        sizeMultiplier: 1.0,  // Similar to human
-        offsetX: 0,
-        offsetY: -0.2
-    },
-    // Default for unknown entity types
+// Entity rendering configuration - loaded from API
+// This will be populated by loadSpeciesConfig()
+export let ENTITY_CONFIG = {
     'default': {
         emoji: '❓',
         sizeMultiplier: 1.0,
-        offsetX: 0,
+        offsetX: 0.0,
         offsetY: -0.2
     }
 };
+
+// Juvenile scaling data - loaded from API
+export let JUVENILE_SCALES = {};
+
+// Load species configuration from the backend API
+export async function loadSpeciesConfig() {
+    try {
+        const response = await fetch(`${CONFIG.apiBaseUrl}/api/species`);
+        if (!response.ok) {
+            throw new Error(`Failed to load species config: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Set default entity config from API
+        if (data.default_entity) {
+            ENTITY_CONFIG.default = data.default_entity;
+        }
+
+        // Set species-specific configs
+        for (const [speciesName, speciesData] of Object.entries(data.species)) {
+            ENTITY_CONFIG[speciesName] = {
+                emoji: speciesData.emoji,
+                sizeMultiplier: speciesData.viewer_scale,
+                offsetX: 0.0,
+                offsetY: -0.2  // Default Y offset to keep feet in grid
+            };
+        }
+
+        // Set juvenile scales
+        JUVENILE_SCALES = data.juvenile_scales || {};
+
+        console.log('✅ Species configuration loaded from API:', {
+            speciesCount: Object.keys(data.species).length,
+            species: Object.keys(data.species),
+            juvenileScales: Object.keys(JUVENILE_SCALES)
+        });
+
+        return true;
+    } catch (error) {
+        console.warn('⚠️ Failed to load species configuration from API, using defaults:', error);
+        return false;
+    }
+}
 
 // Default values
 export const DEFAULTS = {

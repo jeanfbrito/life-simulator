@@ -207,6 +207,11 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             let json = crate::entities::get_entities_json();
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
+        "/api/species" => {
+            // Return species metadata for viewer configuration
+            let json = crate::entities::get_species_metadata_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
         path if path.starts_with("/api/chunks") => {
             // Only use cached world data - no fallback to generator
             if crate::cached_world::CachedWorld::global_is_loaded() {

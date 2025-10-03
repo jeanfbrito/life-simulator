@@ -2,7 +2,7 @@
  * Rendering engine for the Life Simulator Viewer
  */
 
-import { CONFIG, TERRAIN_COLORS, RESOURCE_CONFIG, RESOURCE_SYMBOLS, ENTITY_CONFIG, DEFAULTS } from './config.js';
+import { CONFIG, TERRAIN_COLORS, RESOURCE_CONFIG, RESOURCE_SYMBOLS, ENTITY_CONFIG, JUVENILE_SCALES, DEFAULTS } from './config.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -278,14 +278,8 @@ export class Renderer {
         
         // Map display: keep species emoji on map. Scale down juveniles per species.
         let juvenileScale = 1.0;
-        if (entity.is_juvenile) {
-            if (entity.entity_type === 'Rabbit') {
-                juvenileScale = 0.7;
-            } else if (entity.entity_type === 'Deer') {
-                juvenileScale = 0.8;
-            } else if (entity.entity_type === 'Raccoon') {
-                juvenileScale = 0.75;
-            }
+        if (entity.is_juvenile && JUVENILE_SCALES[entity.entity_type]) {
+            juvenileScale = JUVENILE_SCALES[entity.entity_type];
         }
         const baseSize = CONFIG.TILE_SIZE * config.sizeMultiplier * juvenileScale;
 

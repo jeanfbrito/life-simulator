@@ -4,8 +4,10 @@ pub mod entity_tracker;
 pub mod entity_types;
 /// Entities module - manages creatures and their behaviors
 pub mod movement;
+pub mod registry;
 pub mod reproduction;
 pub mod stats;
+pub mod systems_registry;
 pub mod types;
 
 use bevy::prelude::*;
@@ -27,6 +29,63 @@ pub use stats::{
 pub use entity_types::{
     count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,
     spawn_raccoon, Deer, EntityTemplate, Human, Rabbit, Raccoon, Wolf,
+};
+
+pub use registry::{
+    SPECIES_REGISTRY, SpeciesDescriptor, SpeciesRegistry,
+    spawn_using_registry, spawn_species_batch,
+    spawn_human_legacy, spawn_rabbit_legacy, spawn_deer_legacy, spawn_raccoon_legacy,
+    spawn_humans_legacy, spawn_rabbits_legacy,
+};
+
+/// Generate JSON metadata for all species for viewer configuration
+pub fn get_species_metadata_json() -> String {
+    use crate::entities::registry::SPECIES_REGISTRY;
+    use std::collections::HashMap;
+
+    let mut species_data: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for descriptor in SPECIES_REGISTRY.get_descriptors() {
+        let species_info = serde_json::json!({
+            "name": descriptor.species,
+            "emoji": descriptor.emoji,
+            "viewer_scale": descriptor.viewer_scale,
+            "viewer_order": descriptor.viewer_order,
+            "viewer_color": descriptor.viewer_color,
+            "name_prefix": descriptor.name_prefix,
+            "juvenile_name_prefix": descriptor.juvenile_name_prefix,
+            "is_juvenile": descriptor.is_juvenile,
+            "movement_speed": descriptor.movement_speed,
+            "wander_radius": descriptor.wander_radius
+        });
+
+        species_data.insert(descriptor.species.to_string(), species_info);
+    }
+
+    // Add juvenile scaling information that was previously hard-coded in renderer
+    let juvenile_scales = serde_json::json!({
+        "Rabbit": 0.7,
+        "Deer": 0.8,
+        "Raccoon": 0.75
+    });
+
+    let result = serde_json::json!({
+        "species": species_data,
+        "juvenile_scales": juvenile_scales,
+        "default_entity": {
+            "emoji": "❓",
+            "sizeMultiplier": 1.0,
+            "offsetX": 0.0,
+            "offsetY": -0.2
+        }
+    });
+
+    result.to_string()
+}
+
+pub use systems_registry::{
+    SPECIES_SYSTEMS_REGISTRY, SpeciesSystemsDescriptor, SpeciesSystemsRegistry,
+    get_mate_matching_system_names, get_birth_system_names, get_planner_system_names,
 };
 
 pub use reproduction::{

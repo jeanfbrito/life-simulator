@@ -14,7 +14,7 @@ use crate::entities::reproduction::{
 };
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::Mother;
-use crate::entities::{Deer, Rabbit, TilePosition};
+use crate::entities::{Deer, TilePosition};
 use crate::simulation::SimulationTick;
 use crate::world_loader::WorldLoader;
 
@@ -82,7 +82,7 @@ impl DeerBehavior {
     }
 
     /// Evaluate Deer actions
-    /// Includes following the nearest rabbit as an example social behavior.
+    /// Note: Follow-mother behavior is handled by the planner using maybe_add_follow_mother
     pub fn evaluate_actions(
         entity: bevy::prelude::Entity,
         position: &crate::entities::TilePosition,
@@ -91,7 +91,6 @@ impl DeerBehavior {
         energy: &crate::entities::stats::Energy,
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
-        _rabbits: &[(bevy::prelude::Entity, bevy::prelude::IVec2)],
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::herbivore_toolkit::evaluate_core_actions(
             position,
@@ -123,15 +122,10 @@ pub fn plan_deer_actions(
         With<Deer>,
     >,
     deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
-    rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
     world_loader: Res<WorldLoader>,
     tick: Res<SimulationTick>,
 ) {
     let loader = world_loader.as_ref();
-    let rabbit_list: Vec<(Entity, IVec2)> = rabbit_positions
-        .iter()
-        .map(|(entity, pos)| (entity, pos.tile))
-        .collect();
 
     plan_species_actions(
         &mut commands,
@@ -147,7 +141,6 @@ pub fn plan_deer_actions(
                 energy,
                 behavior,
                 loader,
-                &rabbit_list,
             )
         },
         Some(MateActionParams {

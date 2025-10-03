@@ -3,27 +3,28 @@ use crate::ai::planner::UtilityScore;
 use crate::entities::TilePosition;
 /// Follow Behavior - make one entity follow another at a comfortable distance
 ///
-/// This behavior chooses the nearest rabbit and asks the follower to move toward it
+/// This behavior chooses the nearest candidate entity and asks the follower to move toward it
 /// until within a stop distance. Intended for simple "follow the leader" examples.
+/// Can be used by any species to follow mothers, herd leaders, or other entities.
 use bevy::prelude::*;
 
-/// Evaluate the utility of following the nearest rabbit
+/// Evaluate the utility of following the nearest candidate entity
 /// - entity: the follower entity id (for logging, not used for scoring)
 /// - position: follower's current tile position
-/// - rabbits: list of (rabbit entity, tile position) pairs that can be followed
+/// - candidates: list of (target entity, tile position) pairs that can be followed
 /// - stop_distance: chebyshev distance at which the follower considers itself "close enough"
 /// - max_follow_distance: cap for distance normalization in utility calculation
 pub fn evaluate_follow_behavior(
     _entity: Entity,
     position: &TilePosition,
-    rabbits: &[(Entity, IVec2)],
+    candidates: &[(Entity, IVec2)],
     stop_distance: i32,
     max_follow_distance: i32,
 ) -> Option<UtilityScore> {
-    // Find nearest rabbit by Chebyshev distance (diagonal allowed)
+    // Find nearest candidate by Chebyshev distance (diagonal allowed)
     let mut best: Option<(Entity, IVec2, i32)> = None; // (target, pos, chebyshev dist)
 
-    for (target, pos) in rabbits.iter().copied() {
+    for (target, pos) in candidates.iter().copied() {
         let d = chebyshev_distance(position.tile, pos);
         match best {
             Some((_, _, best_d)) if d >= best_d => {}

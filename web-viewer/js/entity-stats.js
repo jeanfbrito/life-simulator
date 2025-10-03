@@ -1,6 +1,8 @@
 // Entity Stats Manager
 // Handles fetching and displaying entity statistics in the right sidebar
 
+import { ENTITY_CONFIG } from './config.js';
+
 export class EntityStatsManager {
     constructor() {
         this.entities = [];
@@ -157,13 +159,8 @@ export class EntityStatsManager {
     }
 
     getEntityEmoji(entityType) {
-        const emojis = {
-            'Human': '🧍‍♂️',
-            'Rabbit': '🐇',
-            'Deer': '🦌',
-            'Wolf': '🐺'
-        };
-        return emojis[entityType] || '❓';
+        const entityConfig = ENTITY_CONFIG[entityType];
+        return entityConfig ? entityConfig.emoji : ENTITY_CONFIG.default.emoji;
     }
 
     // Maintain a stable initial ordering: Humans, Rabbits, then others by name
