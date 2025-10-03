@@ -38,7 +38,7 @@ pub use entity_types::{
 };
 
 pub use reproduction::{
-    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak,
+    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak, Mother, MatingIntent,
     update_age_and_wellfed_system,
     tick_reproduction_timers_system,
     rabbit_mate_matching_system,

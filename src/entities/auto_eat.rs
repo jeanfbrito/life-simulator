@@ -14,8 +14,9 @@ pub fn auto_eat_system(
     world_loader: Res<WorldLoader>,
 ) {
     for (entity, position, mut hunger, needs) in query.iter_mut() {
-        // Only eat if hungry (above 30%)
-        if hunger.0.normalized() < 0.3 {
+        // Eat while at or above a lower hysteresis threshold (15%)
+        // This lets entities keep eating a bit more once they start, for completeness.
+        if hunger.0.normalized() < 0.15 {
             continue;
         }
         

@@ -33,10 +33,22 @@ pub struct Pregnancy {
     pub father: Option<Entity>,
 }
 
+/// Mother reference for juveniles to enable following behavior
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Mother(pub Entity);
+
 /// Tracks sustained well-fed state
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WellFedStreak { pub ticks: u32 }
 impl Default for WellFedStreak { fn default() -> Self { Self { ticks: 0 } } }
+
+/// Intent to rendezvous and mate with a partner at a meeting tile
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MatingIntent {
+    pub partner: Entity,
+    pub meeting_tile: IVec2,
+    pub duration_ticks: u32,
+}
 
 /// System: increment Age each tick; update WellFedStreak based on hunger/thirst
 pub fn update_age_and_wellfed_system(
@@ -52,7 +64,8 @@ pub fn update_age_and_wellfed_system(
             if h <= (*config).well_fed_hunger_norm && t <= (*config).well_fed_thirst_norm {
                 wellfed.ticks = wellfed.ticks.saturating_add(1);
             } else {
-                wellfed.ticks = 0;
+                // Decay instead of reset to allow progress to persist across brief lapses
+                wellfed.ticks = wellfed.ticks.saturating_sub(1);
             }
         }
     }
@@ -101,6 +114,7 @@ pub fn rabbit_mate_matching_system(
         &WellFedStreak,
         Option<&Pregnancy>,
         Option<&Sex>,
+        Option<&MatingIntent>,
     ), With<Rabbit>>,
     tick: Res<crate::simulation::SimulationTick>,
 ) {
@@ -111,10 +125,10 @@ pub fn rabbit_mate_matching_system(
     let mut males: Vec<(Entity, IVec2, &Age, &ReproductionCooldown, &Energy, &Health, &WellFedStreak)> = Vec::new();
     let mut females: Vec<(Entity, IVec2, &Age, &ReproductionCooldown, &Energy, &Health, &WellFedStreak)> = Vec::new();
 
-    for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt) in rabbits.iter() {
+    for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt) in rabbits.iter() {
         let Some(sex) = sex_opt.copied() else { continue; };
-        // Females must not be pregnant
-        if matches!(sex, Sex::Female) && preg_opt.is_some() { continue; }
+        // Skip if already pregnant or already has a mating intent
+        if preg_opt.is_some() || intent_opt.is_some() { continue; }
         if !is_eligible(age, cd, en, hp, wf, &*config) { continue; }
         match sex {
             Sex::Male => males.push((e, pos.tile, age, cd, en, hp, wf)),
@@ -128,7 +142,7 @@ pub fn rabbit_mate_matching_system(
     use std::collections::HashSet;
     let mut used_males: HashSet<Entity> = HashSet::new();
     let radius2 = ((*config).mating_search_radius * (*config).mating_search_radius) as i32;
-    let mut rng = rand::thread_rng();
+    let _rng = rand::thread_rng();
 
     for (female_e, fpos, _fa, _fcd, _fen, _fhp, _fwf) in females.into_iter() {
         // Find nearest available male
@@ -148,18 +162,13 @@ pub fn rabbit_mate_matching_system(
         let male_e = males[mi].0;
         used_males.insert(male_e);
 
-        // Start pregnancy on female
-        let litter = rng.gen_range((*config).litter_size_range.0..=(*config).litter_size_range.1);
-        commands.entity(female_e).insert(Pregnancy {
-            remaining_ticks: (*config).gestation_ticks,
-            litter_size: litter,
-            father: Some(male_e),
-        });
-        // Apply cooldowns
-        commands.entity(female_e).insert(ReproductionCooldown { remaining_ticks: (*config).postpartum_cooldown_ticks });
-        commands.entity(male_e).insert(ReproductionCooldown { remaining_ticks: (*config).mating_cooldown_ticks });
+        // Issue mating intents for a rendezvous at the female's current tile
+        let meet = fpos;
+        let duration = (*config).mating_duration_ticks;
+        commands.entity(female_e).insert(MatingIntent { partner: male_e, meeting_tile: meet, duration_ticks: duration });
+        commands.entity(male_e).insert(MatingIntent { partner: female_e, meeting_tile: meet, duration_ticks: duration });
 
-        info!("🐇❤️ Mating occurred: female {:?} with male {:?} -> pregnancy (litter {})", female_e, male_e, litter);
+        info!("🐇💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}", female_e, male_e, meet);
     }
 }
 
@@ -187,7 +196,8 @@ pub fn rabbit_birth_system(
                     .insert(sex)
                     .insert(Age { ticks_alive: 0, mature_at_ticks: cfg.maturity_ticks })
                     .insert(WellFedStreak::default())
-                    .insert(ReproductionCooldown::default());
+                    .insert(ReproductionCooldown::default())
+                    .insert(Mother(mother));
             }
             info!("🐇🍼 Birth: mother {:?} gave birth to {} kits at {:?}", mother, preg.litter_size, pos.tile);
             to_clear.push(mother);

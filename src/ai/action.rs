@@ -9,6 +9,7 @@ use crate::entities::{TilePosition, MoveOrder};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 use crate::pathfinding::{PathfindingFailed, Path};
+use rand::Rng;
 
 /// Result of executing an action
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -37,6 +38,7 @@ pub enum ActionType {
     Graze { target_tile: IVec2 },   // Move to grass tile (eating happens via auto-eat system)
     Rest { duration_ticks: u32 },
     Follow { target: Entity, stop_distance: i32 },
+    Mate { partner: Entity, meeting_tile: IVec2, duration_ticks: u32 },
     // Future actions:
     // Hunt { target: Entity },
     // Flee { from: Entity },
@@ -486,6 +488,104 @@ impl Action for FollowAction {
 }
 
 // =============================================================================
+// =============================================================================
+// MATE ACTION
+// =============================================================================
+
+/// Action: Rendezvous with partner and mate; pregnancy applied on female only
+#[derive(Debug, Clone)]
+pub struct MateAction {
+    pub partner: Entity,
+    pub meeting_tile: IVec2,
+    pub duration_ticks: u32,
+    pub started: bool,
+    pub waited: u32,
+}
+
+impl MateAction {
+    pub fn new(partner: Entity, meeting_tile: IVec2, duration_ticks: u32) -> Self {
+        Self { partner, meeting_tile, duration_ticks, started: false, waited: 0 }
+    }
+}
+
+impl Action for MateAction {
+    fn can_execute(&self, world: &World, _entity: Entity, _tick: u64) -> bool {
+        world.get_entity(self.partner).is_ok() && world.get::<TilePosition>(self.partner).is_some()
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
+        use crate::entities::types::rabbit::RabbitReproductionConfig;
+        use crate::entities::reproduction::{Pregnancy, ReproductionCooldown, Sex, MatingIntent};
+        // Abort if partner missing
+        if world.get::<TilePosition>(self.partner).is_none() {
+            if let Some(mut e) = world.get_entity_mut(entity).ok() { e.remove::<MatingIntent>(); }
+            return ActionResult::Failed;
+        }
+
+        let Some(me_pos) = world.get::<TilePosition>(entity).copied() else { return ActionResult::Failed; };
+        let Some(partner_pos) = world.get::<TilePosition>(self.partner).copied() else { return ActionResult::Failed; };
+
+        // Move towards meeting tile until arrived
+        if me_pos.tile != self.meeting_tile {
+            if world.get::<Path>(entity).is_none() {
+                if let Some(mut e) = world.get_entity_mut(entity).ok() {
+                    e.insert(MoveOrder { destination: self.meeting_tile, allow_diagonal: true });
+                }
+            }
+            return ActionResult::InProgress;
+        }
+
+        // At meeting tile: wait while partner gets adjacent
+        let diff = (me_pos.tile - partner_pos.tile).abs();
+        let adjacent = diff.x.max(diff.y) <= 1;
+        if !adjacent {
+            // Wait for partner to arrive
+            self.waited = 0; // reset if they drift apart
+            return ActionResult::InProgress;
+        }
+
+        // Both are adjacent: perform mating over duration
+        self.waited = self.waited.saturating_add(1);
+        if self.waited < self.duration_ticks {
+            return ActionResult::InProgress;
+        }
+
+        // Duration complete: apply pregnancy and cooldowns (female only)
+        if let Some(cfg) = world.get_resource::<RabbitReproductionConfig>().cloned() {
+            // Determine if self is female
+            let me_female = world.get::<Sex>(entity).is_some_and(|s| matches!(s, Sex::Female));
+            let partner_female = world.get::<Sex>(self.partner).is_some_and(|s| matches!(s, Sex::Female));
+
+            if me_female {
+                if let Some(mut e) = world.get_entity_mut(entity).ok() {
+                    // Start pregnancy
+                    let litter = rand::thread_rng().gen_range(cfg.litter_size_range.0..=cfg.litter_size_range.1);
+                    e.insert(Pregnancy { remaining_ticks: cfg.gestation_ticks, litter_size: litter, father: Some(self.partner) });
+                    e.insert(ReproductionCooldown { remaining_ticks: cfg.postpartum_cooldown_ticks });
+                    info!("🐇❤️ Pregnancy started for {:?} with father {:?} (litter {})", entity, self.partner, litter);
+                }
+                if let Some(mut p) = world.get_entity_mut(self.partner).ok() {
+                    p.insert(ReproductionCooldown { remaining_ticks: cfg.mating_cooldown_ticks });
+                }
+            } else if partner_female {
+                // If partner is female, ensure cooldown set on self and pregnancy is handled by partner's action
+                if let Some(mut me) = world.get_entity_mut(entity).ok() {
+                    me.insert(ReproductionCooldown { remaining_ticks: cfg.mating_cooldown_ticks });
+                }
+            }
+        }
+
+        // Clean up intents on both
+        if let Some(mut e) = world.get_entity_mut(entity).ok() { e.remove::<MatingIntent>(); }
+        if let Some(mut p) = world.get_entity_mut(self.partner).ok() { p.remove::<MatingIntent>(); }
+
+        ActionResult::Success
+    }
+
+    fn name(&self) -> &'static str { "Mate" }
+}
+
+// =============================================================================
 // ACTION FACTORY
 // =============================================================================
 
@@ -503,6 +603,9 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
         }
         ActionType::Follow { target, stop_distance } => {
             Box::new(FollowAction::new(target, stop_distance))
+        }
+        ActionType::Mate { partner, meeting_tile, duration_ticks } => {
+            Box::new(MateAction::new(partner, meeting_tile, duration_ticks))
         }
     }
 }

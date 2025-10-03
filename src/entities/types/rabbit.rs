@@ -21,6 +21,7 @@ pub struct RabbitReproductionConfig {
     pub well_fed_thirst_norm: f32,
     pub well_fed_required_ticks: u32,
     pub matching_interval_ticks: u32,
+    pub mating_duration_ticks: u32,
     pub min_energy_norm: f32,
     pub min_health_norm: f32,
 }
@@ -39,6 +40,7 @@ impl RabbitBehavior {
             well_fed_thirst_norm: 0.35,
             well_fed_required_ticks: 300,        // ~30s sustained
             matching_interval_ticks: 50,         // run matcher every 5s
+            mating_duration_ticks: 30,            // ~3s mating interaction
             min_energy_norm: 0.5,
             min_health_norm: 0.6,
         }
@@ -84,9 +86,9 @@ impl RabbitBehavior {
             // Scaled from DF size (rabbit max 500 cm^3) to manageable sim numbers
             hunger_max: 70.0,
             thirst_max: 90.0,
-            // Smaller consumption per event than deer
-            eat_amount: 14.0,
-            drink_amount: 45.0,
+            // Increase per-event consumption so rabbits eat/drink more completely
+            eat_amount: 28.0,
+            drink_amount: 70.0,
         }
     }
 

@@ -6,6 +6,11 @@ export class EntityStatsManager {
         this.entities = [];
         this.updateInterval = 500; // Update every 500ms
         this.isRunning = false;
+        // Stable ordering across updates
+        this.entityOrder = new Map(); // id -> index
+        this.nextOrderIndex = 0;
+        // Persist <details> open state per entity
+        this.reproOpen = {}; // id(string) -> bool
     }
 
     start() {
@@ -38,6 +43,9 @@ export class EntityStatsManager {
         const container = document.getElementById('entity-list');
         if (!container) return;
 
+        // Capture current <details> open state before re-render
+        this.captureReproOpenState(container);
+
         if (this.entities.length === 0) {
             container.innerHTML = `
                 <div style="text-align: center; opacity: 0.5; padding: 2rem;">
@@ -47,15 +55,21 @@ export class EntityStatsManager {
             return;
         }
 
-        // Sort entities by type (Humans first, then Rabbits)
+        // Seed initial stable order, then append new entities in arrival order
+        this.seedInitialOrder(this.entities);
+        this.updateOrderIndices(this.entities);
+
+        // Sort by stable order index
         const sorted = [...this.entities].sort((a, b) => {
-            if (a.entity_type === b.entity_type) {
-                return a.name.localeCompare(b.name);
-            }
-            return a.entity_type === 'Human' ? -1 : 1;
+            const ai = this.entityOrder.get(String(a.id)) ?? 0;
+            const bi = this.entityOrder.get(String(b.id)) ?? 0;
+            return ai - bi;
         });
 
         container.innerHTML = sorted.map(entity => this.renderEntityCard(entity)).join('');
+
+        // Re-attach listeners to persist future toggles
+        this.attachReproToggleHandlers(container);
     }
 
     renderEntityCard(entity) {
@@ -158,6 +172,56 @@ export class EntityStatsManager {
         return emojis[entityType] || '❓';
     }
 
+    // Maintain a stable initial ordering: Humans, Rabbits, then others by name
+    seedInitialOrder(entities) {
+        if (this.entityOrder.size > 0) return;
+        const typeOrder = { 'Human': 0, 'Rabbit': 1, 'Deer': 2, 'Wolf': 3 };
+        const initial = [...entities].sort((a, b) => {
+            const at = typeOrder[a.entity_type] ?? 99;
+            const bt = typeOrder[b.entity_type] ?? 99;
+            if (at !== bt) return at - bt;
+            return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+        initial.forEach((e, idx) => {
+            this.entityOrder.set(String(e.id), idx);
+        });
+        this.nextOrderIndex = initial.length;
+    }
+
+    // Add new entities at the end, keep existing indices
+    updateOrderIndices(entities) {
+        for (const e of entities) {
+            const key = String(e.id);
+            if (!this.entityOrder.has(key)) {
+                this.entityOrder.set(key, this.nextOrderIndex++);
+            }
+        }
+    }
+
+    // Capture open state of reproduction <details> before DOM is replaced
+    captureReproOpenState(container) {
+        const detailsList = container.querySelectorAll('details.entity-repro[data-entity-id]');
+        detailsList.forEach(d => {
+            const id = d.getAttribute('data-entity-id');
+            if (id) {
+                this.reproOpen[id] = d.open;
+            }
+        });
+    }
+
+    // After render, attach toggle listeners to persist future changes
+    attachReproToggleHandlers(container) {
+        const detailsList = container.querySelectorAll('details.entity-repro[data-entity-id]');
+        detailsList.forEach(d => {
+            d.addEventListener('toggle', () => {
+                const id = d.getAttribute('data-entity-id');
+                if (id) {
+                    this.reproOpen[id] = d.open;
+                }
+            });
+        });
+    }
+
     // Collapsible reproduction diagnostics (for rabbits)
     renderReproduction(entity) {
         if (entity.entity_type !== 'Rabbit') return '';
@@ -213,8 +277,9 @@ export class EntityStatsManager {
                 </div>
             </div>` : '';
 
+        const isOpen = this.reproOpen[String(entity.id)] === true;
         return `
-            <details class="entity-repro" style="margin-top:0.5rem;">
+            <details class="entity-repro" data-entity-id="${entity.id}" ${isOpen ? 'open' : ''} style="margin-top:0.5rem;">
               <summary style="cursor:pointer; opacity:0.9;">Reproduction · <span style="font-weight:600;">${status}</span></summary>
               <div style="margin-top:0.35rem;">
                 ${wfSection}
