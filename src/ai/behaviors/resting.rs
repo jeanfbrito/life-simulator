@@ -66,11 +66,11 @@ pub fn evaluate_resting_behavior(
 /// More tired = rest longer
 fn calculate_rest_duration(energy_level: f32) -> u32 {
     if energy_level < 0.15 {
-        100  // Very tired - rest ~10 seconds at 10 TPS
+        600  // Very tired - sleep ~60 seconds at 10 TPS
     } else if energy_level < 0.3 {
-        50   // Moderately tired - rest ~5 seconds
+        300  // Moderately tired - sleep ~30 seconds
     } else {
-        30   // Slightly tired - quick nap ~3 seconds
+        150  // Slightly tired - nap ~15 seconds
     }
 }
 

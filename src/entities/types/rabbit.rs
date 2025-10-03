@@ -19,8 +19,8 @@ impl RabbitBehavior {
     /// - Small territory: 15 tile wander radius
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(
-            0.15,       // thirst_threshold: Drink when 15% thirsty
-            0.4,        // hunger_threshold: Eat when 40% hungry
+            0.75,       // thirst_threshold: Drink when >= 75% thirsty
+            0.5,        // hunger_threshold: Eat when >= 50% hungry
             0.3,        // energy_threshold: Rest when energy drops below 30%
             (3, 8),     // graze_range: Short-range grazing (3-8 tiles)
             100,        // water_search_radius: Wide water search
@@ -33,16 +33,29 @@ impl RabbitBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        let needs = Self::needs();
         // Rabbits: higher metabolism — eat/drink more often, tire a bit faster
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.14)),  // faster hunger gain
-            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.20)),  // faster thirst gain
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)),  // moderate hunger gain
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),  // slower thirst gain to avoid spam-drinking
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.07)), // slightly faster energy drain
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)), // same regen for now
         }
     }
 
-    /// Evaluate Rabbit actions in one place (the Rabbit's module)
+    /// Species-level needs and consumption profile for rabbits
+    pub fn needs() -> super::SpeciesNeeds {
+        super::SpeciesNeeds {
+            // Scaled from DF size (rabbit max 500 cm^3) to manageable sim numbers
+            hunger_max: 70.0,
+            thirst_max: 90.0,
+            // Smaller consumption per event than deer
+            eat_amount: 14.0,
+            drink_amount: 45.0,
+        }
+    }
+
+    /// Evaluate Rabbit actions
     /// Delegates to generic behavior evaluators but centralizes Rabbit logic.
     pub fn evaluate_actions(
         position: &crate::entities::TilePosition,
@@ -100,8 +113,8 @@ mod tests {
     #[test]
     fn test_rabbit_config() {
         let config = RabbitBehavior::config();
-        // Note: thresholds are defined as 0.15 above
-        assert_eq!(config.thirst_threshold, 0.15);
+        // Note: thresholds are defined as 0.75 above
+        assert_eq!(config.thirst_threshold, 0.75);
         assert_eq!(config.graze_range, (3, 8));
         assert_eq!(config.water_search_radius, 100);
     }

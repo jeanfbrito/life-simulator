@@ -154,7 +154,7 @@ impl Energy {
 
     /// Set to resting rate (faster regen)
     pub fn set_resting(&mut self) {
-        self.0.rate_per_tick = 0.2; // Regen while resting
+        self.0.rate_per_tick = 0.35; // Faster regen while resting (sleep-like)
     }
 
     /// Set to active rate (slower decay)

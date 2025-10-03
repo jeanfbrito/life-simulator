@@ -11,8 +11,8 @@ impl DeerBehavior {
     /// Get the default behavior configuration for deer
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(
-            0.20,      // thirst_threshold
-            0.30,      // hunger_threshold
+            0.65,      // thirst_threshold (wait longer before drinking)
+            0.45,      // hunger_threshold (eat less frequently)
             0.30,      // energy_threshold
             (5, 15),   // graze_range
             150,       // water_search_radius
@@ -25,16 +25,29 @@ impl DeerBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        let needs = Self::needs();
         // Deer: lower metabolism — eat/drink less often, tire a bit slower
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, 100.0, 0.07)),  // slower hunger gain
-            thirst: Thirst(Stat::new(0.0, 0.0, 100.0, 0.12)),  // slower thirst gain
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),  // slower hunger gain
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.02)),  // much slower thirst gain
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.04)), // slower energy drain
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)), // same regen for now
         }
     }
 
-    /// Evaluate Deer actions in one place (the Deer's module)
+    /// Species-level needs and consumption profile for deer
+    pub fn needs() -> super::SpeciesNeeds {
+        super::SpeciesNeeds {
+            // Scaled from DF size (deer max 140,000 cm^3) to manageable sim numbers (~5x rabbit)
+            hunger_max: 300.0,
+            thirst_max: 300.0,
+            // Larger consumption per event than rabbit
+            eat_amount: 60.0,
+            drink_amount: 150.0,
+        }
+    }
+
+    /// Evaluate Deer actions
     /// Includes following the nearest rabbit as an example social behavior.
     pub fn evaluate_actions(
         entity: bevy::prelude::Entity,
@@ -84,13 +97,6 @@ impl DeerBehavior {
             behavior_config.graze_range,
         ) { actions.push(graze); }
 
-        if let Some(follow) = evaluate_follow_behavior(
-            entity,
-            position,
-            rabbits,
-            2,   // stop distance
-            40,  // max follow distance normalization
-        ) { actions.push(follow); }
 
         actions
     }

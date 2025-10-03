@@ -179,19 +179,26 @@ impl Action for DrinkWaterAction {
         if is_adjacent || is_on_water {
             // We're close enough to drink!
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                // Compute drink amount before taking a mutable borrow on Thirst to avoid overlapping borrows
+                let amount = entity_mut
+                    .get::<crate::entities::types::SpeciesNeeds>()
+                    .map(|needs| needs.drink_amount)
+                    .unwrap_or(50.0);
+
                 if let Some(mut thirst) = entity_mut.get_mut::<Thirst>() {
-                    // Fully restore thirst (reduce to 0%)
-                    let old_thirst = thirst.0.percentage();
-                    thirst.0.set(0.0);
+                    // Reduce thirst by species-specific amount instead of fully restoring
+                    let old_thirst_units = thirst.0.current;
+                    thirst.0.change(-amount);
                     
                     info!(
-                        "💧 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst: {:.1}% -> {:.1}%",
+                        "💧 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst units: {:.1} -> {:.1} (Δ {:.1})",
                         entity,
                         self.target_tile,
                         current_pos,
                         tick,
-                        old_thirst,
-                        thirst.0.percentage()
+                        old_thirst_units,
+                        thirst.0.current,
+                        amount.min(old_thirst_units)
                     );
                     
                     return ActionResult::Success;

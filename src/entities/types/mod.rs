@@ -8,6 +8,19 @@ pub mod deer;
 
 use bevy::prelude::*;
 
+/// Species-level needs and consumption profile
+#[derive(Component, Debug, Clone)]
+pub struct SpeciesNeeds {
+    /// Maximum hunger capacity (absolute units). Higher for larger animals.
+    pub hunger_max: f32,
+    /// Maximum thirst capacity (absolute units). Higher for larger animals.
+    pub thirst_max: f32,
+    /// How much hunger is reduced by a single "eat" event (absolute units)
+    pub eat_amount: f32,
+    /// How much thirst is reduced by a single "drink" event (absolute units)
+    pub drink_amount: f32,
+}
+
 /// Component that defines an entity's behavior parameters
 /// 
 /// This is attached to entities at spawn time and queried by the AI planner

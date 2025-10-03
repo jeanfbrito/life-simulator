@@ -37,7 +37,7 @@ pub use entity_types::{
 };
 
 pub use types::{
-    BehaviorConfig,
+    BehaviorConfig, SpeciesNeeds,
 };
 
 pub use current_action::CurrentAction;

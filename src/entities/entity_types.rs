@@ -124,9 +124,10 @@ pub fn spawn_rabbit(
         MovementSpeed::custom(template.movement_speed),
         RabbitBehavior::stats_bundle(),
         RabbitBehavior::config(), // Attach behavior configuration
+        RabbitBehavior::needs(),   // SpeciesNeeds profile
         CurrentAction::none(), // Track current action for viewer
         // NO Wanderer component - movement driven by utility AI!
-    )).id()
+)).id()
 }
 
 /// Spawn a deer entity
@@ -147,8 +148,9 @@ pub fn spawn_deer(
         MovementSpeed::custom(template.movement_speed),
         DeerBehavior::stats_bundle(),
         DeerBehavior::config(), // Attach behavior configuration
+        DeerBehavior::needs(),   // SpeciesNeeds profile
         CurrentAction::none(), // Track current action for viewer
-    )).id()
+)).id()
 }
 
 /// Spawn multiple humans at random positions
