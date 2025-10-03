@@ -276,8 +276,15 @@ export class Renderer {
         const entityX = screenX + (CONFIG.TILE_SIZE * config.offsetX);
         const entityY = screenY + (CONFIG.TILE_SIZE * config.offsetY);
         
-        // Map display: keep species emoji on map. Scale down only juvenile rabbits.
-        const juvenileScale = (entity.entity_type === 'Rabbit' && entity.is_juvenile) ? 0.7 : 1.0;
+        // Map display: keep species emoji on map. Scale down juveniles per species.
+        let juvenileScale = 1.0;
+        if (entity.is_juvenile) {
+            if (entity.entity_type === 'Rabbit') {
+                juvenileScale = 0.7;
+            } else if (entity.entity_type === 'Deer') {
+                juvenileScale = 0.8;
+            }
+        }
         const baseSize = CONFIG.TILE_SIZE * config.sizeMultiplier * juvenileScale;
 
         // Draw species emoji (e.g., 🐇 for rabbits)
