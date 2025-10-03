@@ -156,9 +156,9 @@ mod systems {
         }
     }
 
-    pub fn rabbit_mate_matching_system(
-        mut commands: Commands,
-        rabbits: Query<
+    fn mate_matching_system_inner<M: Component>(
+        commands: &mut Commands,
+        animals: &Query<
             (
                 Entity,
                 &TilePosition,
@@ -172,12 +172,14 @@ mod systems {
                 Option<&MatingIntent>,
                 &ReproductionConfig,
             ),
-            With<Rabbit>,
+            With<M>,
         >,
-        tick: Res<crate::simulation::SimulationTick>,
+        current_tick: u64,
+        species_emoji: &str,
     ) {
         use std::collections::HashSet;
 
+        let mut sampled_interval: Option<u64> = None;
         let mut males: Vec<(
             Entity,
             IVec2,
@@ -199,12 +201,11 @@ mod systems {
             &ReproductionConfig,
         )> = Vec::new();
 
-        let mut interval_checked = false;
-
-        for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in rabbits.iter() {
-            if !interval_checked {
-                interval_checked = true;
-                if tick.0 % cfg.matching_interval_ticks as u64 != 0 {
+        for (entity, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in animals.iter()
+        {
+            if sampled_interval.is_none() {
+                sampled_interval = Some(cfg.matching_interval_ticks as u64);
+                if current_tick % cfg.matching_interval_ticks as u64 != 0 {
                     return;
                 }
             }
@@ -218,9 +219,10 @@ mod systems {
             if !is_eligible(age, cd, en, hp, wf, cfg) {
                 continue;
             }
+
             match sex {
-                Sex::Male => males.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
-                Sex::Female => females.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
+                Sex::Male => males.push((entity, pos.tile, age, cd, en, hp, wf, cfg)),
+                Sex::Female => females.push((entity, pos.tile, age, cd, en, hp, wf, cfg)),
             }
         }
 
@@ -233,32 +235,30 @@ mod systems {
         for (female_e, fpos, _fa, _fcd, _fen, _fhp, _fwf, fcfg) in females.into_iter() {
             let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
             let mut best: Option<(usize, i32)> = None;
-            for (idx, (me, mpos, .., _mcfg)) in males.iter().enumerate() {
-                if used_males.contains(me) {
+
+            for (idx, (male_e, mpos, .., _mcfg)) in males.iter().enumerate() {
+                if used_males.contains(male_e) {
                     continue;
                 }
-                // Radius is determined by female config; skip males too far away
-                let dx = fpos.x - mpos.x;
-                let dy = fpos.y - mpos.y;
-                let d2 = dx * dx + dy * dy;
-                if d2 <= radius2 {
-                    if best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
-                        best = Some((idx, d2));
-                    }
+                let d = fpos - *mpos;
+                let d2 = d.x * d.x + d.y * d.y;
+                if d2 <= radius2 && best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
+                    best = Some((idx, d2));
                 }
             }
+
             let Some((mi, _)) = best else {
                 continue;
             };
+
             let (male_e, _, .., mcfg) = males[mi];
             used_males.insert(male_e);
 
             let meet = fpos;
-            let duration = fcfg.mating_duration_ticks;
             commands.entity(female_e).insert(MatingIntent {
                 partner: male_e,
                 meeting_tile: meet,
-                duration_ticks: duration,
+                duration_ticks: fcfg.mating_duration_ticks,
             });
             commands.entity(male_e).insert(MatingIntent {
                 partner: female_e,
@@ -266,10 +266,33 @@ mod systems {
                 duration_ticks: mcfg.mating_duration_ticks,
             });
             info!(
-                "🐇💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
-                female_e, male_e, meet
+                "{}💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
+                species_emoji, female_e, male_e, meet
             );
         }
+    }
+
+    pub fn rabbit_mate_matching_system(
+        mut commands: Commands,
+        rabbits: Query<
+            (
+                Entity,
+                &TilePosition,
+                &Age,
+                &ReproductionCooldown,
+                &Energy,
+                &Health,
+                &WellFedStreak,
+                Option<&Pregnancy>,
+                Option<&Sex>,
+                Option<&MatingIntent>,
+                &ReproductionConfig,
+            ),
+            With<Rabbit>,
+        >,
+        tick: Res<crate::simulation::SimulationTick>,
+    ) {
+        mate_matching_system_inner(&mut commands, &rabbits, tick.0, "🐇");
     }
 
     // Shared birth helper
@@ -352,93 +375,7 @@ mod systems {
         >,
         tick: Res<crate::simulation::SimulationTick>,
     ) {
-        use std::collections::HashSet;
-
-        let mut males: Vec<(
-            Entity,
-            IVec2,
-            &Age,
-            &ReproductionCooldown,
-            &Energy,
-            &Health,
-            &WellFedStreak,
-            &ReproductionConfig,
-        )> = Vec::new();
-        let mut females: Vec<(
-            Entity,
-            IVec2,
-            &Age,
-            &ReproductionCooldown,
-            &Energy,
-            &Health,
-            &WellFedStreak,
-            &ReproductionConfig,
-        )> = Vec::new();
-        let mut interval_checked = false;
-
-        for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in deer.iter() {
-            if !interval_checked {
-                interval_checked = true;
-                if tick.0 % cfg.matching_interval_ticks as u64 != 0 {
-                    return;
-                }
-            }
-
-            let Some(sex) = sex_opt.copied() else {
-                continue;
-            };
-            if preg_opt.is_some() || intent_opt.is_some() {
-                continue;
-            }
-            if !is_eligible(age, cd, en, hp, wf, cfg) {
-                continue;
-            }
-            match sex {
-                Sex::Male => males.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
-                Sex::Female => females.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
-            }
-        }
-        if males.is_empty() || females.is_empty() {
-            return;
-        }
-        let mut used_males: HashSet<Entity> = HashSet::new();
-        for (female_e, fpos, .., fcfg) in females.into_iter() {
-            let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
-            let mut best: Option<(usize, i32)> = None;
-            for (idx, (me, mpos, .., _mcfg)) in males.iter().enumerate() {
-                if used_males.contains(me) {
-                    continue;
-                }
-                let d = fpos - *mpos;
-                let d2 = d.x * d.x + d.y * d.y;
-                if d2 <= radius2 {
-                    if best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
-                        best = Some((idx, d2));
-                    }
-                }
-            }
-            let Some((mi, _)) = best else {
-                continue;
-            };
-            let (male_e, _, .., mcfg) = males[mi];
-            used_males.insert(male_e);
-            let meet = fpos;
-            let duration = fcfg.mating_duration_ticks;
-            commands.entity(female_e).insert(MatingIntent {
-                partner: male_e,
-                meeting_tile: meet,
-                duration_ticks: duration,
-            });
-            commands.entity(male_e).insert(MatingIntent {
-                partner: female_e,
-                meeting_tile: meet,
-                duration_ticks: mcfg.mating_duration_ticks,
-            });
-            info!(
-                "🦌💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
-                female_e, male_e, meet
-            );
-        }
+        mate_matching_system_inner(&mut commands, &deer, tick.0, "🦌");
     }
 
     pub fn deer_birth_system(
@@ -477,95 +414,7 @@ mod systems {
         >,
         tick: Res<crate::simulation::SimulationTick>,
     ) {
-        use std::collections::HashSet;
-
-        let mut males: Vec<(
-            Entity,
-            IVec2,
-            &Age,
-            &ReproductionCooldown,
-            &Energy,
-            &Health,
-            &WellFedStreak,
-            &ReproductionConfig,
-        )> = Vec::new();
-        let mut females: Vec<(
-            Entity,
-            IVec2,
-            &Age,
-            &ReproductionCooldown,
-            &Energy,
-            &Health,
-            &WellFedStreak,
-            &ReproductionConfig,
-        )> = Vec::new();
-        let mut interval_checked = false;
-
-        for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in raccoons.iter() {
-            if !interval_checked {
-                interval_checked = true;
-                if tick.0 % cfg.matching_interval_ticks as u64 != 0 {
-                    return;
-                }
-            }
-
-            let Some(sex) = sex_opt.copied() else {
-                continue;
-            };
-            if preg_opt.is_some() || intent_opt.is_some() {
-                continue;
-            }
-            if !is_eligible(age, cd, en, hp, wf, cfg) {
-                continue;
-            }
-            match sex {
-                Sex::Male => males.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
-                Sex::Female => females.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
-            }
-        }
-
-        if males.is_empty() || females.is_empty() {
-            return;
-        }
-
-        let mut used_males: HashSet<Entity> = HashSet::new();
-        for (female_e, fpos, .., fcfg) in females.into_iter() {
-            let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
-            let mut best: Option<(usize, i32)> = None;
-            for (idx, (me, mpos, .., _mcfg)) in males.iter().enumerate() {
-                if used_males.contains(me) {
-                    continue;
-                }
-                let d = fpos - *mpos;
-                let d2 = d.x * d.x + d.y * d.y;
-                if d2 <= radius2 {
-                    if best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
-                        best = Some((idx, d2));
-                    }
-                }
-            }
-            let Some((mi, _)) = best else {
-                continue;
-            };
-            let (male_e, _, .., mcfg) = males[mi];
-            used_males.insert(male_e);
-            let meet = fpos;
-            let duration = fcfg.mating_duration_ticks;
-            commands.entity(female_e).insert(MatingIntent {
-                partner: male_e,
-                meeting_tile: meet,
-                duration_ticks: duration,
-            });
-            commands.entity(male_e).insert(MatingIntent {
-                partner: female_e,
-                meeting_tile: meet,
-                duration_ticks: mcfg.mating_duration_ticks,
-            });
-            info!(
-                "🦝💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
-                female_e, male_e, meet
-            );
-        }
+        mate_matching_system_inner(&mut commands, &raccoons, tick.0, "🦝");
     }
 
     pub fn raccoon_birth_system(

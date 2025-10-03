@@ -16,7 +16,9 @@ mod world_loader;
 
 use ai::TQUAIPlugin;
 use cached_world::CachedWorldPlugin;
-use entities::{spawn_deer, spawn_raccoon, spawn_humans, spawn_rabbit, spawn_rabbits, EntitiesPlugin};
+use entities::{
+    spawn_deer, spawn_humans, spawn_rabbit, spawn_rabbits, spawn_raccoon, EntitiesPlugin,
+};
 use pathfinding::{process_pathfinding_requests, PathfindingGrid};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
