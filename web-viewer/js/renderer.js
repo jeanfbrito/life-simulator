@@ -276,8 +276,15 @@ export class Renderer {
         const entityX = screenX + (CONFIG.TILE_SIZE * config.offsetX);
         const entityY = screenY + (CONFIG.TILE_SIZE * config.offsetY);
         
-        // Render the configured emoji
-        this.ctx.fillText(config.emoji, entityX, entityY);
+        // Map display: show sex symbol instead of species icon, and scale juveniles smaller
+        const sexSymbol = entity.sex === 'female' ? '♀' : (entity.sex === 'male' ? '♂' : '•');
+        const juvenileScale = entity.is_juvenile ? 0.7 : 1.0;
+        const baseSize = CONFIG.TILE_SIZE * config.sizeMultiplier;
+
+        // Draw sex symbol
+        this.ctx.font = `${baseSize * juvenileScale}px Arial`;
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillText(sexSymbol, entityX, entityY);
         
         // Reset shadow
         this.ctx.shadowColor = 'transparent';

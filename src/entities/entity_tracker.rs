@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 
 use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}, CurrentAction};
+use crate::entities::reproduction::{Sex, Age};
 
 // ============================================================================
 // GLOBAL STATE
@@ -22,6 +23,8 @@ pub struct EntityData {
     pub energy: Option<f32>,
     pub health: Option<f32>,
     pub current_action: Option<String>,
+    pub sex: Option<String>,
+    pub is_juvenile: Option<bool>,
 }
 
 /// Global entity tracker
@@ -82,6 +85,12 @@ impl EntityTracker {
                 if let Some(ref action) = e.current_action {
                     parts.push(format!(r#""current_action": "{}""#, action));
                 }
+                if let Some(ref sex) = e.sex {
+                    parts.push(format!(r#""sex": "{}""#, sex));
+                }
+                if let Some(is_juv) = e.is_juvenile {
+                    parts.push(format!(r#""is_juvenile": {}"#, is_juv));
+                }
                 
                 format!(r#"{{{}}}"#, parts.join(", "))
             })
@@ -112,6 +121,8 @@ pub fn sync_entities_to_tracker(
         Option<&Energy>,
         Option<&Health>,
         Option<&CurrentAction>,
+        Option<&Sex>,
+        Option<&Age>,
     )>,
 ) {
     if let Some(tracker) = EntityTracker::global() {
@@ -119,7 +130,9 @@ pub fn sync_entities_to_tracker(
             // Clear and rebuild (simple approach)
             tracker.entities.clear();
             
-            for (entity, creature, position, hunger, thirst, energy, health, current_action) in query.iter() {
+            for (entity, creature, position, hunger, thirst, energy, health, current_action, sex, age) in query.iter() {
+                let sex_str = sex.map(|s| match s { Sex::Male => "male".to_string(), Sex::Female => "female".to_string() });
+                let is_juvenile = age.map(|a| !a.is_adult());
                 let data = EntityData {
                     entity_id: entity.index(),
                     name: creature.name.clone(),
@@ -130,6 +143,8 @@ pub fn sync_entities_to_tracker(
                     energy: energy.map(|e| e.0.percentage()),
                     health: health.map(|h| h.0.percentage()),
                     current_action: current_action.map(|a| a.action_name.clone()),
+                    sex: sex_str,
+                    is_juvenile,
                 };
                 tracker.update(entity.index(), data);
             }

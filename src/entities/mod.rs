@@ -6,6 +6,7 @@ pub mod entity_types;
 pub mod types;
 pub mod auto_eat;
 pub mod current_action;
+pub mod reproduction;
 
 use bevy::prelude::*;
 
@@ -34,6 +35,14 @@ pub use entity_types::{
     spawn_human, spawn_rabbit, spawn_deer,
     spawn_humans, spawn_rabbits,
     count_entities_by_type,
+};
+
+pub use reproduction::{
+    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak,
+    update_age_and_wellfed_system,
+    tick_reproduction_timers_system,
+    rabbit_mate_matching_system,
+    rabbit_birth_system,
 };
 
 pub use types::{
@@ -81,12 +90,16 @@ impl Plugin for EntitiesPlugin {
             ))
             
             // Tick systems (run when should_tick is true)
-            .add_systems(Update, (
+.add_systems(Update, (
                 stats::tick_stats_system,       // Update entity stats
                 movement::tick_movement_system, // Movement execution
                 auto_eat::auto_eat_system,      // Auto-eat when on grass
+                update_age_and_wellfed_system,  // Age and WellFed
+                tick_reproduction_timers_system, // Timers for repro
+                rabbit_mate_matching_system,    // Pairing (MVP)
+                rabbit_birth_system,            // Handle births
                 stats::death_system,            // Handle death
-            ).chain().run_if(should_run_tick_systems));
+            ).run_if(should_run_tick_systems));
     }
 }
 

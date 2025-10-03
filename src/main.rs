@@ -136,6 +136,9 @@ fn setup(
 
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);
+
+    // Insert reproduction config resource for rabbits
+    commands.insert_resource(entities::types::rabbit::RabbitBehavior::reproduction_config());
 }
 
 fn spawn_wanderers(

@@ -65,7 +65,7 @@ export class EntityStatsManager {
         return `
             <div class="entity-card">
                 <div class="entity-header">
-                    <div class="entity-name">${entity.name}</div>
+                    <div class="entity-name">${entity.name} ${this.renderSex(entity)}</div>
                     <div class="entity-type">${emoji}</div>
                 </div>
                 ${actionLabel}
@@ -80,6 +80,13 @@ export class EntityStatsManager {
                 <span class="action-label">Action:</span> <span class="action-value">${action}</span>
             </div>
         `;
+    }
+
+    renderSex(entity) {
+        const sex = entity.sex;
+        if (sex === 'male') return '<span title="Male">♂</span>';
+        if (sex === 'female') return '<span title="Female">♀</span>';
+        return '';
     }
 
     renderStats(entity) {

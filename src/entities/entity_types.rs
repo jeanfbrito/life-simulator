@@ -114,20 +114,30 @@ pub fn spawn_rabbit(
 ) -> Entity {
     let template = EntityTemplate::RABBIT;
     
-    commands.spawn((
-        Creature {
-            name: name.into(),
-            species: template.species.to_string(),
-        },
-        Rabbit,
-        TilePosition::from_tile(position),
-        MovementSpeed::custom(template.movement_speed),
-        RabbitBehavior::stats_bundle(),
-        RabbitBehavior::config(), // Attach behavior configuration
-        RabbitBehavior::needs(),   // SpeciesNeeds profile
-        CurrentAction::none(), // Track current action for viewer
-        // NO Wanderer component - movement driven by utility AI!
-)).id()
+    {
+        use crate::entities::reproduction::{Sex, Age, ReproductionCooldown, WellFedStreak};
+        let cfg = RabbitBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) { Sex::Male } else { Sex::Female };
+        commands.spawn((
+            Creature {
+                name: name.into(),
+                species: template.species.to_string(),
+            },
+            Rabbit,
+            TilePosition::from_tile(position),
+            MovementSpeed::custom(template.movement_speed),
+            RabbitBehavior::stats_bundle(),
+            RabbitBehavior::config(), // Attach behavior configuration
+            RabbitBehavior::needs(),   // SpeciesNeeds profile
+            sex,
+            Age { ticks_alive: cfg.maturity_ticks as u64, mature_at_ticks: cfg.maturity_ticks }, // spawn as adult
+            ReproductionCooldown::default(),
+            WellFedStreak::default(),
+            CurrentAction::none(), // Track current action for viewer
+            // NO Wanderer component - movement driven by utility AI!
+        )).id()
+    }
 }
 
 /// Spawn a deer entity

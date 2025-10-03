@@ -3,11 +3,46 @@
 /// Defines behavior parameters optimized for rabbit entities.
 
 use super::BehaviorConfig;
+use bevy::prelude::Resource;
 
 /// Rabbit behavior preset
 pub struct RabbitBehavior;
 
+/// Rabbit reproduction tuning parameters
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct RabbitReproductionConfig {
+    pub maturity_ticks: u32,
+    pub gestation_ticks: u32,
+    pub mating_cooldown_ticks: u32,
+    pub postpartum_cooldown_ticks: u32,
+    pub litter_size_range: (u8, u8),
+    pub mating_search_radius: i32,
+    pub well_fed_hunger_norm: f32,
+    pub well_fed_thirst_norm: f32,
+    pub well_fed_required_ticks: u32,
+    pub matching_interval_ticks: u32,
+    pub min_energy_norm: f32,
+    pub min_health_norm: f32,
+}
+
 impl RabbitBehavior {
+    /// Default reproduction parameters for rabbits
+    pub fn reproduction_config() -> RabbitReproductionConfig {
+        RabbitReproductionConfig {
+            maturity_ticks: 3600,                 // ~6 minutes at 10 TPS
+            gestation_ticks: 1200,               // ~2 minutes
+            mating_cooldown_ticks: 600,          // ~1 minute (male)
+            postpartum_cooldown_ticks: 1800,     // ~3 minutes (female)
+            litter_size_range: (2, 6),
+            mating_search_radius: 50,
+            well_fed_hunger_norm: 0.35,
+            well_fed_thirst_norm: 0.35,
+            well_fed_required_ticks: 300,        // ~30s sustained
+            matching_interval_ticks: 50,         // run matcher every 5s
+            min_energy_norm: 0.5,
+            min_health_norm: 0.6,
+        }
+    }
     /// Get the default behavior configuration for rabbits
     /// 
     /// Rabbit characteristics:
