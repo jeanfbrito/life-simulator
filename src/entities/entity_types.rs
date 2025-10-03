@@ -1,12 +1,12 @@
+use super::types::deer::DeerBehavior;
+use super::types::rabbit::RabbitBehavior;
+use super::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
+use crate::pathfinding::PathfindingGrid;
 /// Modular entity types system
-/// 
+///
 /// This module defines different entity types (humans, animals, etc.) with their
 /// unique properties while sharing common systems (movement, stats, AI).
 use bevy::prelude::*;
-use super::{TilePosition, MovementSpeed, EntityStatsBundle, Creature, CurrentAction};
-use super::types::rabbit::RabbitBehavior;
-use super::types::deer::DeerBehavior;
-use crate::pathfinding::PathfindingGrid;
 use rand::Rng;
 
 // ============================================================================
@@ -38,9 +38,9 @@ pub struct Wolf;
 pub struct EntityTemplate {
     pub name_prefix: &'static str,
     pub species: &'static str,
-    pub movement_speed: u32,  // Ticks per tile
+    pub movement_speed: u32, // Ticks per tile
     pub wander_radius: i32,
-    pub emoji: &'static str,  // For future rendering customization
+    pub emoji: &'static str, // For future rendering customization
 }
 
 impl EntityTemplate {
@@ -48,7 +48,7 @@ impl EntityTemplate {
     pub const HUMAN: EntityTemplate = EntityTemplate {
         name_prefix: "Person",
         species: "Human",
-        movement_speed: 30,  // 3 seconds per tile at 10 TPS (comfortable walking)
+        movement_speed: 30, // 3 seconds per tile at 10 TPS (comfortable walking)
         wander_radius: 30,
         emoji: "🧍‍♂️",
     };
@@ -57,8 +57,8 @@ impl EntityTemplate {
     pub const RABBIT: EntityTemplate = EntityTemplate {
         name_prefix: "Rabbit",
         species: "Rabbit",
-        movement_speed: 20,   // 2 seconds per tile at 10 TPS (faster than humans)
-        wander_radius: 15,   // Smaller territory
+        movement_speed: 20, // 2 seconds per tile at 10 TPS (faster than humans)
+        wander_radius: 15,  // Smaller territory
         emoji: "🐇",
     };
 
@@ -66,8 +66,8 @@ impl EntityTemplate {
     pub const DEER: EntityTemplate = EntityTemplate {
         name_prefix: "Deer",
         species: "Deer",
-        movement_speed: 10,  // 1.0 tiles/sec at 10 TPS
-        wander_radius: 40,   // Large territory
+        movement_speed: 10, // 1.0 tiles/sec at 10 TPS
+        wander_radius: 40,  // Large territory
         emoji: "🦌",
     };
 
@@ -75,8 +75,8 @@ impl EntityTemplate {
     pub const WOLF: EntityTemplate = EntityTemplate {
         name_prefix: "Wolf",
         species: "Wolf",
-        movement_speed: 6,   // 1.67 tiles/sec at 10 TPS (very fast)
-        wander_radius: 50,   // Roams widely
+        movement_speed: 6, // 1.67 tiles/sec at 10 TPS (very fast)
+        wander_radius: 50, // Roams widely
         emoji: "🐺",
     };
 }
@@ -86,91 +86,105 @@ impl EntityTemplate {
 // ============================================================================
 
 /// Spawn a human entity
-pub fn spawn_human(
-    commands: &mut Commands,
-    name: impl Into<String>,
-    position: IVec2,
-) -> Entity {
+pub fn spawn_human(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
     let template = EntityTemplate::HUMAN;
-    
-    commands.spawn((
-        Creature {
-            name: name.into(),
-            species: template.species.to_string(),
-        },
-        Human,
-        TilePosition::from_tile(position),
-        MovementSpeed::custom(template.movement_speed),
-        EntityStatsBundle::default(),
-        // NO Wanderer component - movement driven by utility AI!
-    )).id()
-}
 
-/// Spawn a rabbit entity
-pub fn spawn_rabbit(
-    commands: &mut Commands,
-    name: impl Into<String>,
-    position: IVec2,
-) -> Entity {
-    let template = EntityTemplate::RABBIT;
-    
-    {
-        use crate::entities::reproduction::{Sex, Age, ReproductionCooldown, WellFedStreak};
-        let cfg = RabbitBehavior::reproduction_config();
-        let mut rng = rand::thread_rng();
-        let sex = if rng.gen_bool(0.5) { Sex::Male } else { Sex::Female };
-        commands.spawn((
+    commands
+        .spawn((
             Creature {
                 name: name.into(),
                 species: template.species.to_string(),
             },
-            Rabbit,
+            Human,
             TilePosition::from_tile(position),
             MovementSpeed::custom(template.movement_speed),
-            RabbitBehavior::stats_bundle(),
-            RabbitBehavior::config(), // Attach behavior configuration
-            RabbitBehavior::needs(),   // SpeciesNeeds profile
-            sex,
-            Age { ticks_alive: cfg.maturity_ticks as u64, mature_at_ticks: cfg.maturity_ticks }, // spawn as adult
-            ReproductionCooldown::default(),
-            WellFedStreak::default(),
-            CurrentAction::none(), // Track current action for viewer
+            EntityStatsBundle::default(),
             // NO Wanderer component - movement driven by utility AI!
-        )).id()
+        ))
+        .id()
+}
+
+/// Spawn a rabbit entity
+pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+    let template = EntityTemplate::RABBIT;
+
+    {
+        use crate::entities::reproduction::{
+            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
+        };
+        let cfg = RabbitBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Rabbit,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                RabbitBehavior::stats_bundle(),
+                RabbitBehavior::config(), // Attach behavior configuration
+                RabbitBehavior::needs(),  // SpeciesNeeds profile
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                }, // spawn as adult
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(), // Track current action for viewer
+                cfg,
+                // NO Wanderer component - movement driven by utility AI!
+            ))
+            .id()
     }
 }
 
 /// Spawn a deer entity
-pub fn spawn_deer(
-    commands: &mut Commands,
-    name: impl Into<String>,
-    position: IVec2,
-) -> Entity {
+pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
     let template = EntityTemplate::DEER;
-    
+
     {
-        use crate::entities::reproduction::{Sex, Age, ReproductionCooldown, WellFedStreak};
+        use crate::entities::reproduction::{
+            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
+        };
         // Use deer reproduction config for maturity
         let cfg = DeerBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
-        let sex = if rng.gen_bool(0.5) { Sex::Male } else { Sex::Female };
-        commands.spawn((
-            Creature {
-                name: name.into(),
-                species: template.species.to_string(),
-            },
-            Deer,
-            TilePosition::from_tile(position),
-            MovementSpeed::custom(template.movement_speed),
-            DeerBehavior::stats_bundle(),
-            DeerBehavior::config(), // Attach behavior configuration
-            DeerBehavior::needs(),   // SpeciesNeeds profile
-            sex,
-            Age { ticks_alive: cfg.maturity_ticks as u64, mature_at_ticks: cfg.maturity_ticks }, // spawn as adult
-            ReproductionCooldown::default(),
-            WellFedStreak::default(),
-            CurrentAction::none(), // Track current action for viewer
-        )).id()
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Deer,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                DeerBehavior::stats_bundle(),
+                DeerBehavior::config(), // Attach behavior configuration
+                DeerBehavior::needs(),  // SpeciesNeeds profile
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                }, // spawn as adult
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(), // Track current action for viewer
+                cfg,
+            ))
+            .id()
     }
 }
 
@@ -184,7 +198,7 @@ pub fn spawn_humans(
 ) -> Vec<Entity> {
     let mut entities = Vec::new();
     let mut rng = rand::thread_rng();
-    
+
     for i in 0..count {
         if let Some(spawn_pos) = pick_random_walkable_tile(center, spawn_radius, grid, &mut rng) {
             let name = format!("Human_{}", i);
@@ -195,7 +209,7 @@ pub fn spawn_humans(
             warn!("Couldn't find walkable spawn position for human {}", i);
         }
     }
-    
+
     entities
 }
 
@@ -209,7 +223,7 @@ pub fn spawn_rabbits(
 ) -> Vec<Entity> {
     let mut entities = Vec::new();
     let mut rng = rand::thread_rng();
-    
+
     for i in 0..count {
         if let Some(spawn_pos) = pick_random_walkable_tile(center, spawn_radius, grid, &mut rng) {
             let name = format!("Rabbit_{}", i);
@@ -220,7 +234,7 @@ pub fn spawn_rabbits(
             warn!("Couldn't find walkable spawn position for rabbit {}", i);
         }
     }
-    
+
     entities
 }
 
@@ -233,8 +247,7 @@ pub fn spawn_rabbits(
 /// - Flee from predators
 /// - Eat grass/plants
 /// - Breed when healthy
-pub fn rabbit_behavior_system(
-    // query: Query<&Rabbit, With<Wanderer>>,
+pub fn rabbit_behavior_system(// query: Query<&Rabbit, With<Wanderer>>,
 ) {
     // Future: Add rabbit-specific behaviors here
     // For now, rabbits just use the standard wandering system
@@ -273,12 +286,12 @@ fn pick_random_walkable_tile(
         let offset_x = rng.gen_range(-radius..=radius);
         let offset_y = rng.gen_range(-radius..=radius);
         let candidate = center + IVec2::new(offset_x, offset_y);
-        
+
         if grid.is_walkable(candidate) {
             return Some(candidate);
         }
     }
-    
+
     // If we couldn't find anything, try a simple grid search
     for dx in -radius..=radius {
         for dy in -radius..=radius {
@@ -288,6 +301,6 @@ fn pick_random_walkable_tile(
             }
         }
     }
-    
+
     None
 }

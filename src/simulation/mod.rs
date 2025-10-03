@@ -7,14 +7,15 @@ pub mod tick;
 
 // Re-exports
 pub use tick::{
-    SimulationTick, SimulationSpeed, TickMetrics, SimulationState, TickAccumulator,
-    increment_tick_counter, log_tick_metrics, every_n_ticks,
+    every_n_ticks, increment_tick_counter, log_tick_metrics, SimulationSpeed, SimulationState,
+    SimulationTick, TickAccumulator, TickMetrics,
 };
 
 /// Base tick rate: 10 ticks per second (100ms per tick)
 /// This is a good balance between responsiveness and performance
 pub const BASE_TICK_RATE: f64 = 10.0;
 pub const TICK_DURATION_MS: u64 = 100;
+const METRICS_LOG_INTERVAL_TICKS: u64 = 50;
 
 /// Plugin that sets up the core simulation tick system
 pub struct SimulationPlugin;
@@ -29,14 +30,22 @@ impl Plugin for SimulationPlugin {
             .insert_resource(SimulationState { should_tick: false })
             .insert_resource(TickMetrics::default())
             .insert_resource(TickAccumulator::default())
-            
             // Core tick systems run in Update schedule
-            .add_systems(Update, (
-                diagnostic_heartbeat,
-                accumulate_ticks.before(run_simulation_ticks),
-                run_simulation_ticks,
-                handle_speed_controls,
-            ));
+            .add_systems(
+                Update,
+                (
+                    diagnostic_heartbeat,
+                    accumulate_ticks.before(run_simulation_ticks),
+                    run_simulation_ticks,
+                    handle_speed_controls,
+                ),
+            )
+            .add_systems(
+                Update,
+                log_tick_metrics
+                    .after(run_simulation_ticks)
+                    .run_if(every_n_ticks(METRICS_LOG_INTERVAL_TICKS)),
+            );
         info!("✅ SimulationPlugin: Tick systems installed");
     }
 }
@@ -64,19 +73,21 @@ fn accumulate_ticks(
         state.should_tick = false;
         return;
     }
-    
+
     let tick_duration = 1.0 / BASE_TICK_RATE as f32;
     let delta = time.delta_secs();
     let ticks = accumulator.update(delta, tick_duration, speed.multiplier);
     state.should_tick = ticks > 0;
-    
+
     // Debug: Log first few frames
     static mut FRAME_COUNT: u32 = 0;
     unsafe {
         FRAME_COUNT += 1;
         if FRAME_COUNT <= 5 || (FRAME_COUNT % 100 == 0) {
-            info!("🔍 Frame {}: delta={:.4}s, ticks={}, accumulated={:.4}", 
-                FRAME_COUNT, delta, ticks, accumulator.accumulated);
+            info!(
+                "🔍 Frame {}: delta={:.4}s, ticks={}, accumulated={:.4}",
+                FRAME_COUNT, delta, ticks, accumulator.accumulated
+            );
         }
     }
 }
@@ -89,47 +100,52 @@ fn run_simulation_ticks(
     state: Res<SimulationState>,
 ) {
     let ticks_to_run = accumulator.pending_ticks;
-    
+
     if ticks_to_run == 0 {
         return;
     }
-    
+
     // Run each tick
     for _ in 0..ticks_to_run {
         // End previous tick timing
         metrics.end_tick();
-        
-        // Start new tick timing  
+
+        // Start new tick timing
         metrics.start_tick();
-        
+
         // Increment counter
         tick.increment();
-        
+
         // Log every 100 ticks
         if tick.get() % 100 == 0 {
-            info!("🎯 Tick #{} | TPS: {:.1} | Avg duration: {:?}",
+            info!(
+                "🎯 Tick #{} | TPS: {:.1} | Avg duration: {:?}",
                 tick.get(),
                 metrics.actual_tps(),
                 metrics.average_duration()
             );
         }
     }
-    
+
     // Clear pending ticks
     accumulator.pending_ticks = 0;
 }
 
 /// System to handle pause/speed controls (runs every frame)
-fn handle_speed_controls(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut speed: ResMut<SimulationSpeed>,
-) {
+fn handle_speed_controls(keyboard: Res<ButtonInput<KeyCode>>, mut speed: ResMut<SimulationSpeed>) {
     // Space to pause/unpause
     if keyboard.just_pressed(KeyCode::Space) {
         speed.toggle_pause();
-        info!("Simulation {}", if speed.is_paused() { "PAUSED" } else { "RESUMED" });
+        info!(
+            "Simulation {}",
+            if speed.is_paused() {
+                "PAUSED"
+            } else {
+                "RESUMED"
+            }
+        );
     }
-    
+
     // Number keys for speed control
     if keyboard.just_pressed(KeyCode::Digit1) {
         speed.set_speed(0.5);

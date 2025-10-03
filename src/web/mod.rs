@@ -1,11 +1,11 @@
 use bevy::prelude::*;
+use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::RwLock;
+use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 
 use crate::tilemap::{Chunk, ChunkCoordinate, WorldGenerator, CHUNK_SIZE};
 
@@ -60,7 +60,8 @@ fn start_websocket_server() {
     // This would need to run in a separate tokio runtime
     // For now, we'll integrate it differently since Bevy manages its own runtime
     tokio::spawn(async move {
-        let listener = TcpListener::bind("127.0.0.1:8080").await
+        let listener = TcpListener::bind("127.0.0.1:8080")
+            .await
             .expect("Failed to bind to port 8080");
 
         info!("WEB: WebSocket server listening on ws://127.0.0.1:8080");
@@ -78,10 +79,7 @@ fn start_websocket_server() {
     });
 }
 
-async fn handle_connection(
-    mut ws_stream: WebSocketStream<TcpStream>,
-    client_id: String,
-) {
+async fn handle_connection(mut ws_stream: WebSocketStream<TcpStream>, client_id: String) {
     info!("WEB: Handling connection from {}", client_id);
 
     while let Some(msg) = ws_stream.next().await {
@@ -114,10 +112,13 @@ async fn handle_client_message(
         match msg_type {
             "get_world_info" => {
                 // Send world information
-                let response = WebSocketMessage::new("world_info", Some(serde_json::json!({
-                    "center_chunk": {"x": 0, "y": 0},
-                    "world_size": {"width": 20, "height": 20}
-                })));
+                let response = WebSocketMessage::new(
+                    "world_info",
+                    Some(serde_json::json!({
+                        "center_chunk": {"x": 0, "y": 0},
+                        "world_size": {"width": 20, "height": 20}
+                    })),
+                );
 
                 if let Ok(json) = response.to_json() {
                     let _ = ws_stream.send(Message::Text(json)).await;
@@ -132,9 +133,12 @@ async fn handle_client_message(
             "regenerate_world" => {
                 info!("WEB: Client requested world regeneration");
                 // Send acknowledgment
-                let response = WebSocketMessage::new("world_regenerated", Some(serde_json::json!({
-                    "success": true
-                })));
+                let response = WebSocketMessage::new(
+                    "world_regenerated",
+                    Some(serde_json::json!({
+                        "success": true
+                    })),
+                );
 
                 if let Ok(json) = response.to_json() {
                     let _ = ws_stream.send(Message::Text(json)).await;
@@ -157,7 +161,7 @@ async fn handle_chunk_request(
     for coord in chunk_coords {
         if let (Some(x), Some(y)) = (
             coord.get("x").and_then(|v| v.as_i64()),
-            coord.get("y").and_then(|v| v.as_i64())
+            coord.get("y").and_then(|v| v.as_i64()),
         ) {
             let chunk_key = format!("{},{}", x, y);
             let terrain_data = generate_sample_chunk(x, y);
@@ -165,9 +169,12 @@ async fn handle_chunk_request(
         }
     }
 
-    let response = WebSocketMessage::new("chunk_data", Some(serde_json::json!({
-        "chunk_data": chunk_data
-    })));
+    let response = WebSocketMessage::new(
+        "chunk_data",
+        Some(serde_json::json!({
+            "chunk_data": chunk_data
+        })),
+    );
 
     if let Ok(json) = response.to_json() {
         let _ = ws_stream.send(Message::Text(json)).await;

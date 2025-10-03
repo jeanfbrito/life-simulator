@@ -17,8 +17,8 @@ use crate::tilemap::{chunk::CHUNK_SIZE, terrain::TerrainType};
 pub struct PathNode {
     pub index: IVec2,
     pub parent: Option<IVec2>,
-    pub g_cost: u32, // Cost from origin to this node
-    pub h_cost: u32, // Heuristic (Manhattan distance to destination)
+    pub g_cost: u32,       // Cost from origin to this node
+    pub h_cost: u32,       // Heuristic (Manhattan distance to destination)
     pub cost_to_pass: u32, // Tile movement cost
 }
 
@@ -175,13 +175,21 @@ pub fn find_path(
 ) -> Option<Path> {
     // Early exit if origin is not walkable
     if !grid.is_walkable(origin) {
-        warn!("Pathfinding: Origin {:?} is not walkable! Cost: {}", origin, grid.get_cost(origin));
+        warn!(
+            "Pathfinding: Origin {:?} is not walkable! Cost: {}",
+            origin,
+            grid.get_cost(origin)
+        );
         return None;
     }
-    
+
     // Early exit if destination is not walkable
     if !grid.is_walkable(destination) {
-        warn!("Pathfinding: Destination {:?} is not walkable! Cost: {}", destination, grid.get_cost(destination));
+        warn!(
+            "Pathfinding: Destination {:?} is not walkable! Cost: {}",
+            destination,
+            grid.get_cost(destination)
+        );
         return None;
     }
 
@@ -201,8 +209,13 @@ pub fn find_path(
         // Check step limit
         if let Some(max) = max_steps {
             if steps >= max {
-                warn!("Pathfinding: Max steps ({}) reached. Origin: {:?}, Dest: {:?}, Explored: {}",
-                    max, origin, destination, explored.len());
+                warn!(
+                    "Pathfinding: Max steps ({}) reached. Origin: {:?}, Dest: {:?}, Explored: {}",
+                    max,
+                    origin,
+                    destination,
+                    explored.len()
+                );
                 return None; // Failed - too many steps
             }
         }
@@ -210,7 +223,11 @@ pub fn find_path(
 
         // Reached destination!
         if current.index == destination {
-            debug!("Pathfinding: SUCCESS! Steps: {}, Explored: {}", steps, explored.len());
+            debug!(
+                "Pathfinding: SUCCESS! Steps: {}, Explored: {}",
+                steps,
+                explored.len()
+            );
             return Some(reconstruct_path(&all_nodes, origin, destination));
         }
 
@@ -283,11 +300,11 @@ fn reconstruct_path(
 
     // Fill in all intermediate tiles between A* waypoints
     let mut full_waypoints = Vec::new();
-    
+
     for i in 0..sparse_waypoints.len() - 1 {
         let start = sparse_waypoints[i];
         let end = sparse_waypoints[i + 1];
-        
+
         // Add all tiles from start to end (excluding start, including end)
         let mut intermediate = interpolate_tiles(start, end);
         full_waypoints.append(&mut intermediate);
@@ -301,25 +318,25 @@ fn reconstruct_path(
 fn interpolate_tiles(start: IVec2, end: IVec2) -> Vec<IVec2> {
     let mut tiles = Vec::new();
     let mut current = start;
-    
+
     // Calculate direction
     let delta = end - start;
     let steps = delta.x.abs().max(delta.y.abs());
-    
+
     if steps == 0 {
         return tiles; // Same tile, no interpolation needed
     }
-    
+
     // Determine step direction for each axis
     let step_x = if delta.x != 0 { delta.x.signum() } else { 0 };
     let step_y = if delta.y != 0 { delta.y.signum() } else { 0 };
-    
+
     // Generate all intermediate tiles
     for _ in 0..steps {
         current = IVec2::new(current.x + step_x, current.y + step_y);
         tiles.push(current);
     }
-    
+
     tiles
 }
 
@@ -431,11 +448,11 @@ pub fn build_pathfinding_grid_from_world(
     // Note: WorldLoader stores chunks in a HashMap, so we need to iterate differently
     // For now, return an empty grid - this needs to be implemented when WorldLoader
     // exposes an iterator or we can access its chunks
-    
+
     // TODO: Add iter_chunks() method to WorldLoader
     warn!("build_pathfinding_grid_from_world: Not yet fully implemented");
     warn!("Pathfinding grid will need to be manually populated or WorldLoader needs an iterator");
-    
+
     grid
 }
 
@@ -467,13 +484,7 @@ mod tests {
             }
         }
 
-        let path = find_path(
-            IVec2::new(0, 0),
-            IVec2::new(4, 0),
-            &grid,
-            false,
-            None,
-        );
+        let path = find_path(IVec2::new(0, 0), IVec2::new(4, 0), &grid, false, None);
 
         assert!(path.is_some());
         let path = path.unwrap();
@@ -496,13 +507,7 @@ mod tests {
             }
         }
 
-        let path = find_path(
-            IVec2::new(0, 0),
-            IVec2::new(4, 0),
-            &grid,
-            false,
-            None,
-        );
+        let path = find_path(IVec2::new(0, 0), IVec2::new(4, 0), &grid, false, None);
 
         assert!(path.is_some());
         let path = path.unwrap();
@@ -519,13 +524,7 @@ mod tests {
         grid.set_cost(IVec2::new(5, 5), 1);
         // Everything else is impassable
 
-        let path = find_path(
-            IVec2::new(0, 0),
-            IVec2::new(5, 5),
-            &grid,
-            false,
-            Some(100),
-        );
+        let path = find_path(IVec2::new(0, 0), IVec2::new(5, 5), &grid, false, Some(100));
 
         assert!(path.is_none());
     }

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
+use std::collections::HashMap;
 
 /// Resource types that can be placed on the map
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -53,10 +53,10 @@ pub struct ResourceConfig {
 impl Default for ResourceConfig {
     fn default() -> Self {
         Self {
-            tree_density: 0.08,      // 8% chance of tree per tile
-            rock_density: 0.03,      // 3% chance of rock per tile
-            bush_density: 0.05,      // 5% chance of bush per tile
-            flower_density: 0.04,    // 4% chance of flower per tile
+            tree_density: 0.08,   // 8% chance of tree per tile
+            rock_density: 0.03,   // 3% chance of rock per tile
+            bush_density: 0.05,   // 5% chance of bush per tile
+            flower_density: 0.04, // 4% chance of flower per tile
             enable_resources: true,
         }
     }
@@ -85,8 +85,12 @@ impl ResourceGenerator {
         }
 
         let mut resource_layer = vec![vec!["".to_string(); 16]; 16];
-        let seed = world_seed.wrapping_mul(1000).wrapping_add(chunk_x as u64)
-            .wrapping_mul(100).wrapping_add(chunk_y as u64).wrapping_add(9999);
+        let seed = world_seed
+            .wrapping_mul(1000)
+            .wrapping_add(chunk_x as u64)
+            .wrapping_mul(100)
+            .wrapping_add(chunk_y as u64)
+            .wrapping_add(9999);
         let mut rng = Pcg64::seed_from_u64(seed);
 
         for y in 0..16 {
@@ -94,7 +98,8 @@ impl ResourceGenerator {
                 let terrain = &terrain_layer[y][x];
 
                 // Only place resources on suitable terrain
-                if let Some(resource_type) = self.determine_resource_for_terrain(terrain, &mut rng) {
+                if let Some(resource_type) = self.determine_resource_for_terrain(terrain, &mut rng)
+                {
                     resource_layer[y][x] = resource_type.as_str().to_string();
                 }
             }
@@ -124,7 +129,11 @@ impl ResourceGenerator {
                     }
                 } else if roll < self.config.tree_density + self.config.bush_density {
                     Some(ResourceType::Bush)
-                } else if roll < self.config.tree_density + self.config.bush_density + self.config.flower_density {
+                } else if roll
+                    < self.config.tree_density
+                        + self.config.bush_density
+                        + self.config.flower_density
+                {
                     Some(ResourceType::Flower)
                 } else {
                     None
@@ -245,7 +254,10 @@ mod tests {
 
     #[test]
     fn test_resource_type_conversion() {
-        assert_eq!(ResourceType::from_str("TreeOak"), Some(ResourceType::TreeOak));
+        assert_eq!(
+            ResourceType::from_str("TreeOak"),
+            Some(ResourceType::TreeOak)
+        );
         assert_eq!(ResourceType::TreeOak.as_str(), "TreeOak");
         assert_eq!(ResourceType::from_str("Invalid"), None);
     }
@@ -260,18 +272,16 @@ mod tests {
 
     #[test]
     fn test_resource_generation() {
-        let terrain = vec![
-            vec!["Grass".to_string(); 16]; 16
-        ];
+        let terrain = vec![vec!["Grass".to_string(); 16]; 16];
 
         let resources = ResourceGenerator::create_resources_for_chunk(&terrain, 0, 0, 12345);
         assert_eq!(resources.len(), 16);
         assert_eq!(resources[0].len(), 16);
 
         // Should have some resources in grass terrain
-        let has_any_resource = resources.iter().any(|row|
-            row.iter().any(|tile| !tile.is_empty())
-        );
+        let has_any_resource = resources
+            .iter()
+            .any(|row| row.iter().any(|tile| !tile.is_empty()));
         assert!(has_any_resource);
     }
 

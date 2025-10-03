@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use ron::error::SpannedError;
 use serde::{Deserialize, Serialize};
 
-use crate::tilemap::{ChunkCoordinate, WorldConfig, CHUNK_SIZE};
 use crate::cached_world::CachedWorld;
+use crate::tilemap::{ChunkCoordinate, WorldConfig, CHUNK_SIZE};
 
 /// Serializable world data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,7 +76,10 @@ pub struct WorldSerializer;
 
 impl WorldSerializer {
     /// Save world data to RON file
-    pub fn save_world(world: &SerializedWorld, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save_world(
+        world: &SerializedWorld,
+        path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let path = Path::new(path);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -105,10 +108,8 @@ impl WorldSerializer {
             .into_iter()
             .map(|((x, y), terrain_tiles)| {
                 let chunk_key = format!("{},{}", x, y);
-                let serialized_chunk = SerializedChunk::new(
-                    ChunkCoordinate::new(x, y),
-                    terrain_tiles
-                );
+                let serialized_chunk =
+                    SerializedChunk::new(ChunkCoordinate::new(x, y), terrain_tiles);
                 (chunk_key, serialized_chunk)
             })
             .collect();
@@ -132,10 +133,13 @@ impl WorldSerializer {
                 if let Some((x_str, y_str)) = key.split_once(',') {
                     if let (Ok(x), Ok(y)) = (x_str.parse::<i32>(), y_str.parse::<i32>()) {
                         // Extract terrain layer for backward compatibility
-                        return Some(((x, y), chunk.get_terrain().cloned().unwrap_or_else(|| {
-                            // Create empty terrain layer if none exists
-                            vec![vec!["Grass".to_string(); 16]; 16]
-                        })));
+                        return Some((
+                            (x, y),
+                            chunk.get_terrain().cloned().unwrap_or_else(|| {
+                                // Create empty terrain layer if none exists
+                                vec![vec!["Grass".to_string(); 16]; 16]
+                            }),
+                        ));
                     }
                 }
                 None
@@ -237,12 +241,13 @@ pub fn handle_world_save_requests(
                 let terrain_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
 
                 // Generate resources layer using the existing resource generation system
-                let resources_tiles = crate::resources::ResourceGenerator::create_resources_for_chunk(
-                    &terrain_tiles,
-                    chunk_x,
-                    chunk_y,
-                    world_generator.get_seed()
-                );
+                let resources_tiles =
+                    crate::resources::ResourceGenerator::create_resources_for_chunk(
+                        &terrain_tiles,
+                        chunk_x,
+                        chunk_y,
+                        world_generator.get_seed(),
+                    );
 
                 // Create multi-layer chunk with both terrain and resources
                 let mut chunk_layers = HashMap::new();
@@ -262,7 +267,10 @@ pub fn handle_world_save_requests(
 
         match WorldSerializer::save_world(&serialized_world, &request.file_path) {
             Ok(()) => {
-                info!("World '{}' saved successfully to {}", request.name, request.file_path);
+                info!(
+                    "World '{}' saved successfully to {}",
+                    request.name, request.file_path
+                );
                 commands.entity(entity).remove::<WorldSaveRequest>();
             }
             Err(e) => {
@@ -283,7 +291,10 @@ pub fn handle_world_load_requests(
 
         match WorldSerializer::load_world(&request.file_path) {
             Ok(serialized_world) => {
-                info!("World '{}' loaded successfully (seed: {})", serialized_world.name, serialized_world.seed);
+                info!(
+                    "World '{}' loaded successfully (seed: {})",
+                    serialized_world.name, serialized_world.seed
+                );
 
                 // Update the world generator with the loaded seed
                 world_generator.set_seed(serialized_world.seed);
@@ -317,6 +328,6 @@ pub struct WorldSerializationPlugin;
 impl Plugin for WorldSerializationPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, handle_world_save_requests)
-           .add_systems(Update, handle_world_load_requests);
+            .add_systems(Update, handle_world_load_requests);
     }
 }

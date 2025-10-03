@@ -1,17 +1,17 @@
 use clap::Parser;
+use rand;
 use std::collections::HashMap;
 use std::fs;
 use std::time::Instant;
-use rand;
 
-mod tilemap;
-mod serialization;
-mod resources;
 mod cached_world;
+mod resources;
+mod serialization;
+mod tilemap;
 
-use tilemap::{WorldGenerator, WorldConfig};
-use serialization::WorldSerializer;
 use resources::ResourceGenerator;
+use serialization::WorldSerializer;
+use tilemap::{WorldConfig, WorldGenerator};
 
 /// Map Generator for Life Simulator
 ///
@@ -73,7 +73,10 @@ fn main() {
 
     // Create output directory
     if let Err(e) = fs::create_dir_all(&args.output_dir) {
-        eprintln!("Failed to create output directory '{}': {}", args.output_dir, e);
+        eprintln!(
+            "Failed to create output directory '{}': {}",
+            args.output_dir, e
+        );
         std::process::exit(1);
     }
 
@@ -98,7 +101,7 @@ fn main() {
                 &terrain_tiles,
                 chunk_x,
                 chunk_y,
-                seed
+                seed,
             );
 
             // Create multi-layer chunk
@@ -110,9 +113,12 @@ fn main() {
             generated_chunks += 1;
 
             if args.verbose && generated_chunks % 10 == 0 {
-                println!("Progress: {}/{} chunks ({}%)",
-                    generated_chunks, total_chunks,
-                    (generated_chunks * 100) / total_chunks);
+                println!(
+                    "Progress: {}/{} chunks ({}%)",
+                    generated_chunks,
+                    total_chunks,
+                    (generated_chunks * 100) / total_chunks
+                );
             }
         }
     }
@@ -155,7 +161,12 @@ fn main() {
     // Print summary
     println!("\nGeneration Summary:");
     println!("  World file: {}", file_path);
-    println!("  Chunks: {} ({}x{} area)", total_chunks, args.radius * 2 + 1, args.radius * 2 + 1);
+    println!(
+        "  Chunks: {} ({}x{} area)",
+        total_chunks,
+        args.radius * 2 + 1,
+        args.radius * 2 + 1
+    );
     println!("  Seed: {}", seed);
     println!("  Time: {:?}", duration);
 

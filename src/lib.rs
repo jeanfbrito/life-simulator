@@ -1,13 +1,13 @@
+pub mod ai;
+pub mod cached_world;
+pub mod entities;
+pub mod pathfinding;
+pub mod resources;
+pub mod serialization;
+pub mod simulation;
 pub mod tilemap;
 pub mod web;
-pub mod serialization;
-pub mod cached_world;
-pub mod resources;
 pub mod world_loader;
-pub mod pathfinding;
-pub mod entities;
-pub mod simulation;
-pub mod ai;
 
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,
@@ -16,18 +16,12 @@ pub use tilemap::{
 };
 
 pub use serialization::{
-    SerializedWorld, SerializedChunk, WorldSerializer, WorldSaveRequest, WorldLoadRequest,
-    WorldSerializationPlugin,
+    SerializedChunk, SerializedWorld, WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin,
+    WorldSerializer,
 };
 
-pub use cached_world::{
-    CachedWorld, CachedWorldPlugin, UpdateCachedWorld,
-};
+pub use cached_world::{CachedWorld, CachedWorldPlugin, UpdateCachedWorld};
 
-pub use resources::{
-    ResourceType, ResourceConfig, ResourceGenerator, ResourceUtils,
-};
+pub use resources::{ResourceConfig, ResourceGenerator, ResourceType, ResourceUtils};
 
-pub use world_loader::{
-    WorldLoader, WorldInfo, validate_world_file, list_available_worlds,
-};
+pub use world_loader::{list_available_worlds, validate_world_file, WorldInfo, WorldLoader};

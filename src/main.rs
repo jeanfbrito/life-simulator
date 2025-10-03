@@ -1,27 +1,27 @@
-use bevy::prelude::*;
 use bevy::app::ScheduleRunnerPlugin;
+use bevy::prelude::*;
 use bevy::time::TimePlugin;
 use std::time::Duration;
 
+mod ai;
+mod cached_world;
+mod entities;
+mod pathfinding;
+mod resources;
+mod serialization;
+mod simulation;
 mod tilemap;
 mod web;
-mod serialization;
-mod cached_world;
-mod resources;
 mod world_loader;
-mod pathfinding;
-mod entities;
-mod simulation;
-mod ai;
 
-use tilemap::{TilemapPlugin, WorldConfig};
-use serialization::{WorldSerializationPlugin, WorldSaveRequest, WorldLoadRequest};
-use cached_world::CachedWorldPlugin;
-use world_loader::WorldLoader;
-use pathfinding::{PathfindingGrid, process_pathfinding_requests};
-use entities::{EntitiesPlugin, spawn_humans, spawn_rabbits, spawn_rabbit, spawn_deer};
-use simulation::SimulationPlugin;
 use ai::TQUAIPlugin;
+use cached_world::CachedWorldPlugin;
+use entities::{spawn_deer, spawn_humans, spawn_rabbit, spawn_rabbits, EntitiesPlugin};
+use pathfinding::{process_pathfinding_requests, PathfindingGrid};
+use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
+use simulation::SimulationPlugin;
+use tilemap::{TilemapPlugin, WorldConfig};
+use world_loader::WorldLoader;
 
 mod web_server_simple;
 
@@ -31,36 +31,43 @@ fn main() {
 
     App::new()
         .add_plugins(
-            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0))),
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                1.0 / 60.0,
+            ))),
         )
-        .add_plugins(bevy::log::LogPlugin::default())  // Enable logging!
+        .add_plugins(bevy::log::LogPlugin::default()) // Enable logging!
         // TilemapPlugin removed - we're loading a world, not generating one
         // WorldSerializationPlugin removed - not needed for running simulation
         .add_plugins(CachedWorldPlugin)
-        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin))  // Core plugins
+        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin)) // Core plugins
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
         .add_systems(Startup, (setup, spawn_wanderers.after(setup)))
-        .add_systems(Update, (
-            process_pathfinding_requests,  // Async pathfinding
-            simulation_system,
-            save_load_system.after(simulation_system),
-        ).run_if(resource_exists::<WorldLoader>))
+        .add_systems(
+            Update,
+            (
+                process_pathfinding_requests, // Async pathfinding
+                simulation_system,
+                save_load_system.after(simulation_system),
+            )
+                .run_if(resource_exists::<WorldLoader>),
+        )
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut pathfinding_grid: ResMut<PathfindingGrid>,
-) {
+fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) {
     println!("🔧 LIFE_SIMULATOR: Setting up headless life simulation");
 
     // Load the world
     println!("🗺️ LIFE_SIMULATOR: Loading world...");
     let world_loader = match WorldLoader::load_default() {
         Ok(loader) => {
-            println!("✅ LIFE_SIMULATOR: World loaded: {} (seed: {})", loader.get_name(), loader.get_seed());
+            println!(
+                "✅ LIFE_SIMULATOR: World loaded: {} (seed: {})",
+                loader.get_name(),
+                loader.get_seed()
+            );
             loader
         }
         Err(e) => {
@@ -72,23 +79,23 @@ fn setup(
 
     // Build pathfinding grid from terrain and resources
     println!("🧭 LIFE_SIMULATOR: Building pathfinding grid...");
-    
+
     use tilemap::TerrainType;
-    
+
     // Get world bounds
     let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
     let tile_min_x = min_x * 16 - 16; // Extra padding
     let tile_min_y = min_y * 16 - 16;
     let tile_max_x = (max_x + 1) * 16 + 16;
     let tile_max_y = (max_y + 1) * 16 + 16;
-    
+
     let mut tiles_processed = 0;
     let mut tiles_blocked = 0;
-    
+
     for y in tile_min_y..=tile_max_y {
         for x in tile_min_x..=tile_max_x {
             let pos = bevy::math::IVec2::new(x, y);
-            
+
             // Get terrain at this position
             let terrain_str = world_loader.get_terrain_at(x, y);
             let terrain_cost = if let Some(terrain_str) = terrain_str {
@@ -107,12 +114,13 @@ fn setup(
                 // No terrain data, assume impassable (outside world bounds)
                 u32::MAX
             };
-            
+
             // Check if there's a resource blocking this tile
-            let has_resource = world_loader.get_resource_at(x, y)
+            let has_resource = world_loader
+                .get_resource_at(x, y)
                 .map(|r| !r.is_empty())
                 .unwrap_or(false);
-            
+
             // If terrain is passable but has resource, make it impassable
             let final_cost = if has_resource && terrain_cost != u32::MAX {
                 tiles_blocked += 1;
@@ -120,14 +128,17 @@ fn setup(
             } else {
                 terrain_cost
             };
-            
+
             pathfinding_grid.set_cost(pos, final_cost);
             tiles_processed += 1;
         }
     }
-    
+
     println!("✅ LIFE_SIMULATOR: Pathfinding grid ready");
-    println!("   📊 Processed {} tiles, {} blocked by resources", tiles_processed, tiles_blocked);
+    println!(
+        "   📊 Processed {} tiles, {} blocked by resources",
+        tiles_processed, tiles_blocked
+    );
 
     // Start the web server
     println!("🌐 LIFE_SIMULATOR: Starting web server...");
@@ -136,28 +147,22 @@ fn setup(
 
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);
-
-// Insert reproduction config resource - use fast deer config for quick test
-    commands.insert_resource(entities::types::deer::DeerBehavior::reproduction_config());
 }
 
-fn spawn_wanderers(
-    mut commands: Commands,
-    pathfinding_grid: Res<PathfindingGrid>,
-) {
+fn spawn_wanderers(mut commands: Commands, pathfinding_grid: Res<PathfindingGrid>) {
     println!("🎯 LIFE_SIMULATOR: Spawning 5 rabbits for testing...");
-    
+
     // Import the spawn function that attaches BehaviorConfig
     // use entities::spawn_rabbit;  // already imported above
-    
+
     // Find walkable spawn positions near origin
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    
+
     let rabbit_names = ["Bugs", "Roger", "Thumper", "Peter", "Clover"];
     let mut spawned_count = 0;
     let mut first_rabbit_pos: Option<bevy::math::IVec2> = None;
-    
+
     for (idx, name) in rabbit_names.iter().enumerate() {
         // Try to find a walkable tile near origin
         let spawn_pos = (0..30).find_map(|_| {
@@ -170,7 +175,7 @@ fn spawn_wanderers(
                 None
             }
         });
-        
+
         if let Some(spawn_pos) = spawn_pos {
             // Use the proper spawn function that attaches BehaviorConfig
             let rabbit = spawn_rabbit(&mut commands, *name, spawn_pos);
@@ -178,13 +183,18 @@ fn spawn_wanderers(
                 first_rabbit_pos = Some(spawn_pos);
             }
             spawned_count += 1;
-            println!("   ✅ Spawned rabbit #{}: {} 🐇 at {:?}", idx + 1, name, spawn_pos);
+            println!(
+                "   ✅ Spawned rabbit #{}: {} 🐇 at {:?}",
+                idx + 1,
+                name,
+                spawn_pos
+            );
         } else {
             eprintln!("   ❌ Failed to find walkable spawn position for {}!", name);
         }
     }
-    
-// Spawn a male and a female deer near origin for quick reproduction test
+
+    // Spawn a male and a female deer near origin for quick reproduction test
     use crate::entities::reproduction::Sex;
     // Find two nearby walkable tiles around origin
     let base_pos = bevy::math::IVec2::new(0, 0);
@@ -192,13 +202,21 @@ fn spawn_wanderers(
         let dx = rng.gen_range(-5..=5);
         let dy = rng.gen_range(-5..=5);
         let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
-        if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
+        if pathfinding_grid.is_walkable(candidate) {
+            Some(candidate)
+        } else {
+            None
+        }
     });
     let female_pos = (0..50).find_map(|_| {
         let dx = rng.gen_range(-5..=5);
         let dy = rng.gen_range(-5..=5);
         let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
-        if pathfinding_grid.is_walkable(candidate) { Some(candidate) } else { None }
+        if pathfinding_grid.is_walkable(candidate) {
+            Some(candidate)
+        } else {
+            None
+        }
     });
     if let (Some(mpos), Some(fpos)) = (male_pos, female_pos) {
         let male = spawn_deer(&mut commands, "Stag", mpos);
@@ -206,13 +224,19 @@ fn spawn_wanderers(
         // Force explicit sexes to ensure pairing
         commands.entity(male).insert(Sex::Male);
         commands.entity(female).insert(Sex::Female);
-        println!("   🦌 Spawned deer pair: Stag at {:?}, Doe at {:?}", mpos, fpos);
+        println!(
+            "   🦌 Spawned deer pair: Stag at {:?}, Doe at {:?}",
+            mpos, fpos
+        );
     } else {
         eprintln!("   ⚠️ Failed to find walkable positions for deer pair");
     }
-    
+
     if spawned_count > 0 {
-        println!("✅ LIFE_SIMULATOR: Spawned {} rabbits successfully!", spawned_count);
+        println!(
+            "✅ LIFE_SIMULATOR: Spawned {} rabbits successfully!",
+            spawned_count
+        );
         println!("   📊 Rabbits will only move when thirsty/hungry (no wandering)");
         println!("   🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range");
         println!("   🦌 Example: Deer follows the nearest rabbit while idle");
@@ -223,19 +247,20 @@ fn spawn_wanderers(
     }
 }
 
-
-fn simulation_system(
-    world_loader: Res<WorldLoader>,
-) {
+fn simulation_system(world_loader: Res<WorldLoader>) {
     // Basic simulation loop - runs once per frame
     // In a full implementation, this would handle entity updates, AI, etc.
 
     static mut FRAME_COUNT: u64 = 0;
     unsafe {
         FRAME_COUNT += 1;
-        if FRAME_COUNT % 300 == 0 { // Every 5 seconds at 60 FPS
-            println!("🔄 LIFE_SIMULATOR: Simulation running - frame {} (world: {} chunks)",
-                FRAME_COUNT, world_loader.get_chunk_count());
+        if FRAME_COUNT % 300 == 0 {
+            // Every 5 seconds at 60 FPS
+            println!(
+                "🔄 LIFE_SIMULATOR: Simulation running - frame {} (world: {} chunks)",
+                FRAME_COUNT,
+                world_loader.get_chunk_count()
+            );
         }
     }
 }
@@ -264,7 +289,10 @@ fn save_load_system(
             name: save_name.clone(),
         });
 
-        println!("✅ LIFE_SIMULATOR: Save request queued for '{}' -> {}", save_name, file_path);
+        println!(
+            "✅ LIFE_SIMULATOR: Save request queued for '{}' -> {}",
+            save_name, file_path
+        );
     }
 
     // Load system - Press key 2 to load most recent save
@@ -338,9 +366,11 @@ fn list_save_files() {
                 if let Ok(metadata) = entry.metadata() {
                     if let Ok(modified) = metadata.modified() {
                         if let Some(filename) = path.file_stem() {
-                            println!("  {} (modified: {:?})",
+                            println!(
+                                "  {} (modified: {:?})",
                                 filename.to_string_lossy(),
-                                modified);
+                                modified
+                            );
                             count += 1;
                         }
                     }

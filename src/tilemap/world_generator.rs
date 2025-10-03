@@ -1,11 +1,11 @@
-use super::{BiomeType, Chunk, ChunkCoordinate, CHUNK_SIZE, TerrainType};
+use super::{BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
 use bevy::log::debug;
 use bevy::prelude::*;
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use serde::{Deserialize, Serialize};
-use std::sync::RwLock;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component, Resource)]
 pub struct WorldConfig {
@@ -38,9 +38,9 @@ impl WorldGenerator {
     pub fn new(config: WorldConfig) -> Self {
         let rng = Pcg64::seed_from_u64(config.seed);
         Self {
-        config,
-        rng: RwLock::new(rng)
-    }
+            config,
+            rng: RwLock::new(rng),
+        }
     }
 
     pub fn get_seed(&self) -> u64 {
@@ -73,11 +73,7 @@ impl WorldGenerator {
                         // For now, we just mark the terrain as having resource potential
                         debug!(
                             "Resource potential at chunk ({}, {}) local ({}, {}) on {:?}",
-                            chunk.coordinate.x,
-                            chunk.coordinate.y,
-                            x,
-                            y,
-                            terrain
+                            chunk.coordinate.x, chunk.coordinate.y, x, y, terrain
                         );
                     }
                 }
@@ -184,8 +180,17 @@ impl WorldGenerator {
         // Convert to JSON string
         let mut json_parts = Vec::new();
         for (key, data) in chunk_data {
-            let data_str = data.iter()
-                .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
+            let data_str = data
+                .iter()
+                .map(|row| {
+                    format!(
+                        "[{}]",
+                        row.iter()
+                            .map(|tile| format!("\"{}\"", tile))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             json_parts.push(format!("\"{}\": [{}]", key, data_str));
@@ -215,7 +220,10 @@ impl WorldGenerator {
 
     pub fn generate_procedural_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
         let mut chunk = Vec::with_capacity(16);
-        let seed = (chunk_x as u64).wrapping_mul(1000).wrapping_add(chunk_y as u64).wrapping_add(self.config.seed);
+        let seed = (chunk_x as u64)
+            .wrapping_mul(1000)
+            .wrapping_add(chunk_y as u64)
+            .wrapping_add(self.config.seed);
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
         for y in 0..16 {
@@ -234,13 +242,18 @@ impl WorldGenerator {
         chunk
     }
 
-    fn generate_terrain_type(&self, world_x: i32, world_y: i32, rng: &mut rand::rngs::StdRng) -> String {
+    fn generate_terrain_type(
+        &self,
+        world_x: i32,
+        world_y: i32,
+        rng: &mut rand::rngs::StdRng,
+    ) -> String {
         // Circular island generation with clean beach edges
         let distance_from_center = ((world_x * world_x + world_y * world_y) as f32).sqrt();
 
         // Main island parameters
         let island_radius = 35.0; // Main island radius
-        let beach_width = 4.0;    // Beach width around island
+        let beach_width = 4.0; // Beach width around island
         let shallow_water_width = 6.0; // Shallow water zone
 
         // Create circular island with reduced irregularity for more consistency
@@ -255,7 +268,9 @@ impl WorldGenerator {
         // Add small random variation for texture
         let texture_noise = (world_x as f32 * 0.1).sin() * (world_y as f32 * 0.1).cos() * 0.5 + 0.5;
 
-        if distance_from_center > effective_island_radius + effective_beach_width + shallow_water_width {
+        if distance_from_center
+            > effective_island_radius + effective_beach_width + shallow_water_width
+        {
             // Deep water - outer ocean
             "DeepWater".to_string()
         } else if distance_from_center > effective_island_radius + effective_beach_width {
@@ -287,7 +302,8 @@ impl WorldGenerator {
                 }
             } else {
                 // Outer island area - transition zone
-                let transition_factor = (distance_from_center - inner_radius) / (effective_island_radius - inner_radius);
+                let transition_factor = (distance_from_center - inner_radius)
+                    / (effective_island_radius - inner_radius);
 
                 if rng.gen::<f32>() < transition_factor * 0.3 {
                     // Some sand patches near beach

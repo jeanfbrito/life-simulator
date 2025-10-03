@@ -44,26 +44,36 @@ impl CachedWorld {
     pub fn global_get_chunk(chunk_x: i32, chunk_y: i32) -> Option<Vec<Vec<String>>> {
         let _lock = CACHED_WORLD_LOCK.lock().unwrap();
         unsafe {
-            CACHED_WORLD.as_ref()
+            CACHED_WORLD
+                .as_ref()
                 .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)))
                 .and_then(|layers| layers.get("terrain").cloned())
         }
     }
 
     /// Get all layers from global cached world
-    pub fn global_get_chunk_layers(chunk_x: i32, chunk_y: i32) -> Option<HashMap<String, Vec<Vec<String>>>> {
+    pub fn global_get_chunk_layers(
+        chunk_x: i32,
+        chunk_y: i32,
+    ) -> Option<HashMap<String, Vec<Vec<String>>>> {
         let _lock = CACHED_WORLD_LOCK.lock().unwrap();
         unsafe {
-            CACHED_WORLD.as_ref()
+            CACHED_WORLD
+                .as_ref()
                 .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)).cloned())
         }
     }
 
     /// Get specific layer from global cached world
-    pub fn global_get_chunk_layer(chunk_x: i32, chunk_y: i32, layer_name: &str) -> Option<Vec<Vec<String>>> {
+    pub fn global_get_chunk_layer(
+        chunk_x: i32,
+        chunk_y: i32,
+        layer_name: &str,
+    ) -> Option<Vec<Vec<String>>> {
         let _lock = CACHED_WORLD_LOCK.lock().unwrap();
         unsafe {
-            CACHED_WORLD.as_ref()
+            CACHED_WORLD
+                .as_ref()
                 .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)))
                 .and_then(|layers| layers.get(layer_name).cloned())
         }
@@ -94,7 +104,9 @@ impl CachedWorld {
 
     /// Load world from serialized data
     pub fn from_serialized(serialized_world: crate::serialization::SerializedWorld) -> Self {
-        let chunks = crate::serialization::WorldSerializer::chunks_to_multi_layer_hashmap(serialized_world.chunks);
+        let chunks = crate::serialization::WorldSerializer::chunks_to_multi_layer_hashmap(
+            serialized_world.chunks,
+        );
         Self {
             name: serialized_world.name,
             seed: serialized_world.seed,
@@ -105,33 +117,57 @@ impl CachedWorld {
 
     /// Get terrain data for a specific chunk (for backward compatibility)
     pub fn get_chunk(&self, chunk_x: i32, chunk_y: i32) -> Option<Vec<Vec<String>>> {
-        self.chunks.get(&(chunk_x, chunk_y))
+        self.chunks
+            .get(&(chunk_x, chunk_y))
             .and_then(|layers| layers.get("terrain").cloned())
     }
 
     /// Get all layers for a specific chunk
-    pub fn get_chunk_layers(&self, chunk_x: i32, chunk_y: i32) -> Option<HashMap<String, Vec<Vec<String>>>> {
+    pub fn get_chunk_layers(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) -> Option<HashMap<String, Vec<Vec<String>>>> {
         self.chunks.get(&(chunk_x, chunk_y)).cloned()
     }
 
     /// Get specific layer for a specific chunk
-    pub fn get_chunk_layer(&self, chunk_x: i32, chunk_y: i32, layer_name: &str) -> Option<Vec<Vec<String>>> {
-        self.chunks.get(&(chunk_x, chunk_y))
+    pub fn get_chunk_layer(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+        layer_name: &str,
+    ) -> Option<Vec<Vec<String>>> {
+        self.chunks
+            .get(&(chunk_x, chunk_y))
             .and_then(|layers| layers.get(layer_name).cloned())
     }
 
     /// Set all layers for a specific chunk
-    pub fn set_chunk_layers(&mut self, chunk_x: i32, chunk_y: i32, layers: HashMap<String, Vec<Vec<String>>>) {
+    pub fn set_chunk_layers(
+        &mut self,
+        chunk_x: i32,
+        chunk_y: i32,
+        layers: HashMap<String, Vec<Vec<String>>>,
+    ) {
         self.chunks.insert((chunk_x, chunk_y), layers);
     }
 
     /// Set specific layer for a specific chunk
-    pub fn set_chunk_layer(&mut self, chunk_x: i32, chunk_y: i32, layer_name: String, data: Vec<Vec<String>>) {
-        let chunk_layers = self.chunks.entry((chunk_x, chunk_y)).or_insert_with(HashMap::new);
+    pub fn set_chunk_layer(
+        &mut self,
+        chunk_x: i32,
+        chunk_y: i32,
+        layer_name: String,
+        data: Vec<Vec<String>>,
+    ) {
+        let chunk_layers = self
+            .chunks
+            .entry((chunk_x, chunk_y))
+            .or_insert_with(HashMap::new);
         chunk_layers.insert(layer_name, data);
     }
 
-  
     /// Clear all cached chunks
     pub fn clear(&mut self) {
         self.chunks.clear();
@@ -139,10 +175,15 @@ impl CachedWorld {
     }
 
     /// Load chunks from serialized world
-    pub fn load_from_serialized(&mut self, serialized_world: crate::serialization::SerializedWorld) {
+    pub fn load_from_serialized(
+        &mut self,
+        serialized_world: crate::serialization::SerializedWorld,
+    ) {
         self.name = serialized_world.name;
         self.seed = serialized_world.seed;
-        self.chunks = crate::serialization::WorldSerializer::chunks_to_multi_layer_hashmap(serialized_world.chunks);
+        self.chunks = crate::serialization::WorldSerializer::chunks_to_multi_layer_hashmap(
+            serialized_world.chunks,
+        );
         self.is_loaded = true;
     }
 
@@ -171,8 +212,17 @@ impl CachedWorld {
         // Convert to JSON string
         let mut json_parts = Vec::new();
         for (key, data) in chunk_data {
-            let data_str = data.iter()
-                .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
+            let data_str = data
+                .iter()
+                .map(|row| {
+                    format!(
+                        "[{}]",
+                        row.iter()
+                            .map(|tile| format!("\"{}\"", tile))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ");
             json_parts.push(format!("\"{}\": [{}]", key, data_str));
@@ -194,8 +244,17 @@ impl CachedWorld {
                 // Convert each layer to JSON
                 let mut layer_json_parts = Vec::new();
                 for (layer_name, layer_data) in layers {
-                    let data_str = layer_data.iter()
-                        .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
+                    let data_str = layer_data
+                        .iter()
+                        .map(|row| {
+                            format!(
+                                "[{}]",
+                                row.iter()
+                                    .map(|tile| format!("\"{}\"", tile))
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        })
                         .collect::<Vec<_>>()
                         .join(", ");
                     layer_json_parts.push(format!("\"{}\": [{}]", layer_name, data_str));
@@ -282,7 +341,10 @@ pub fn handle_cached_world_updates(
     mut cached_world: ResMut<CachedWorld>,
 ) {
     for (entity, request) in update_requests.iter() {
-        info!("Updating cached world to: {}", request.serialized_world.name);
+        info!(
+            "Updating cached world to: {}",
+            request.serialized_world.name
+        );
 
         cached_world.load_from_serialized(request.serialized_world.clone());
 

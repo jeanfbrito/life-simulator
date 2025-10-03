@@ -16,11 +16,11 @@ impl SimulationTick {
     pub fn get(&self) -> u64 {
         self.0
     }
-    
+
     pub fn increment(&mut self) {
         self.0 += 1;
     }
-    
+
     pub fn set(&mut self, tick: u64) {
         self.0 = tick;
     }
@@ -46,23 +46,23 @@ impl SimulationSpeed {
     pub fn set_speed(&mut self, multiplier: f32) {
         self.multiplier = multiplier.max(0.1).min(10.0); // Clamp to reasonable range
     }
-    
+
     pub fn pause(&mut self) {
         self.paused = true;
     }
-    
+
     pub fn resume(&mut self) {
         self.paused = false;
     }
-    
+
     pub fn toggle_pause(&mut self) {
         self.paused = !self.paused;
     }
-    
+
     pub fn is_paused(&self) -> bool {
         self.paused
     }
-    
+
     pub fn effective_tps(&self, base_tps: f64) -> f64 {
         if self.paused {
             0.0
@@ -80,12 +80,9 @@ pub struct SimulationState {
 
 impl Default for SimulationState {
     fn default() -> Self {
-        Self {
-            should_tick: false,
-        }
+        Self { should_tick: false }
     }
 }
-
 
 /// Performance metrics for tick monitoring
 #[derive(Resource)]
@@ -162,33 +159,33 @@ impl TickMetrics {
     pub fn start_tick(&mut self) {
         self.current_tick_start = Some(Instant::now());
     }
-    
+
     /// End timing current tick and record duration
     pub fn end_tick(&mut self) {
         if let Some(start) = self.current_tick_start {
             let duration = start.elapsed();
             self.tick_durations.push_back(duration);
-            
+
             // Keep only last N samples
             while self.tick_durations.len() > self.max_samples {
                 self.tick_durations.pop_front();
             }
-            
+
             self.last_tick_start = Some(start);
             self.current_tick_start = None;
         }
     }
-    
+
     /// Get average tick duration over last N ticks
     pub fn average_duration(&self) -> Duration {
         if self.tick_durations.is_empty() {
             return Duration::ZERO;
         }
-        
+
         let total: Duration = self.tick_durations.iter().sum();
         total / self.tick_durations.len() as u32
     }
-    
+
     /// Get actual TPS based on measured tick durations
     pub fn actual_tps(&self) -> f64 {
         let avg = self.average_duration();
@@ -198,17 +195,17 @@ impl TickMetrics {
             1.0 / avg.as_secs_f64()
         }
     }
-    
+
     /// Get minimum tick duration
     pub fn min_duration(&self) -> Option<Duration> {
         self.tick_durations.iter().min().copied()
     }
-    
+
     /// Get maximum tick duration
     pub fn max_duration(&self) -> Option<Duration> {
         self.tick_durations.iter().max().copied()
     }
-    
+
     /// Get last tick duration
     pub fn last_duration(&self) -> Option<Duration> {
         self.tick_durations.back().copied()
@@ -221,16 +218,13 @@ impl TickMetrics {
 
 /// Core system that increments the tick counter
 /// NOTE: This is no longer used - tick incrementing happens in run_simulation_ticks
-pub fn increment_tick_counter(
-    mut tick: ResMut<SimulationTick>,
-    mut metrics: ResMut<TickMetrics>,
-) {
+pub fn increment_tick_counter(mut tick: ResMut<SimulationTick>, mut metrics: ResMut<TickMetrics>) {
     // End previous tick timing
     metrics.end_tick();
-    
+
     // Start new tick timing
     metrics.start_tick();
-    
+
     // Increment counter
     tick.increment();
 }
@@ -240,23 +234,53 @@ pub fn log_tick_metrics(
     tick: Res<SimulationTick>,
     metrics: Res<TickMetrics>,
     speed: Res<SimulationSpeed>,
+    accumulator: Res<TickAccumulator>,
 ) {
     let avg_duration = metrics.average_duration();
     let actual_tps = metrics.actual_tps();
     let min = metrics.min_duration().unwrap_or(Duration::ZERO);
     let max = metrics.max_duration().unwrap_or(Duration::ZERO);
-    
+    let last = metrics.last_duration().unwrap_or(Duration::ZERO);
+
     info!("╔══════════════════════════════════════════╗");
     info!("║       TICK METRICS - Tick {}           ║", tick.get());
     info!("╠══════════════════════════════════════════╣");
     info!("║ Actual TPS:      {:>6.1}                ║", actual_tps);
-    info!("║ Speed:           {:>5.1}x                ║", speed.multiplier);
-    info!("║ Status:          {:>9}             ║", if speed.is_paused() { "PAUSED" } else { "RUNNING" });
+    info!(
+        "║ Speed:           {:>5.1}x                ║",
+        speed.multiplier
+    );
+    info!(
+        "║ Status:          {:>9}             ║",
+        if speed.is_paused() {
+            "PAUSED"
+        } else {
+            "RUNNING"
+        }
+    );
     info!("║                                          ║");
     info!("║ Tick Duration:                           ║");
-    info!("║   Average:       {:>6.2}ms              ║", avg_duration.as_secs_f64() * 1000.0);
-    info!("║   Min:           {:>6.2}ms              ║", min.as_secs_f64() * 1000.0);
-    info!("║   Max:           {:>6.2}ms              ║", max.as_secs_f64() * 1000.0);
+    info!(
+        "║   Average:       {:>6.2}ms              ║",
+        avg_duration.as_secs_f64() * 1000.0
+    );
+    info!(
+        "║   Min:           {:>6.2}ms              ║",
+        min.as_secs_f64() * 1000.0
+    );
+    info!(
+        "║   Max:           {:>6.2}ms              ║",
+        max.as_secs_f64() * 1000.0
+    );
+    info!(
+        "║   Last:          {:>6.2}ms              ║",
+        last.as_secs_f64() * 1000.0
+    );
+    info!("║                                          ║");
+    info!(
+        "║ Pending ticks: {:>3}  Accumulated: {:>6.3} ║",
+        accumulator.pending_ticks, accumulator.accumulated
+    );
     info!("╚══════════════════════════════════════════╝");
 }
 
@@ -265,7 +289,7 @@ pub fn log_tick_metrics(
 // ============================================================================
 
 /// Run condition: Execute system every N ticks
-/// 
+///
 /// Usage:
 /// ```rust
 /// .add_systems(FixedUpdate, my_system.run_if(every_n_ticks(10)))
@@ -320,7 +344,7 @@ impl UpdateFrequency {
             UpdateFrequency::VeryRare => 1000,
         }
     }
-    
+
     pub fn should_run(&self, tick: u64) -> bool {
         tick % self.ticks() == 0
     }
@@ -333,71 +357,71 @@ impl UpdateFrequency {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_tick_increment() {
         let mut tick = SimulationTick::default();
         assert_eq!(tick.get(), 0);
-        
+
         tick.increment();
         assert_eq!(tick.get(), 1);
-        
+
         tick.increment();
         assert_eq!(tick.get(), 2);
     }
-    
+
     #[test]
     fn test_speed_control() {
         let mut speed = SimulationSpeed::default();
         assert_eq!(speed.multiplier, 1.0);
         assert!(!speed.is_paused());
-        
+
         speed.set_speed(2.0);
         assert_eq!(speed.multiplier, 2.0);
-        
+
         speed.pause();
         assert!(speed.is_paused());
-        
+
         speed.resume();
         assert!(!speed.is_paused());
-        
+
         speed.toggle_pause();
         assert!(speed.is_paused());
     }
-    
+
     #[test]
     fn test_update_frequency() {
         let every = UpdateFrequency::EveryTick;
         assert!(every.should_run(0));
         assert!(every.should_run(1));
         assert!(every.should_run(100));
-        
+
         let every_5 = UpdateFrequency::EveryNTicks(5);
         assert!(every_5.should_run(0));
         assert!(!every_5.should_run(1));
         assert!(every_5.should_run(5));
         assert!(every_5.should_run(10));
         assert!(!every_5.should_run(11));
-        
+
         let rare = UpdateFrequency::Rare;
         assert!(rare.should_run(0));
         assert!(!rare.should_run(100));
         assert!(rare.should_run(250));
         assert!(rare.should_run(500));
     }
-    
+
     #[test]
     fn test_tick_metrics() {
         let mut metrics = TickMetrics::default();
-        
+
         metrics.start_tick();
         std::thread::sleep(Duration::from_millis(1));
         metrics.end_tick();
-        
+
         let last = metrics.last_duration();
         assert!(last.is_some());
         assert!(last.unwrap() >= Duration::from_millis(1));
-        
+
         let avg = metrics.average_duration();
         assert!(avg > Duration::ZERO);
     }

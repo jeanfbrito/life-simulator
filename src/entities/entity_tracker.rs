@@ -1,11 +1,17 @@
 /// Entity tracker for web API access
 /// Maintains a global list of entity positions that can be queried by the web server
 use bevy::prelude::*;
-use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
-use crate::entities::{Creature, movement::TilePosition, stats::{Hunger, Thirst, Energy, Health}, CurrentAction};
-use crate::entities::reproduction::{Sex, Age, WellFedStreak, ReproductionCooldown, Pregnancy, ReproductionConfig};
+use crate::entities::reproduction::{
+    Age, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
+};
+use crate::entities::{
+    movement::TilePosition,
+    stats::{Energy, Health, Hunger, Thirst},
+    Creature, CurrentAction,
+};
 
 // ============================================================================
 // GLOBAL STATE
@@ -25,7 +31,7 @@ pub struct EntityData {
     pub current_action: Option<String>,
     pub sex: Option<String>,
     pub is_juvenile: Option<bool>,
-    // Reproduction diagnostics (primarily for rabbits)
+    // Reproduction diagnostics for entities with reproduction components
     pub well_fed_streak: Option<u32>,
     pub well_fed_required_ticks: Option<u32>,
     pub eligible_to_mate: Option<bool>,
@@ -50,33 +56,38 @@ impl EntityTracker {
             ENTITY_TRACKER = Some(Arc::new(RwLock::new(EntityTracker::default())));
         }
     }
-    
+
     /// Get a clone of the global tracker
     pub fn global() -> Option<Arc<RwLock<EntityTracker>>> {
         unsafe { ENTITY_TRACKER.as_ref().cloned() }
     }
-    
+
     /// Update entity data
     pub fn update(&mut self, entity_id: u32, data: EntityData) {
         self.entities.insert(entity_id, data);
     }
-    
+
     /// Remove entity
     pub fn remove(&mut self, entity_id: u32) {
         self.entities.remove(&entity_id);
     }
-    
+
     /// Get all entities as JSON
     pub fn to_json(&self) -> String {
-        let entities_json: Vec<String> = self.entities.values()
+        let entities_json: Vec<String> = self
+            .entities
+            .values()
             .map(|e| {
                 let mut parts = vec![
                     format!(r#""id": {}"#, e.entity_id),
                     format!(r#""name": "{}""#, e.name),
                     format!(r#""entity_type": "{}""#, e.species),
-                    format!(r#""position": {{"x": {}, "y": {}}}"#, e.position.x, e.position.y),
+                    format!(
+                        r#""position": {{"x": {}, "y": {}}}"#,
+                        e.position.x, e.position.y
+                    ),
                 ];
-                
+
                 // Add stats if present
                 if let Some(hunger) = e.hunger {
                     parts.push(format!(r#""hunger": {:.1}"#, hunger));
@@ -99,21 +110,35 @@ impl EntityTracker {
                 if let Some(is_juv) = e.is_juvenile {
                     parts.push(format!(r#""is_juvenile": {}"#, is_juv));
                 }
-                if let Some(v) = e.well_fed_streak { parts.push(format!(r#""well_fed_streak": {}"#, v)); }
-                if let Some(v) = e.well_fed_required_ticks { parts.push(format!(r#""well_fed_required_ticks": {}"#, v)); }
-                if let Some(v) = e.eligible_to_mate { parts.push(format!(r#""eligible_to_mate": {}"#, v)); }
-                if let Some(v) = e.pregnancy_remaining_ticks { parts.push(format!(r#""pregnancy_remaining_ticks": {}"#, v)); }
-                if let Some(v) = e.gestation_total_ticks { parts.push(format!(r#""gestation_total_ticks": {}"#, v)); }
-                if let Some(v) = e.reproduction_cooldown_ticks { parts.push(format!(r#""reproduction_cooldown_ticks": {}"#, v)); }
-                if let Some(v) = e.ticks_to_adult { parts.push(format!(r#""ticks_to_adult": {}"#, v)); }
-                
+                if let Some(v) = e.well_fed_streak {
+                    parts.push(format!(r#""well_fed_streak": {}"#, v));
+                }
+                if let Some(v) = e.well_fed_required_ticks {
+                    parts.push(format!(r#""well_fed_required_ticks": {}"#, v));
+                }
+                if let Some(v) = e.eligible_to_mate {
+                    parts.push(format!(r#""eligible_to_mate": {}"#, v));
+                }
+                if let Some(v) = e.pregnancy_remaining_ticks {
+                    parts.push(format!(r#""pregnancy_remaining_ticks": {}"#, v));
+                }
+                if let Some(v) = e.gestation_total_ticks {
+                    parts.push(format!(r#""gestation_total_ticks": {}"#, v));
+                }
+                if let Some(v) = e.reproduction_cooldown_ticks {
+                    parts.push(format!(r#""reproduction_cooldown_ticks": {}"#, v));
+                }
+                if let Some(v) = e.ticks_to_adult {
+                    parts.push(format!(r#""ticks_to_adult": {}"#, v));
+                }
+
                 format!(r#"{{{}}}"#, parts.join(", "))
             })
             .collect();
-        
+
         format!(r#"{{"entities": [{}]}}"#, entities_json.join(","))
     }
-    
+
     /// Get entity count
     pub fn count(&self) -> usize {
         self.entities.len()
@@ -141,16 +166,35 @@ pub fn sync_entities_to_tracker(
         Option<&WellFedStreak>,
         Option<&ReproductionCooldown>,
         Option<&Pregnancy>,
+        Option<&ReproductionConfig>,
     )>,
-rabbit_cfg: Option<Res<ReproductionConfig>>,
 ) {
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {
             // Clear and rebuild (simple approach)
             tracker.entities.clear();
-            
-            for (entity, creature, position, hunger, thirst, energy, health, current_action, sex, age, wellfed, cooldown, pregnancy) in query.iter() {
-                let sex_str = sex.map(|s| match s { Sex::Male => "male".to_string(), Sex::Female => "female".to_string() });
+
+            for (
+                entity,
+                creature,
+                position,
+                hunger,
+                thirst,
+                energy,
+                health,
+                current_action,
+                sex,
+                age,
+                wellfed,
+                cooldown,
+                pregnancy,
+                config,
+            ) in query.iter()
+            {
+                let sex_str = sex.map(|s| match s {
+                    Sex::Male => "male".to_string(),
+                    Sex::Female => "female".to_string(),
+                });
                 let is_juvenile = age.map(|a| !a.is_adult());
 
                 // Defaults
@@ -162,40 +206,43 @@ rabbit_cfg: Option<Res<ReproductionConfig>>,
                 let mut reproduction_cooldown_ticks = None;
                 let mut ticks_to_adult = None;
 
-                // Provide reproduction diagnostics for rabbits
-                if creature.species == "Rabbit" {
-                    if let Some(cfg) = rabbit_cfg.as_deref() {
-                        // Well-fed
-                        if let Some(wf) = wellfed { 
-                            well_fed_streak = Some(wf.ticks);
-                            well_fed_required_ticks = Some(cfg.well_fed_required_ticks);
-                        }
-                        // Cooldown
-                        if let Some(cd) = cooldown { reproduction_cooldown_ticks = Some(cd.remaining_ticks); }
-                        // Pregnancy
-                        if let Some(preg) = pregnancy { 
-                            pregnancy_remaining_ticks = Some(preg.remaining_ticks);
-                            gestation_total_ticks = Some(cfg.gestation_ticks);
-                        }
-                        // Maturity
-                        if let Some(a) = age {
-                            if !a.is_adult() {
-                                let remain = a.mature_at_ticks.saturating_sub(a.ticks_alive as u32);
-                                ticks_to_adult = Some(remain);
-                            }
-                        }
-                        // Eligibility (only if we have all needed values and not pregnant)
-                        if let (Some(a), Some(cd), Some(en), Some(hp), Some(wf), Some(_sx)) = (age, cooldown, energy, health, wellfed, sex) {
-                            let has_preg = pregnancy.is_some();
-                            let basic = a.is_adult()
-                                && cd.remaining_ticks == 0
-                                && en.0.normalized() >= cfg.min_energy_norm
-                                && hp.0.normalized() >= cfg.min_health_norm
-                                && wf.ticks >= cfg.well_fed_required_ticks;
-                            let eligible = basic && !has_preg;
-                            eligible_to_mate = Some(eligible);
-                        }
+                // Reproduction diagnostics (species-agnostic)
+                if let Some(wf) = wellfed {
+                    well_fed_streak = Some(wf.ticks);
+                    if let Some(cfg) = config {
+                        well_fed_required_ticks = Some(cfg.well_fed_required_ticks);
                     }
+                }
+
+                if let Some(cd) = cooldown {
+                    reproduction_cooldown_ticks = Some(cd.remaining_ticks);
+                }
+
+                if let Some(preg) = pregnancy {
+                    pregnancy_remaining_ticks = Some(preg.remaining_ticks);
+                    if let Some(cfg) = config {
+                        gestation_total_ticks = Some(cfg.gestation_ticks);
+                    }
+                }
+
+                if let Some(a) = age {
+                    if !a.is_adult() {
+                        let remain = a.mature_at_ticks.saturating_sub(a.ticks_alive as u32);
+                        ticks_to_adult = Some(remain);
+                    }
+                }
+
+                if let (Some(a), Some(cd), Some(en), Some(hp), Some(wf), Some(_sx), Some(cfg)) =
+                    (age, cooldown, energy, health, wellfed, sex, config)
+                {
+                    let has_preg = pregnancy.is_some();
+                    let eligible = a.is_adult()
+                        && cd.remaining_ticks == 0
+                        && en.0.normalized() >= cfg.min_energy_norm
+                        && hp.0.normalized() >= cfg.min_health_norm
+                        && wf.ticks >= cfg.well_fed_required_ticks
+                        && !has_preg;
+                    eligible_to_mate = Some(eligible);
                 }
 
                 let data = EntityData {
@@ -247,11 +294,11 @@ pub fn get_entities_json() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_entity_tracker() {
         let mut tracker = EntityTracker::default();
-        
+
         let data = EntityData {
             entity_id: 1,
             name: "Test".to_string(),
@@ -263,30 +310,33 @@ mod tests {
             health: Some(100.0),
             current_action: None,
         };
-        
+
         tracker.update(1, data);
         assert_eq!(tracker.count(), 1);
-        
+
         tracker.remove(1);
         assert_eq!(tracker.count(), 0);
     }
-    
+
     #[test]
     fn test_to_json() {
         let mut tracker = EntityTracker::default();
-        
-        tracker.update(1, EntityData {
-            entity_id: 1,
-            name: "Bob".to_string(),
-            species: "Human".to_string(),
-            position: IVec2::new(0, 0),
-            hunger: Some(50.0),
-            thirst: Some(30.0),
-            energy: Some(80.0),
-            health: Some(100.0),
-            current_action: None,
-        });
-        
+
+        tracker.update(
+            1,
+            EntityData {
+                entity_id: 1,
+                name: "Bob".to_string(),
+                species: "Human".to_string(),
+                position: IVec2::new(0, 0),
+                hunger: Some(50.0),
+                thirst: Some(30.0),
+                energy: Some(80.0),
+                health: Some(100.0),
+                current_action: None,
+            },
+        );
+
         let json = tracker.to_json();
         assert!(json.contains("\"name\": \"Bob\""));
         assert!(json.contains("\"x\": 0"));

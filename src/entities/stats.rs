@@ -1,5 +1,5 @@
 /// Entity statistics system for Tick-Queued Utility AI (TQUAI)
-/// 
+///
 /// This module provides a flexible, component-based stats system where:
 /// - Each stat has min/max bounds and current value
 /// - Stats decay/regenerate at configurable rates per tick
@@ -228,44 +228,57 @@ pub fn tick_stats_system(
         // Update each stat if present
         if let Some(mut h) = hunger {
             h.0.tick();
-            
+
             // Log critical states for debugging
             if h.0.is_critical() && tick.0 % 10 == 0 {
-                debug!("Entity {:?} hunger CRITICAL: {:.1}%", entity, h.0.percentage());
+                debug!(
+                    "Entity {:?} hunger CRITICAL: {:.1}%",
+                    entity,
+                    h.0.percentage()
+                );
             }
         }
 
         if let Some(mut t) = thirst {
             t.0.tick();
-            
+
             if t.0.is_critical() && tick.0 % 10 == 0 {
-                debug!("Entity {:?} thirst CRITICAL: {:.1}%", entity, t.0.percentage());
+                debug!(
+                    "Entity {:?} thirst CRITICAL: {:.1}%",
+                    entity,
+                    t.0.percentage()
+                );
             }
         }
 
         if let Some(mut e) = energy {
             e.0.tick();
-            
+
             if e.0.is_critical() && tick.0 % 10 == 0 {
-                debug!("Entity {:?} energy CRITICAL: {:.1}%", entity, e.0.percentage());
+                debug!(
+                    "Entity {:?} energy CRITICAL: {:.1}%",
+                    entity,
+                    e.0.percentage()
+                );
             }
         }
 
         if let Some(mut h) = health {
             h.0.tick();
-            
+
             if h.0.is_critical() && tick.0 % 10 == 0 {
-                warn!("Entity {:?} health CRITICAL: {:.1}%", entity, h.0.percentage());
+                warn!(
+                    "Entity {:?} health CRITICAL: {:.1}%",
+                    entity,
+                    h.0.percentage()
+                );
             }
         }
     }
 }
 
 /// Handle death when health reaches zero
-pub fn death_system(
-    mut commands: Commands,
-    query: Query<(Entity, &Health)>,
-) {
+pub fn death_system(mut commands: Commands, query: Query<(Entity, &Health)>) {
     for (entity, health) in query.iter() {
         if health.is_dead() {
             info!("Entity {:?} has died!", entity);
@@ -284,7 +297,7 @@ pub fn death_system(
 /// Returns 0.0-1.0 where higher = more urgent
 pub fn utility_eat(hunger: &Hunger) -> f32 {
     let base = hunger.urgency();
-    
+
     // Exponential urgency when critical
     if hunger.0.is_critical() {
         base * base // Square it for extra urgency
@@ -296,7 +309,7 @@ pub fn utility_eat(hunger: &Hunger) -> f32 {
 /// Calculate utility score for "drink water" action
 pub fn utility_drink(thirst: &Thirst) -> f32 {
     let base = thirst.urgency();
-    
+
     // Thirst is more urgent than hunger
     if thirst.0.is_critical() {
         (base * base * 1.2).min(1.0)
@@ -313,7 +326,7 @@ pub fn utility_rest(energy: &Energy) -> f32 {
 /// Calculate utility score for "seek healing" action
 pub fn utility_heal(health: &Health) -> f32 {
     let base = health.urgency();
-    
+
     // Health is critical priority
     if health.0.is_critical() {
         1.0 // Max priority
@@ -344,7 +357,9 @@ pub fn get_most_urgent_need(
         needs.push(("health".to_string(), utility_heal(h)));
     }
 
-    needs.into_iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+    needs
+        .into_iter()
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
 }
 
 // ============================================================================
@@ -358,10 +373,10 @@ mod tests {
     #[test]
     fn test_stat_bounds() {
         let mut stat = Stat::new(50.0, 0.0, 100.0, 0.0);
-        
+
         stat.change(100.0);
         assert_eq!(stat.current, 100.0); // Clamped to max
-        
+
         stat.change(-200.0);
         assert_eq!(stat.current, 0.0); // Clamped to min
     }
@@ -370,10 +385,10 @@ mod tests {
     fn test_stat_normalized() {
         let stat = Stat::new(50.0, 0.0, 100.0, 0.0);
         assert_eq!(stat.normalized(), 0.5);
-        
+
         let stat = Stat::new(0.0, 0.0, 100.0, 0.0);
         assert_eq!(stat.normalized(), 0.0);
-        
+
         let stat = Stat::new(100.0, 0.0, 100.0, 0.0);
         assert_eq!(stat.normalized(), 1.0);
     }
@@ -382,12 +397,12 @@ mod tests {
     fn test_hunger_decay() {
         let mut hunger = Hunger::new();
         assert_eq!(hunger.0.current, 0.0);
-        
+
         // Simulate 100 ticks
         for _ in 0..100 {
             hunger.0.tick();
         }
-        
+
         // Use approximate comparison due to floating point precision
         assert!((hunger.0.current - 10.0).abs() < 0.001); // 0.1 per tick * 100
     }
@@ -396,7 +411,7 @@ mod tests {
     fn test_utility_calculations() {
         let hunger = Hunger::new();
         assert!(utility_eat(&hunger) < 0.1); // Not hungry yet
-        
+
         let mut critical_hunger = Hunger::new();
         critical_hunger.0.set(95.0);
         assert!(utility_eat(&critical_hunger) > 0.9); // Very urgent

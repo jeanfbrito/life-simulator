@@ -106,7 +106,9 @@ impl TerrainQuerySystem {
                 let x = center_x + dx;
                 let y = center_y + dy;
 
-                if let Some(terrain) = Self::get_terrain_at_position(chunk_manager, x, y, chunks_query) {
+                if let Some(terrain) =
+                    Self::get_terrain_at_position(chunk_manager, x, y, chunks_query)
+                {
                     results.push(terrain);
                 }
             }
@@ -138,7 +140,8 @@ impl TerrainQuerySystem {
                 continue;
             }
 
-            if let Some(terrain) = Self::get_terrain_at_position(chunk_manager, x, y, chunks_query) {
+            if let Some(terrain) = Self::get_terrain_at_position(chunk_manager, x, y, chunks_query)
+            {
                 if terrain.is_walkable {
                     walkable_positions.push((x, y));
 
@@ -181,7 +184,16 @@ impl TerrainQuerySystem {
             let current_node = nodes[&current_pos].clone();
 
             // Check neighbors
-            for (dx, dy) in &[(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)] {
+            for (dx, dy) in &[
+                (-1, 0),
+                (1, 0),
+                (0, -1),
+                (0, 1),
+                (-1, -1),
+                (-1, 1),
+                (1, -1),
+                (1, 1),
+            ] {
                 let neighbor_pos = (current_pos.0 + dx, current_pos.1 + dy);
 
                 if closed_set.contains(&neighbor_pos) {
@@ -220,7 +232,10 @@ impl TerrainQuerySystem {
                         neighbor_node.f_cost = neighbor_node.g_cost + neighbor_node.h_cost;
                         neighbor_node.parent = Some(current_pos);
 
-                        open_set.push(std::cmp::Reverse((neighbor_node.f_cost.to_bits(), neighbor_pos)));
+                        open_set.push(std::cmp::Reverse((
+                            neighbor_node.f_cost.to_bits(),
+                            neighbor_pos,
+                        )));
                     }
                 }
             }
@@ -273,7 +288,9 @@ impl TerrainQuerySystem {
                 let x = center_x + dx;
                 let y = center_y + dy;
 
-                if let Some(terrain) = Self::get_terrain_at_position(chunk_manager, x, y, chunks_query) {
+                if let Some(terrain) =
+                    Self::get_terrain_at_position(chunk_manager, x, y, chunks_query)
+                {
                     if let Some(terrain_type) = terrain.terrain_type {
                         *terrain_counts.entry(terrain_type).or_insert(0) += 1;
                     }
@@ -325,10 +342,7 @@ pub struct AreaAnalysis {
     pub resource_potentials: std::collections::HashMap<String, i32>,
 }
 
-pub fn terrain_query_api_system(
-    _chunk_manager: Res<ChunkManager>,
-    _chunks_query: Query<&Chunk>,
-) {
+pub fn terrain_query_api_system(_chunk_manager: Res<ChunkManager>, _chunks_query: Query<&Chunk>) {
     // This system can be used to handle terrain queries from other systems
     // or external requests via WebSocket
 }

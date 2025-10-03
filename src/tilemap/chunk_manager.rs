@@ -127,14 +127,16 @@ impl ChunkManager {
             // Insert with priority ordering (high priority first)
             match priority {
                 LoadPriority::High => {
-                    let index = self.load_requests
+                    let index = self
+                        .load_requests
                         .iter()
                         .position(|r| r.priority == LoadPriority::High)
                         .unwrap_or(self.load_requests.len());
                     self.load_requests.insert(index, request);
                 }
                 LoadPriority::Medium => {
-                    let index = self.load_requests
+                    let index = self
+                        .load_requests
                         .iter()
                         .position(|r| r.priority == LoadPriority::Low)
                         .unwrap_or(self.load_requests.len());
@@ -200,7 +202,11 @@ impl ChunkManager {
         self.loaded_chunks.keys().copied().collect()
     }
 
-    pub fn get_chunks_in_radius(&self, center: ChunkCoordinate, radius: i32) -> Vec<ChunkCoordinate> {
+    pub fn get_chunks_in_radius(
+        &self,
+        center: ChunkCoordinate,
+        radius: i32,
+    ) -> Vec<ChunkCoordinate> {
         self.loaded_chunks
             .keys()
             .filter(|coord| coord.distance_to(&center) <= radius)

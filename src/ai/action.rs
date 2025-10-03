@@ -1,14 +1,13 @@
-/// Action system for TQUAI
-/// 
-/// Actions are discrete behaviors that can be queued and executed on ticks.
-/// They can be instant (complete in one tick) or multi-tick (span multiple ticks).
-
-use bevy::prelude::*;
-use crate::entities::stats::{Thirst, Hunger, Energy};
-use crate::entities::{TilePosition, MoveOrder};
+use crate::entities::stats::{Energy, Hunger, Thirst};
+use crate::entities::{MoveOrder, TilePosition};
+use crate::pathfinding::{Path, PathfindingFailed};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
-use crate::pathfinding::{PathfindingFailed, Path};
+/// Action system for TQUAI
+///
+/// Actions are discrete behaviors that can be queued and executed on ticks.
+/// They can be instant (complete in one tick) or multi-tick (span multiple ticks).
+use bevy::prelude::*;
 use rand::Rng;
 
 /// Result of executing an action
@@ -34,11 +33,24 @@ pub struct ActionRequest {
 /// Types of actions available
 #[derive(Debug, Clone, PartialEq)]
 pub enum ActionType {
-    DrinkWater { target_tile: IVec2 },
-    Graze { target_tile: IVec2 },   // Move to grass tile (eating happens via auto-eat system)
-    Rest { duration_ticks: u32 },
-    Follow { target: Entity, stop_distance: i32 },
-    Mate { partner: Entity, meeting_tile: IVec2, duration_ticks: u32 },
+    DrinkWater {
+        target_tile: IVec2,
+    },
+    Graze {
+        target_tile: IVec2,
+    }, // Move to grass tile (eating happens via auto-eat system)
+    Rest {
+        duration_ticks: u32,
+    },
+    Follow {
+        target: Entity,
+        stop_distance: i32,
+    },
+    Mate {
+        partner: Entity,
+        meeting_tile: IVec2,
+        duration_ticks: u32,
+    },
     // Future actions:
     // Hunt { target: Entity },
     // Flee { from: Entity },
@@ -49,11 +61,11 @@ pub enum ActionType {
 pub trait Action: Send + Sync {
     /// Check if action can be executed (preconditions)
     fn can_execute(&self, world: &World, entity: Entity, tick: u64) -> bool;
-    
+
     /// Execute the action for this tick
     /// Returns Success/Failed/InProgress
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult;
-    
+
     /// Get action name for debugging
     fn name(&self) -> &'static str;
 }
@@ -63,10 +75,7 @@ pub trait Action: Send + Sync {
 // =============================================================================
 
 /// Find a walkable tile adjacent to a water tile
-fn find_adjacent_walkable_tile(
-    water_pos: IVec2,
-    world_loader: &WorldLoader,
-) -> Option<IVec2> {
+fn find_adjacent_walkable_tile(water_pos: IVec2, world_loader: &WorldLoader) -> Option<IVec2> {
     // Check all 8 adjacent tiles (including diagonals)
     let adjacent_offsets = [
         IVec2::new(0, 1),
@@ -78,19 +87,25 @@ fn find_adjacent_walkable_tile(
         IVec2::new(-1, 1),
         IVec2::new(-1, -1),
     ];
-    
+
     for offset in adjacent_offsets {
         let check_pos = water_pos + offset;
-        
+
         if let Some(terrain_str) = world_loader.get_terrain_at(check_pos.x, check_pos.y) {
             if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                 // Must be walkable but NOT water
-                if terrain.is_walkable() && !matches!(terrain, TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water) {
+                if terrain.is_walkable()
+                    && !matches!(
+                        terrain,
+                        TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water
+                    )
+                {
                     // CRITICAL: Also check that tile doesn't have resources blocking it
-                    let has_blocking_resource = world_loader.get_resource_at(check_pos.x, check_pos.y)
+                    let has_blocking_resource = world_loader
+                        .get_resource_at(check_pos.x, check_pos.y)
                         .map(|r| !r.is_empty())
                         .unwrap_or(false);
-                    
+
                     if !has_blocking_resource {
                         return Some(check_pos);
                     }
@@ -98,7 +113,7 @@ fn find_adjacent_walkable_tile(
             }
         }
     }
-    
+
     None
 }
 
@@ -107,7 +122,7 @@ fn find_adjacent_walkable_tile(
 // =============================================================================
 
 /// Action: Drink water from a shallow water tile
-/// 
+///
 /// Behavior:
 /// 1. If not at water tile, path to it (multi-tick)
 /// 2. Once at water, drink (instant)
@@ -133,10 +148,12 @@ impl Action for DrinkWaterAction {
         if world.get::<Thirst>(entity).is_none() {
             return false;
         }
-        
+
         // Check target tile is actually water
         if let Some(world_loader) = world.get_resource::<WorldLoader>() {
-            if let Some(terrain_str) = world_loader.get_terrain_at(self.target_tile.x, self.target_tile.y) {
+            if let Some(terrain_str) =
+                world_loader.get_terrain_at(self.target_tile.x, self.target_tile.y)
+            {
                 if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                     matches!(terrain, TerrainType::ShallowWater)
                 } else {
@@ -149,22 +166,21 @@ impl Action for DrinkWaterAction {
             false
         }
     }
-    
+
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         // Get entity position
         let Some(position) = world.get::<TilePosition>(entity).copied() else {
             warn!("Entity {:?} has no position, cannot drink", entity);
             return ActionResult::Failed;
         };
-        
+
         let current_pos = position.tile;
-        
+
         // Check if pathfinding failed for this entity
         if world.get::<PathfindingFailed>(entity).is_some() {
             warn!(
                 "Entity {:?} pathfinding failed to reach water at {:?}, aborting DrinkWater action",
-                entity,
-                self.target_tile
+                entity, self.target_tile
             );
             // Remove the PathfindingFailed component
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
@@ -172,12 +188,12 @@ impl Action for DrinkWaterAction {
             }
             return ActionResult::Failed;
         }
-        
+
         // Check if we're adjacent to the water tile (or standing in it)
         let distance = (current_pos - self.target_tile).abs();
         let is_adjacent = distance.x <= 1 && distance.y <= 1 && (distance.x + distance.y) > 0;
         let is_on_water = current_pos == self.target_tile;
-        
+
         if is_adjacent || is_on_water {
             // We're close enough to drink!
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
@@ -191,7 +207,7 @@ impl Action for DrinkWaterAction {
                     // Reduce thirst by species-specific amount instead of fully restoring
                     let old_thirst_units = thirst.0.current;
                     thirst.0.change(-amount);
-                    
+
                     info!(
                         "💧 Entity {:?} drank water from {:?} while at {:?} on tick {}! Thirst units: {:.1} -> {:.1} (Δ {:.1})",
                         entity,
@@ -202,48 +218,53 @@ impl Action for DrinkWaterAction {
                         thirst.0.current,
                         amount.min(old_thirst_units)
                     );
-                    
+
                     return ActionResult::Success;
                 }
             }
-            
+
             return ActionResult::Failed;
         }
-        
+
         // We need to move closer to the water
         if !self.started {
             // Issue move order on first execution
             // Find a walkable tile adjacent to the water
             if let Some(world_loader) = world.get_resource::<WorldLoader>() {
-                if let Some(adjacent_pos) = find_adjacent_walkable_tile(self.target_tile, world_loader) {
+                if let Some(adjacent_pos) =
+                    find_adjacent_walkable_tile(self.target_tile, world_loader)
+                {
                     info!(
                         "🐇 Entity {:?} starting journey to water at {:?} (will stop at adjacent tile {:?})",
                         entity,
                         self.target_tile,
                         adjacent_pos
                     );
-                    
+
                     if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                         entity_mut.insert(MoveOrder {
                             destination: adjacent_pos,
-                            allow_diagonal: true,  // Enable diagonal pathfinding
+                            allow_diagonal: true, // Enable diagonal pathfinding
                         });
                     }
-                    
+
                     self.started = true;
                 } else {
-                    warn!("No adjacent walkable tile found for water at {:?}", self.target_tile);
+                    warn!(
+                        "No adjacent walkable tile found for water at {:?}",
+                        self.target_tile
+                    );
                     return ActionResult::Failed;
                 }
             } else {
                 return ActionResult::Failed;
             }
         }
-        
+
         // Still traveling
         ActionResult::InProgress
     }
-    
+
     fn name(&self) -> &'static str {
         "DrinkWater"
     }
@@ -254,7 +275,7 @@ impl Action for DrinkWaterAction {
 // =============================================================================
 
 /// Action: Move to a grass tile (for grazing/eating)
-/// 
+///
 /// Behavior:
 /// - Moves to target grass tile
 /// - Once there, auto-eat system will trigger eating
@@ -280,10 +301,12 @@ impl Action for GrazeAction {
         if world.get::<TilePosition>(entity).is_none() {
             return false;
         }
-        
+
         // Check target tile is walkable
         if let Some(world_loader) = world.get_resource::<WorldLoader>() {
-            if let Some(terrain_str) = world_loader.get_terrain_at(self.target_tile.x, self.target_tile.y) {
+            if let Some(terrain_str) =
+                world_loader.get_terrain_at(self.target_tile.x, self.target_tile.y)
+            {
                 if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                     terrain.is_walkable()
                 } else {
@@ -296,16 +319,16 @@ impl Action for GrazeAction {
             false
         }
     }
-    
+
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         // Get entity position
         let Some(position) = world.get::<TilePosition>(entity).copied() else {
             warn!("Entity {:?} has no position, cannot wander", entity);
             return ActionResult::Failed;
         };
-        
+
         let current_pos = position.tile;
-        
+
         // Check if pathfinding failed for this entity
         if world.get::<PathfindingFailed>(entity).is_some() {
             debug!(
@@ -319,40 +342,37 @@ impl Action for GrazeAction {
             }
             return ActionResult::Failed;
         }
-        
+
         // Check if we've arrived at target
         if current_pos == self.target_tile {
             debug!(
                 "🐇 Entity {:?} arrived at grass {:?} on tick {}",
-                entity,
-                self.target_tile,
-                tick
+                entity, self.target_tile, tick
             );
             return ActionResult::Success;
         }
-        
+
         // Start moving if not started yet
         if !self.started {
             debug!(
                 "🐇 Entity {:?} moving to grass at {:?}",
-                entity,
-                self.target_tile
+                entity, self.target_tile
             );
-            
+
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 entity_mut.insert(MoveOrder {
                     destination: self.target_tile,
-                    allow_diagonal: true,  // Enable diagonal pathfinding
+                    allow_diagonal: true, // Enable diagonal pathfinding
                 });
             }
-            
+
             self.started = true;
         }
-        
+
         // Still traveling
         ActionResult::InProgress
     }
-    
+
     fn name(&self) -> &'static str {
         "Graze"
     }
@@ -384,33 +404,53 @@ impl Action for RestAction {
     fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
         world.get::<Energy>(entity).is_some()
     }
-    
+
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         if !self.started {
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 if let Some(mut energy) = entity_mut.get_mut::<Energy>() {
                     energy.set_resting();
-                    info!("😴 Entity {:?} started resting for {} ticks (energy: {:.1}%)", entity, self.duration_ticks, energy.0.percentage());
+                    info!(
+                        "😴 Entity {:?} started resting for {} ticks (energy: {:.1}%)",
+                        entity,
+                        self.duration_ticks,
+                        energy.0.percentage()
+                    );
                 }
             }
             self.started = true;
         }
-        
+
         self.ticks_remaining = self.ticks_remaining.saturating_sub(1);
-        
-        if self.ticks_remaining == 0 {
+
+        let energy_full = if let Some(entity_ref) = world.get_entity(entity).ok() {
+            if let Some(energy) = entity_ref.get::<Energy>() {
+                energy.0.is_full()
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if self.ticks_remaining == 0 || energy_full {
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 if let Some(mut energy) = entity_mut.get_mut::<Energy>() {
                     energy.set_active();
-                    info!("😊 Entity {:?} finished resting on tick {}! Energy: {:.1}%", entity, tick, energy.0.percentage());
+                    info!(
+                        "😊 Entity {:?} finished resting on tick {}! Energy: {:.1}%",
+                        entity,
+                        tick,
+                        energy.0.percentage()
+                    );
                 }
             }
             return ActionResult::Success;
         }
-        
+
         ActionResult::InProgress
     }
-    
+
     fn name(&self) -> &'static str {
         "Rest"
     }
@@ -430,7 +470,11 @@ pub struct FollowAction {
 
 impl FollowAction {
     pub fn new(target: Entity, stop_distance: i32) -> Self {
-        Self { target, stop_distance, started: false }
+        Self {
+            target,
+            stop_distance,
+            started: false,
+        }
     }
 }
 
@@ -443,7 +487,10 @@ impl Action for FollowAction {
     fn execute(&mut self, world: &mut World, entity: Entity, _tick: u64) -> ActionResult {
         // Abort on pathfinding failure for this entity
         if world.get::<PathfindingFailed>(entity).is_some() {
-            warn!("Entity {:?} pathfinding failed while following, aborting Follow action", entity);
+            warn!(
+                "Entity {:?} pathfinding failed while following, aborting Follow action",
+                entity
+            );
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
                 entity_mut.remove::<PathfindingFailed>();
             }
@@ -504,7 +551,13 @@ pub struct MateAction {
 
 impl MateAction {
     pub fn new(partner: Entity, meeting_tile: IVec2, duration_ticks: u32) -> Self {
-        Self { partner, meeting_tile, duration_ticks, started: false, waited: 0 }
+        Self {
+            partner,
+            meeting_tile,
+            duration_ticks,
+            started: false,
+            waited: 0,
+        }
     }
 }
 
@@ -514,33 +567,86 @@ impl Action for MateAction {
     }
 
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
-        use crate::entities::reproduction::ReproductionConfig;
-        use crate::entities::reproduction::{Pregnancy, ReproductionCooldown, Sex, MatingIntent};
-        // Abort if partner missing
-        if world.get::<TilePosition>(self.partner).is_none() {
-            if let Some(mut e) = world.get_entity_mut(entity).ok() { e.remove::<MatingIntent>(); }
+        use crate::entities::reproduction::{
+            MatingIntent, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex,
+        };
+        // Abort if either entity failed to find a path
+        if world.get::<PathfindingFailed>(entity).is_some()
+            || world.get::<PathfindingFailed>(self.partner).is_some()
+        {
+            warn!(
+                "⚠️ MateAction: pathfinding failed for {:?} or {:?}, aborting",
+                entity, self.partner
+            );
+
+            if let Some(mut me) = world.get_entity_mut(entity).ok() {
+                me.remove::<MatingIntent>();
+                me.remove::<PathfindingFailed>();
+            }
+            if let Some(mut partner) = world.get_entity_mut(self.partner).ok() {
+                partner.remove::<MatingIntent>();
+                partner.remove::<PathfindingFailed>();
+            }
+
             return ActionResult::Failed;
         }
 
-        let Some(me_pos) = world.get::<TilePosition>(entity).copied() else { return ActionResult::Failed; };
-        let Some(partner_pos) = world.get::<TilePosition>(self.partner).copied() else { return ActionResult::Failed; };
+        // Abort if partner missing
+        if world.get::<TilePosition>(self.partner).is_none() {
+            if let Some(mut e) = world.get_entity_mut(entity).ok() {
+                e.remove::<MatingIntent>();
+            }
+            return ActionResult::Failed;
+        }
+
+        let Some(me_pos) = world.get::<TilePosition>(entity).copied() else {
+            return ActionResult::Failed;
+        };
+        let Some(partner_pos) = world.get::<TilePosition>(self.partner).copied() else {
+            return ActionResult::Failed;
+        };
 
         // Move towards meeting tile until arrived
         if me_pos.tile != self.meeting_tile {
             if world.get::<Path>(entity).is_none() {
                 if let Some(mut e) = world.get_entity_mut(entity).ok() {
-                    e.insert(MoveOrder { destination: self.meeting_tile, allow_diagonal: true });
+                    e.insert(MoveOrder {
+                        destination: self.meeting_tile,
+                        allow_diagonal: true,
+                    });
                 }
             }
             return ActionResult::InProgress;
         }
 
-        // At meeting tile: wait while partner gets adjacent
-        let diff = (me_pos.tile - partner_pos.tile).abs();
+        // At meeting tile: ensure partner arrives on same or adjacent tile
+        let diff = (self.meeting_tile - partner_pos.tile).abs();
+        let on_spot = diff.x == 0 && diff.y == 0;
         let adjacent = diff.x.max(diff.y) <= 1;
+
         if !adjacent {
-            // Wait for partner to arrive
-            self.waited = 0; // reset if they drift apart
+            // Friend is still approaching
+            if world.get::<Path>(self.partner).is_none() {
+                if let Some(mut partner_mut) = world.get_entity_mut(self.partner).ok() {
+                    partner_mut.insert(MoveOrder {
+                        destination: self.meeting_tile,
+                        allow_diagonal: true,
+                    });
+                }
+            }
+            self.waited = self.waited.saturating_sub(self.waited.min(1));
+            return ActionResult::InProgress;
+        }
+
+        if !on_spot {
+            if world.get::<Path>(self.partner).is_none() {
+                if let Some(mut partner_mut) = world.get_entity_mut(self.partner).ok() {
+                    partner_mut.insert(MoveOrder {
+                        destination: self.meeting_tile,
+                        allow_diagonal: true,
+                    });
+                }
+            }
             return ActionResult::InProgress;
         }
 
@@ -551,38 +657,77 @@ impl Action for MateAction {
         }
 
         // Duration complete: apply pregnancy and cooldowns (female only)
-        if let Some(cfg) = world.get_resource::<ReproductionConfig>().cloned() {
-            // Determine if self is female
-            let me_female = world.get::<Sex>(entity).is_some_and(|s| matches!(s, Sex::Female));
-            let partner_female = world.get::<Sex>(self.partner).is_some_and(|s| matches!(s, Sex::Female));
+        let me_cfg = world.get::<ReproductionConfig>(entity).copied();
+        let partner_cfg = world.get::<ReproductionConfig>(self.partner).copied();
+        let me_female = world
+            .get::<Sex>(entity)
+            .is_some_and(|s| matches!(s, Sex::Female));
+        let partner_female = world
+            .get::<Sex>(self.partner)
+            .is_some_and(|s| matches!(s, Sex::Female));
 
-            if me_female {
+        if me_female {
+            if let Some(cfg) = me_cfg.or(partner_cfg) {
                 if let Some(mut e) = world.get_entity_mut(entity).ok() {
-                    // Start pregnancy
-                    let litter = rand::thread_rng().gen_range(cfg.litter_size_range.0..=cfg.litter_size_range.1);
-                    e.insert(Pregnancy { remaining_ticks: cfg.gestation_ticks, litter_size: litter, father: Some(self.partner) });
-                    e.insert(ReproductionCooldown { remaining_ticks: cfg.postpartum_cooldown_ticks });
-                    info!("🐇❤️ Pregnancy started for {:?} with father {:?} (litter {})", entity, self.partner, litter);
+                    let litter = rand::thread_rng()
+                        .gen_range(cfg.litter_size_range.0..=cfg.litter_size_range.1);
+                    e.insert(Pregnancy {
+                        remaining_ticks: cfg.gestation_ticks,
+                        litter_size: litter,
+                        father: Some(self.partner),
+                    });
+                    e.insert(ReproductionCooldown {
+                        remaining_ticks: cfg.postpartum_cooldown_ticks,
+                    });
+                    info!(
+                        "🐇❤️ Pregnancy started for {:?} with father {:?} (litter {})",
+                        entity, self.partner, litter
+                    );
                 }
                 if let Some(mut p) = world.get_entity_mut(self.partner).ok() {
-                    p.insert(ReproductionCooldown { remaining_ticks: cfg.mating_cooldown_ticks });
+                    let male_cd = partner_cfg
+                        .or(me_cfg)
+                        .map(|cfg| cfg.mating_cooldown_ticks)
+                        .unwrap_or(cfg.mating_cooldown_ticks);
+                    p.insert(ReproductionCooldown {
+                        remaining_ticks: male_cd,
+                    });
                 }
-            } else if partner_female {
-                // If partner is female, ensure cooldown set on self and pregnancy is handled by partner's action
+            } else {
+                warn!(
+                    "⚠️ MateAction: Missing reproduction config for female entity {:?}",
+                    entity
+                );
+            }
+        } else if partner_female {
+            if let Some(cfg) = partner_cfg.or(me_cfg) {
                 if let Some(mut me) = world.get_entity_mut(entity).ok() {
-                    me.insert(ReproductionCooldown { remaining_ticks: cfg.mating_cooldown_ticks });
+                    me.insert(ReproductionCooldown {
+                        remaining_ticks: cfg.mating_cooldown_ticks,
+                    });
                 }
+            } else {
+                warn!(
+                    "⚠️ MateAction: Missing reproduction config for female partner {:?}",
+                    self.partner
+                );
             }
         }
 
         // Clean up intents on both
-        if let Some(mut e) = world.get_entity_mut(entity).ok() { e.remove::<MatingIntent>(); }
-        if let Some(mut p) = world.get_entity_mut(self.partner).ok() { p.remove::<MatingIntent>(); }
+        if let Some(mut e) = world.get_entity_mut(entity).ok() {
+            e.remove::<MatingIntent>();
+        }
+        if let Some(mut p) = world.get_entity_mut(self.partner).ok() {
+            p.remove::<MatingIntent>();
+        }
 
         ActionResult::Success
     }
 
-    fn name(&self) -> &'static str { "Mate" }
+    fn name(&self) -> &'static str {
+        "Mate"
+    }
 }
 
 // =============================================================================
@@ -592,20 +737,17 @@ impl Action for MateAction {
 /// Create an action from an ActionType
 pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
     match action_type {
-        ActionType::DrinkWater { target_tile } => {
-            Box::new(DrinkWaterAction::new(target_tile))
-        }
-        ActionType::Graze { target_tile } => {
-            Box::new(GrazeAction::new(target_tile))
-        }
-        ActionType::Rest { duration_ticks } => {
-            Box::new(RestAction::new(duration_ticks))
-        }
-        ActionType::Follow { target, stop_distance } => {
-            Box::new(FollowAction::new(target, stop_distance))
-        }
-        ActionType::Mate { partner, meeting_tile, duration_ticks } => {
-            Box::new(MateAction::new(partner, meeting_tile, duration_ticks))
-        }
+        ActionType::DrinkWater { target_tile } => Box::new(DrinkWaterAction::new(target_tile)),
+        ActionType::Graze { target_tile } => Box::new(GrazeAction::new(target_tile)),
+        ActionType::Rest { duration_ticks } => Box::new(RestAction::new(duration_ticks)),
+        ActionType::Follow {
+            target,
+            stop_distance,
+        } => Box::new(FollowAction::new(target, stop_distance)),
+        ActionType::Mate {
+            partner,
+            meeting_tile,
+            duration_ticks,
+        } => Box::new(MateAction::new(partner, meeting_tile, duration_ticks)),
     }
 }

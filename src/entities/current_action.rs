@@ -1,7 +1,6 @@
 /// CurrentAction component - tracks what action an entity is currently performing
-/// 
+///
 /// This is used for debugging and visualization in the web viewer
-
 use bevy::prelude::*;
 
 /// Component that stores the name of the current action being executed
@@ -16,7 +15,7 @@ impl CurrentAction {
             action_name: action_name.into(),
         }
     }
-    
+
     pub fn none() -> Self {
         Self {
             action_name: "Idle".to_string(),

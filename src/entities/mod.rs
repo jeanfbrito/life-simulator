@@ -1,55 +1,41 @@
-/// Entities module - manages creatures and their behaviors
-pub mod movement;
-pub mod entity_tracker;
-pub mod stats;
-pub mod entity_types;
-pub mod types;
 pub mod auto_eat;
 pub mod current_action;
+pub mod entity_tracker;
+pub mod entity_types;
+/// Entities module - manages creatures and their behaviors
+pub mod movement;
 pub mod reproduction;
+pub mod stats;
+pub mod types;
 
 use bevy::prelude::*;
 
 pub use movement::{
-    TilePosition, MoveOrder, MovementSpeed, MovementState,
-    issue_move_order, stop_movement, is_moving, get_position,
+    get_position, is_moving, issue_move_order, stop_movement, MoveOrder, MovementSpeed,
+    MovementState, TilePosition,
 };
 
 // Wandering component REMOVED - use utility AI Wander action instead!
 
-pub use entity_tracker::{
-    init_entity_tracker, sync_entities_to_tracker, get_entities_json,
-};
+pub use entity_tracker::{get_entities_json, init_entity_tracker, sync_entities_to_tracker};
 
 pub use stats::{
-    Stat, Hunger, Thirst, Energy, Health,
-    EntityStatsBundle,
-    tick_stats_system, death_system,
-    utility_eat, utility_drink, utility_rest, utility_heal,
-    get_most_urgent_need,
+    death_system, get_most_urgent_need, tick_stats_system, utility_drink, utility_eat,
+    utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
 };
 
 pub use entity_types::{
-    Human, Rabbit, Deer, Wolf,
-    EntityTemplate,
-    spawn_human, spawn_rabbit, spawn_deer,
-    spawn_humans, spawn_rabbits,
-    count_entities_by_type,
+    count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,
+    Deer, EntityTemplate, Human, Rabbit, Wolf,
 };
 
 pub use reproduction::{
-    Sex, Age, ReproductionCooldown, Pregnancy, WellFedStreak, Mother, MatingIntent, ReproductionConfig,
-    update_age_and_wellfed_system,
-    tick_reproduction_timers_system,
-    rabbit_mate_matching_system,
-    rabbit_birth_system,
-    deer_mate_matching_system,
-    deer_birth_system,
+    deer_birth_system, deer_mate_matching_system, rabbit_birth_system, rabbit_mate_matching_system,
+    tick_reproduction_timers_system, update_age_and_wellfed_system, Age, MatingIntent, Mother,
+    Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 
-pub use types::{
-    BehaviorConfig, SpeciesNeeds,
-};
+pub use types::{BehaviorConfig, SpeciesNeeds};
 
 pub use current_action::CurrentAction;
 
@@ -83,27 +69,32 @@ impl Plugin for EntitiesPlugin {
         app
             // Startup
             .add_systems(Startup, entity_tracker::init_entity_tracker)
-            
             // Non-tick systems (run every frame)
-            .add_systems(Update, (
-                movement::initiate_pathfinding,
-                movement::initialize_movement_state,
-                entity_tracker::sync_entities_to_tracker,  // Sync for web API
-            ))
-            
+            .add_systems(
+                Update,
+                (
+                    movement::initiate_pathfinding,
+                    movement::initialize_movement_state,
+                    entity_tracker::sync_entities_to_tracker, // Sync for web API
+                ),
+            )
             // Tick systems (run when should_tick is true)
-.add_systems(Update, (
-                stats::tick_stats_system,       // Update entity stats
-                movement::tick_movement_system, // Movement execution
-                auto_eat::auto_eat_system,      // Auto-eat when on grass
-                update_age_and_wellfed_system,  // Age and WellFed
-                tick_reproduction_timers_system, // Timers for repro
-                rabbit_mate_matching_system,    // Pairing (rabbits)
-                deer_mate_matching_system,      // Pairing (deer)
-                rabbit_birth_system,            // Rabbit births
-                deer_birth_system,              // Deer births
-                stats::death_system,            // Handle death
-            ).run_if(should_run_tick_systems));
+            .add_systems(
+                Update,
+                (
+                    stats::tick_stats_system,        // Update entity stats
+                    movement::tick_movement_system,  // Movement execution
+                    auto_eat::auto_eat_system,       // Auto-eat when on grass
+                    update_age_and_wellfed_system,   // Age and WellFed
+                    tick_reproduction_timers_system, // Timers for repro
+                    rabbit_mate_matching_system,     // Pairing (rabbits)
+                    deer_mate_matching_system,       // Pairing (deer)
+                    rabbit_birth_system,             // Rabbit births
+                    deer_birth_system,               // Deer births
+                    stats::death_system,             // Handle death
+                )
+                    .run_if(should_run_tick_systems),
+            );
     }
 }
 
@@ -124,12 +115,14 @@ pub fn spawn_creature(
     tile_pos: IVec2,
     speed: MovementSpeed,
 ) -> Entity {
-    commands.spawn((
-        Creature {
-            name: name.into(),
-            species: species.into(),
-        },
-        TilePosition::from_tile(tile_pos),
-        speed,
-    )).id()
+    commands
+        .spawn((
+            Creature {
+                name: name.into(),
+                species: species.into(),
+            },
+            TilePosition::from_tile(tile_pos),
+            speed,
+        ))
+        .id()
 }

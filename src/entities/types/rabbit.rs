@@ -1,10 +1,9 @@
 /// Rabbit-specific behavior configuration
-/// 
+///
 /// Defines behavior parameters optimized for rabbit entities.
-
 use super::BehaviorConfig;
-use bevy::prelude::Resource;
 use crate::entities::reproduction::ReproductionConfig;
+use bevy::prelude::Resource;
 
 /// Rabbit behavior preset
 pub struct RabbitBehavior;
@@ -13,23 +12,23 @@ impl RabbitBehavior {
     /// Default reproduction parameters for rabbits
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 3600,                 // ~6 minutes at 10 TPS
-            gestation_ticks: 1200,               // ~2 minutes
-            mating_cooldown_ticks: 600,          // ~1 minute (male)
-            postpartum_cooldown_ticks: 1800,     // ~3 minutes (female)
+            maturity_ticks: 3600,            // ~6 minutes at 10 TPS
+            gestation_ticks: 1200,           // ~2 minutes
+            mating_cooldown_ticks: 600,      // ~1 minute (male)
+            postpartum_cooldown_ticks: 1800, // ~3 minutes (female)
             litter_size_range: (2, 6),
             mating_search_radius: 50,
             well_fed_hunger_norm: 0.35,
             well_fed_thirst_norm: 0.35,
-            well_fed_required_ticks: 300,        // ~30s sustained
-            matching_interval_ticks: 50,         // run matcher every 5s
-            mating_duration_ticks: 30,            // ~3s mating interaction
+            well_fed_required_ticks: 300, // ~30s sustained
+            matching_interval_ticks: 50,  // run matcher every 5s
+            mating_duration_ticks: 30,    // ~3s mating interaction
             min_energy_norm: 0.5,
             min_health_norm: 0.6,
         }
     }
     /// Get the default behavior configuration for rabbits
-    /// 
+    ///
     /// Rabbit characteristics:
     /// - Proactive drinkers: Seek water at 15% thirsty to avoid dehydration
     /// - Moderate eaters: Eat grass when 40% hungry
@@ -39,27 +38,27 @@ impl RabbitBehavior {
     /// - Small territory: 15 tile wander radius
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(
-            0.75,       // thirst_threshold: Drink when >= 75% thirsty
-            0.5,        // hunger_threshold: Eat when >= 50% hungry
-            0.3,        // energy_threshold: Rest when energy drops below 30%
-            (3, 8),     // graze_range: Short-range grazing (3-8 tiles)
-            100,        // water_search_radius: Wide water search
-            100,        // food_search_radius: Wide food search
-            15,         // wander_radius: Small territory
+            0.75,   // thirst_threshold: Drink when >= 75% thirsty
+            0.5,    // hunger_threshold: Eat when >= 50% hungry
+            0.3,    // energy_threshold: Rest when energy drops below 30%
+            (3, 8), // graze_range: Short-range grazing (3-8 tiles)
+            100,    // water_search_radius: Wide water search
+            100,    // food_search_radius: Wide food search
+            15,     // wander_radius: Small territory
         )
     }
 
     /// Species-specific stats preset for rabbits (initial values and rates)
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
-        use crate::entities::stats::{EntityStatsBundle, Hunger, Thirst, Energy, Health, Stat};
+        use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
         let needs = Self::needs();
         // Rabbits: higher metabolism — eat/drink more often, tire a bit faster
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)),  // moderate hunger gain
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),  // slower thirst gain to avoid spam-drinking
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // moderate hunger gain
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)), // slower thirst gain to avoid spam-drinking
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.07)), // slightly faster energy drain
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)), // same regen for now
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),  // same regen for now
         }
     }
 
@@ -86,9 +85,7 @@ impl RabbitBehavior {
         world_loader: &crate::world_loader::WorldLoader,
     ) -> Vec<crate::ai::UtilityScore> {
         use crate::ai::behaviors::{
-            evaluate_drinking_behavior,
-            evaluate_eating_behavior,
-            evaluate_grazing_behavior,
+            evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_grazing_behavior,
             evaluate_resting_behavior,
         };
 
@@ -100,7 +97,9 @@ impl RabbitBehavior {
             world_loader,
             behavior_config.thirst_threshold,
             behavior_config.water_search_radius,
-        ) { actions.push(drink); }
+        ) {
+            actions.push(drink);
+        }
 
         if let Some(eat) = evaluate_eating_behavior(
             position,
@@ -108,19 +107,21 @@ impl RabbitBehavior {
             world_loader,
             behavior_config.hunger_threshold,
             behavior_config.food_search_radius,
-        ) { actions.push(eat); }
+        ) {
+            actions.push(eat);
+        }
 
-        if let Some(rest) = evaluate_resting_behavior(
-            position,
-            energy,
-            behavior_config.energy_threshold,
-        ) { actions.push(rest); }
+        if let Some(rest) =
+            evaluate_resting_behavior(position, energy, behavior_config.energy_threshold)
+        {
+            actions.push(rest);
+        }
 
-        if let Some(graze) = evaluate_grazing_behavior(
-            position,
-            world_loader,
-            behavior_config.graze_range,
-        ) { actions.push(graze); }
+        if let Some(graze) =
+            evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
+        {
+            actions.push(graze);
+        }
 
         actions
     }
@@ -129,7 +130,7 @@ impl RabbitBehavior {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rabbit_config() {
         let config = RabbitBehavior::config();

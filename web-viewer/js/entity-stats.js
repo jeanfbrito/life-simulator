@@ -9,8 +9,6 @@ export class EntityStatsManager {
         // Stable ordering across updates
         this.entityOrder = new Map(); // id -> index
         this.nextOrderIndex = 0;
-        // Persist <details> open state per entity
-        this.reproOpen = {}; // id(string) -> bool
     }
 
     start() {
@@ -43,9 +41,6 @@ export class EntityStatsManager {
         const container = document.getElementById('entity-list');
         if (!container) return;
 
-        // Capture current <details> open state before re-render
-        this.captureReproOpenState(container);
-
         if (this.entities.length === 0) {
             container.innerHTML = `
                 <div style="text-align: center; opacity: 0.5; padding: 2rem;">
@@ -67,9 +62,6 @@ export class EntityStatsManager {
         });
 
         container.innerHTML = sorted.map(entity => this.renderEntityCard(entity)).join('');
-
-        // Re-attach listeners to persist future toggles
-        this.attachReproToggleHandlers(container);
     }
 
     renderEntityCard(entity) {
@@ -84,7 +76,6 @@ export class EntityStatsManager {
                 </div>
                 ${actionLabel}
                 ${this.renderStats(entity)}
-                ${this.renderReproduction(entity)}
             </div>
         `;
     }
@@ -126,6 +117,9 @@ export class EntityStatsManager {
         if (entity.health !== undefined) {
             stats.push(this.renderStatBar('Health', entity.health, 'health', false));
         }
+
+        const reproductionStats = this.renderReproductionStats(entity);
+        stats.push(...reproductionStats);
 
         return stats.length > 0 ? stats.join('') : '<div style="font-size: 0.75rem; opacity: 0.5;">No stats available</div>';
     }
@@ -198,97 +192,115 @@ export class EntityStatsManager {
         }
     }
 
-    // Capture open state of reproduction <details> before DOM is replaced
-    captureReproOpenState(container) {
-        const detailsList = container.querySelectorAll('details.entity-repro[data-entity-id]');
-        detailsList.forEach(d => {
-            const id = d.getAttribute('data-entity-id');
-            if (id) {
-                this.reproOpen[id] = d.open;
-            }
-        });
-    }
+    renderReproductionStats(entity) {
+        const hasReproductionData = entity.sex !== undefined
+            || entity.well_fed_streak !== undefined
+            || entity.reproduction_cooldown_ticks !== undefined
+            || entity.pregnancy_remaining_ticks !== undefined
+            || entity.ticks_to_adult !== undefined;
 
-    // After render, attach toggle listeners to persist future changes
-    attachReproToggleHandlers(container) {
-        const detailsList = container.querySelectorAll('details.entity-repro[data-entity-id]');
-        detailsList.forEach(d => {
-            d.addEventListener('toggle', () => {
-                const id = d.getAttribute('data-entity-id');
-                if (id) {
-                    this.reproOpen[id] = d.open;
-                }
-            });
-        });
-    }
+        if (!hasReproductionData) return [];
 
-    // Collapsible reproduction diagnostics (for rabbits)
-    renderReproduction(entity) {
-        if (entity.entity_type !== 'Rabbit') return '';
-        const TPS = 10; // display conversion
+        const TPS = 10; // ticks per second for display conversions
 
         const wf = entity.well_fed_streak ?? null;
         const wfReq = entity.well_fed_required_ticks ?? null;
-        const wfPct = (wf !== null && wfReq) ? Math.max(0, Math.min(100, (wf / wfReq) * 100)) : null;
+        const wfValue = (wf !== null && wfReq !== null)
+            ? Math.min(wf, wfReq)
+            : wf;
+        const wfPct = (wfValue !== null && wfReq !== null && wfReq > 0)
+            ? Math.max(0, Math.min(100, (wfValue / wfReq) * 100))
+            : null;
 
         const pregLeft = entity.pregnancy_remaining_ticks ?? null;
         const gestTotal = entity.gestation_total_ticks ?? null;
-        const pregPct = (pregLeft !== null && gestTotal) ? Math.max(0, Math.min(100, ((gestTotal - pregLeft) / gestTotal) * 100)) : null;
+        const gestProgress = (pregLeft !== null && gestTotal && gestTotal > 0)
+            ? Math.max(0, Math.min(100, ((gestTotal - pregLeft) / gestTotal) * 100))
+            : null;
 
         const cd = entity.reproduction_cooldown_ticks ?? null;
         const eligible = entity.eligible_to_mate ?? null;
         const ticksToAdult = entity.ticks_to_adult ?? null;
 
-        const status = pregLeft !== null ? `Pregnant (${Math.ceil(pregLeft / TPS)}s left)`
-                      : (eligible ? 'Eligible to mate' : (cd ? `Cooldown: ${Math.ceil(cd / TPS)}s` : 'Not eligible'));
+        let status = null;
+        if (pregLeft !== null) {
+            status = `Pregnant (${Math.ceil(pregLeft / TPS)}s left)`;
+        } else if (eligible !== null) {
+            status = eligible ? 'Eligible to mate' : 'Not eligible';
+        } else if (cd !== null && cd > 0) {
+            status = `Cooldown: ${Math.ceil(cd / TPS)}s`;
+        }
 
-        const wfSection = (wf !== null && wfReq !== null) ? `
-            <div class="stat-bar-container">
-                <div class="stat-bar-label">
-                    <span>Well-fed streak</span>
-                    <span>${wf}/${wfReq}</span>
+        const sections = [];
+
+        if (status) {
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Reproduction</span>
+                        <span style="font-weight: bold;">${status}</span>
+                    </div>
                 </div>
-                <div class="stat-bar"><div class="stat-bar-fill" style="width:${wfPct.toFixed(0)}%"></div></div>
-            </div>` : '';
+            `);
+        }
 
-        const pregSection = (pregLeft !== null && gestTotal !== null) ? `
-            <div class="stat-bar-container">
-                <div class="stat-bar-label">
-                    <span>Gestation</span>
-                    <span>${Math.ceil((gestTotal - pregLeft)/TPS)}s / ${Math.ceil(gestTotal/TPS)}s</span>
+        if (wf !== null && wfReq !== null && wfReq > 0) {
+            const wfLabel = wf > wfReq ? `${wfReq}+/${wfReq}` : `${wf}/${wfReq}`;
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Well-fed streak</span>
+                        <span>${wfLabel}</span>
+                    </div>
+                    <div class="stat-bar"><div class="stat-bar-fill" style="width:${wfPct.toFixed(0)}%"></div></div>
                 </div>
-                <div class="stat-bar"><div class="stat-bar-fill" style="width:${pregPct.toFixed(0)}%"></div></div>
-            </div>` : '';
-
-        const cdSection = (cd !== null && cd > 0) ? `
-            <div class="stat-bar-container">
-                <div class="stat-bar-label">
-                    <span>Cooldown</span>
-                    <span>${Math.ceil(cd / TPS)}s</span>
+            `);
+        } else if (wf !== null && wfReq === null) {
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Well-fed streak</span>
+                        <span>${wf} ticks</span>
+                    </div>
                 </div>
-                <div class="stat-bar"><div class="stat-bar-fill" style="width:${Math.max(0, Math.min(100, (1 - (cd / (wfReq || cd))) * 100)).toFixed(0)}%"></div></div>
-            </div>` : '';
+            `);
+        }
 
-        const maturitySection = (ticksToAdult !== null && ticksToAdult > 0) ? `
-            <div class="stat-bar-container">
-                <div class="stat-bar-label">
-                    <span>Maturity</span>
-                    <span>${Math.ceil(ticksToAdult / TPS)}s</span>
+        if (pregLeft !== null && gestTotal !== null && gestTotal > 0) {
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Gestation</span>
+                        <span>${Math.ceil((gestTotal - pregLeft)/TPS)}s / ${Math.ceil(gestTotal/TPS)}s</span>
+                    </div>
+                    <div class="stat-bar"><div class="stat-bar-fill" style="width:${gestProgress.toFixed(0)}%"></div></div>
                 </div>
-            </div>` : '';
+            `);
+        }
 
-        const isOpen = this.reproOpen[String(entity.id)] === true;
-        return `
-            <details class="entity-repro" data-entity-id="${entity.id}" ${isOpen ? 'open' : ''} style="margin-top:0.5rem;">
-              <summary style="cursor:pointer; opacity:0.9;">Reproduction · <span style="font-weight:600;">${status}</span></summary>
-              <div style="margin-top:0.35rem;">
-                ${wfSection}
-                ${pregSection}
-                ${cdSection}
-                ${maturitySection}
-              </div>
-            </details>
-        `;
+        if (cd !== null && cd > 0) {
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Cooldown</span>
+                        <span>${Math.ceil(cd / TPS)}s</span>
+                    </div>
+                </div>
+            `);
+        }
+
+        if (ticksToAdult !== null && ticksToAdult > 0) {
+            sections.push(`
+                <div class="stat-bar-container stat-reproduction">
+                    <div class="stat-bar-label">
+                        <span>Maturity</span>
+                        <span>${Math.ceil(ticksToAdult / TPS)}s to adult</span>
+                    </div>
+                </div>
+            `);
+        }
+
+        return sections;
     }
 }
 

@@ -1,13 +1,12 @@
 /// Action queue for TQUAI system
-/// 
+///
 /// Manages queued actions with priorities, executing them synchronously on ticks.
 /// Handles multi-tick actions that span across multiple ticks.
-
 use bevy::prelude::*;
-use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
-use super::action::{Action, ActionResult, ActionType, create_action};
+use super::action::{create_action, Action, ActionResult, ActionType};
 use crate::entities::CurrentAction;
 
 /// A queued action waiting to be executed
@@ -39,10 +38,11 @@ impl Ord for QueuedAction {
         match self.priority.cmp(&other.priority) {
             Ordering::Equal => {
                 // If same priority, higher utility executes first
-                self.utility.partial_cmp(&other.utility)
+                self.utility
+                    .partial_cmp(&other.utility)
                     .unwrap_or(Ordering::Equal)
             }
-            other => other
+            other => other,
         }
     }
 }
@@ -85,24 +85,30 @@ impl Default for ActionQueue {
 
 impl ActionQueue {
     /// Queue a new action for execution
-    pub fn queue_action(&mut self, entity: Entity, action_type: ActionType, utility: f32, priority: i32, tick: u64) {
+    pub fn queue_action(
+        &mut self,
+        entity: Entity,
+        action_type: ActionType,
+        utility: f32,
+        priority: i32,
+        tick: u64,
+    ) {
         // Don't queue if entity already has an active action
         if self.active.contains_key(&entity) {
             return;
         }
-        
+
         // Check if entity already has a pending action - replace if new one is better
-        let has_pending = self.pending.iter()
-            .any(|qa| qa.entity == entity);
-        
+        let has_pending = self.pending.iter().any(|qa| qa.entity == entity);
+
         if has_pending {
             // TODO: More sophisticated replacement logic
             // For now, just don't queue duplicate
             return;
         }
-        
+
         let action = create_action(action_type);
-        
+
         self.pending.push(QueuedAction {
             entity,
             action,
@@ -110,33 +116,33 @@ impl ActionQueue {
             priority,
             queued_at_tick: tick,
         });
-        
+
         self.stats.actions_queued += 1;
     }
-    
+
     /// Execute all queued and active actions for this tick
     pub fn execute_tick(&mut self, world: &mut World, tick: u64) {
         // First, continue any active multi-tick actions
         self.execute_active_actions(world, tick);
-        
+
         // Then execute new actions from the queue
         self.execute_pending_actions(world, tick);
     }
-    
+
     /// Execute active multi-tick actions
     fn execute_active_actions(&mut self, world: &mut World, tick: u64) {
         let mut to_remove = Vec::new();
-        
+
         for (entity, active) in self.active.iter_mut() {
             // Check if entity still exists
             if world.get_entity(*entity).is_err() {
                 to_remove.push(*entity);
                 continue;
             }
-            
+
             // Execute the action
             let result = active.action.execute(world, *entity, tick);
-            
+
             match result {
                 ActionResult::Success => {
                     debug!(
@@ -170,34 +176,34 @@ impl ActionQueue {
                 }
             }
         }
-        
+
         // Remove completed/failed actions
         for entity in to_remove {
             self.active.remove(&entity);
         }
     }
-    
+
     /// Execute pending actions from the queue
     fn execute_pending_actions(&mut self, world: &mut World, tick: u64) {
         let mut executed_this_tick = Vec::new();
-        
+
         // Process actions in priority order
         while let Some(mut queued) = self.pending.pop() {
             // Skip if entity already executed an action this tick
             if executed_this_tick.contains(&queued.entity) {
                 continue;
             }
-            
+
             // Skip if entity already has an active action
             if self.active.contains_key(&queued.entity) {
                 continue;
             }
-            
+
             // Check if entity still exists
             if world.get_entity(queued.entity).is_err() {
                 continue;
             }
-            
+
             // Verify action can still be executed
             if !queued.action.can_execute(world, queued.entity, tick) {
                 debug!(
@@ -208,17 +214,17 @@ impl ActionQueue {
                 self.stats.actions_failed += 1;
                 continue;
             }
-            
+
             // Execute the action!
             let result = queued.action.execute(world, queued.entity, tick);
             self.stats.actions_executed += 1;
-            
+
             // Set current action on entity
             let action_name = queued.action.name().to_string();
             if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                 entity_mut.insert(CurrentAction::new(action_name.clone()));
             }
-            
+
             match result {
                 ActionResult::Success => {
                     debug!(
@@ -251,31 +257,33 @@ impl ActionQueue {
                         queued.entity,
                         queued.action.name()
                     );
-                    self.active.insert(queued.entity, ActiveAction {
-                        entity: queued.entity,
-                        action: queued.action,
-                        started_at_tick: tick,
-                    });
+                    self.active.insert(
+                        queued.entity,
+                        ActiveAction {
+                            entity: queued.entity,
+                            action: queued.action,
+                            started_at_tick: tick,
+                        },
+                    );
                 }
             }
-            
+
             executed_this_tick.push(queued.entity);
         }
     }
-    
+
     /// Get the number of pending actions
     pub fn pending_count(&self) -> usize {
         self.pending.len()
     }
-    
+
     /// Get the number of active actions
     pub fn active_count(&self) -> usize {
         self.active.len()
     }
-    
+
     /// Check if an entity has any queued or active action
     pub fn has_action(&self, entity: Entity) -> bool {
-        self.active.contains_key(&entity) ||
-        self.pending.iter().any(|qa| qa.entity == entity)
+        self.active.contains_key(&entity) || self.pending.iter().any(|qa| qa.entity == entity)
     }
 }

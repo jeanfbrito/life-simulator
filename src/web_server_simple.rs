@@ -1,9 +1,9 @@
+use crate::cached_world::CachedWorld;
+use crate::world_loader::{list_available_worlds, WorldLoader};
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
-use std::thread;
 use std::sync::{Arc, RwLock};
-use crate::world_loader::{WorldLoader, list_available_worlds};
-use crate::cached_world::CachedWorld;
+use std::thread;
 
 fn parse_chunk_key(chunk_key: &str) -> Result<(i32, i32), Box<dyn std::error::Error>> {
     // Parse chunk key format "x,y" into tuple (x, y)
@@ -23,7 +23,11 @@ pub fn start_simple_web_server() {
     // Load the default world for the web server
     let world_loader = match WorldLoader::load_default() {
         Ok(loader) => {
-            println!("✅ WEB_SERVER: World loaded: {} (seed: {})", loader.get_name(), loader.get_seed());
+            println!(
+                "✅ WEB_SERVER: World loaded: {} (seed: {})",
+                loader.get_name(),
+                loader.get_seed()
+            );
 
             // Initialize CachedWorld with the loaded world data
             let mut cached_chunks = std::collections::HashMap::new();
@@ -42,19 +46,27 @@ pub fn start_simple_web_server() {
 
             // Set the global cached world
             CachedWorld::global_set(cached_world);
-            println!("✅ WEB_SERVER: CachedWorld initialized with {} chunks", loader.get_chunk_count());
+            println!(
+                "✅ WEB_SERVER: CachedWorld initialized with {} chunks",
+                loader.get_chunk_count()
+            );
 
             Arc::new(RwLock::new(loader))
         }
         Err(e) => {
             eprintln!("❌ WEB_SERVER: Failed to load world: {}", e);
-            eprintln!("💡 WEB_SERVER: Please generate a world first using: cargo run --bin map_generator");
+            eprintln!(
+                "💡 WEB_SERVER: Please generate a world first using: cargo run --bin map_generator"
+            );
             // Create a placeholder world loader for error handling
-            let placeholder = WorldLoader::load_from_file("maps/test_world.ron").unwrap_or_else(|_| {
-                eprintln!("❌ WEB_SERVER: No test world available, creating minimal placeholder");
-                // This would need to be handled better in production
-                panic!("No world files available for web server");
-            });
+            let placeholder =
+                WorldLoader::load_from_file("maps/test_world.ron").unwrap_or_else(|_| {
+                    eprintln!(
+                        "❌ WEB_SERVER: No test world available, creating minimal placeholder"
+                    );
+                    // This would need to be handled better in production
+                    panic!("No world files available for web server");
+                });
             Arc::new(RwLock::new(placeholder))
         }
     };
@@ -123,7 +135,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
     }
 
     if method != "GET" && method != "POST" {
-        send_response(&mut stream, "405 Method Not Allowed", "text/plain", "Method Not Allowed");
+        send_response(
+            &mut stream,
+            "405 Method Not Allowed",
+            "text/plain",
+            "Method Not Allowed",
+        );
         return;
     }
 
@@ -132,7 +149,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             if let Ok(html) = std::fs::read_to_string("web-viewer/viewer.html") {
                 send_response(&mut stream, "200 OK", "text/html", &html);
             } else {
-                send_response(&mut stream, "404 Not Found", "text/plain", "HTML file not found");
+                send_response(
+                    &mut stream,
+                    "404 Not Found",
+                    "text/plain",
+                    "HTML file not found",
+                );
             }
         }
         "/api/world_info" => {
@@ -141,14 +163,21 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             let name = world.get_name();
             let chunk_count = world.get_chunk_count();
             let (bounds_min, bounds_max) = world.get_world_bounds();
-            let json = format!(r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "bounds": {{"min": {{"x": {}, "y": {}}}, "max": {{"x": {}, "y": {}}}}}}}"#,
-                name, seed, chunk_count, bounds_min.0, bounds_min.1, bounds_max.0, bounds_max.1);
+            let json = format!(
+                r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "bounds": {{"min": {{"x": {}, "y": {}}}, "max": {{"x": {}, "y": {}}}}}}}"#,
+                name, seed, chunk_count, bounds_min.0, bounds_min.1, bounds_max.0, bounds_max.1
+            );
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/world/current" => {
             let world = world_loader.read().unwrap();
-            let json = format!(r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "file_path": "{}"}}"#,
-                world.get_name(), world.get_seed(), world.get_chunk_count(), "maps/current");
+            let json = format!(
+                r#"{{"name": "{}", "seed": {}, "chunk_count": {}, "file_path": "{}"}}"#,
+                world.get_name(),
+                world.get_seed(),
+                world.get_chunk_count(),
+                "maps/current"
+            );
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/worlds" => {
@@ -164,7 +193,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
                 }
                 Err(e) => {
                     let json = format!(r#"{{"error": "{}"}}"#, e);
-                    send_response(&mut stream, "500 Internal Server Error", "application/json", &json);
+                    send_response(
+                        &mut stream,
+                        "500 Internal Server Error",
+                        "application/json",
+                        &json,
+                    );
                 }
             }
         }
@@ -177,7 +211,8 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             // Only use cached world data - no fallback to generator
             if crate::cached_world::CachedWorld::global_is_loaded() {
                 // Check if multi-layer format is requested
-                let use_multi_layer = path.contains("&layers=true") || path.contains("?layers=true");
+                let use_multi_layer =
+                    path.contains("&layers=true") || path.contains("?layers=true");
 
                 let json = if use_multi_layer {
                     // Use the new multi-layer format
@@ -194,9 +229,20 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
                     for &(chunk_x, chunk_y) in &coords {
                         let chunk_key = format!("{},{}", chunk_x, chunk_y);
 
-                        if let Some(terrain_data) = crate::cached_world::CachedWorld::global_get_chunk(chunk_x, chunk_y) {
-                            let data_str = terrain_data.iter()
-                                .map(|row| format!("[{}]", row.iter().map(|tile| format!("\"{}\"", tile)).collect::<Vec<_>>().join(", ")))
+                        if let Some(terrain_data) =
+                            crate::cached_world::CachedWorld::global_get_chunk(chunk_x, chunk_y)
+                        {
+                            let data_str = terrain_data
+                                .iter()
+                                .map(|row| {
+                                    format!(
+                                        "[{}]",
+                                        row.iter()
+                                            .map(|tile| format!("\"{}\"", tile))
+                                            .collect::<Vec<_>>()
+                                            .join(", ")
+                                    )
+                                })
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             chunk_data.insert(chunk_key, data_str);
@@ -214,7 +260,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
                 send_response(&mut stream, "200 OK", "application/json", &json);
             } else {
                 // No cached world loaded - return error
-                send_response(&mut stream, "404 Not Found", "application/json", r#"{"error": "No world loaded. Please load a world first."}"#);
+                send_response(
+                    &mut stream,
+                    "404 Not Found",
+                    "application/json",
+                    r#"{"error": "No world loaded. Please load a world first."}"#,
+                );
             }
         }
         path if path.starts_with("/js/") => {
@@ -224,7 +275,12 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
                 send_response(&mut stream, "200 OK", "application/javascript", &content);
             } else {
                 eprintln!("❌ WEB_SERVER: JavaScript file not found: {}", file_path);
-                send_response(&mut stream, "404 Not Found", "text/plain", "JavaScript file not found");
+                send_response(
+                    &mut stream,
+                    "404 Not Found",
+                    "text/plain",
+                    "JavaScript file not found",
+                );
             }
         }
         _ => {
@@ -246,7 +302,11 @@ fn send_response(stream: &mut TcpStream, status: &str, content_type: &str, body:
     let _ = stream.flush();
 }
 
-fn handle_world_selection(mut stream: &mut TcpStream, world_loader: &Arc<RwLock<WorldLoader>>, request: &str) {
+fn handle_world_selection(
+    mut stream: &mut TcpStream,
+    world_loader: &Arc<RwLock<WorldLoader>>,
+    request: &str,
+) {
     // Extract JSON body from request
     let lines: Vec<&str> = request.lines().collect();
 
@@ -286,20 +346,40 @@ fn handle_world_selection(mut stream: &mut TcpStream, world_loader: &Arc<RwLock<
                     // Set the global cached world
                     CachedWorld::global_set(cached_world);
 
-                    let response_json = format!(r#"{{"success": true, "world_name": "{}", "seed": {}}}"#,
-                        world_name, world_seed);
+                    let response_json = format!(
+                        r#"{{"success": true, "world_name": "{}", "seed": {}}}"#,
+                        world_name, world_seed
+                    );
                     send_response(&mut stream, "200 OK", "application/json", &response_json);
                 }
                 Err(e) => {
-                    let response_json = format!(r#"{{"success": false, "error": "Failed to load world '{}': {}"}}"#, world_name, e);
-                    send_response(&mut stream, "404 Not Found", "application/json", &response_json);
+                    let response_json = format!(
+                        r#"{{"success": false, "error": "Failed to load world '{}': {}"}}"#,
+                        world_name, e
+                    );
+                    send_response(
+                        &mut stream,
+                        "404 Not Found",
+                        "application/json",
+                        &response_json,
+                    );
                 }
             }
         } else {
-            send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "Invalid world name format"}"#);
+            send_response(
+                &mut stream,
+                "400 Bad Request",
+                "application/json",
+                r#"{"success": false, "error": "Invalid world name format"}"#,
+            );
         }
     } else {
-        send_response(&mut stream, "400 Bad Request", "application/json", r#"{"success": false, "error": "No request body"}"#);
+        send_response(
+            &mut stream,
+            "400 Bad Request",
+            "application/json",
+            r#"{"success": false, "error": "No request body"}"#,
+        );
     }
 }
 
@@ -318,7 +398,7 @@ fn parse_world_name_from_json(json_str: &str) -> Result<String, Box<dyn std::err
             let name_with_quotes = after_colon.trim().trim_end_matches('}');
 
             if name_with_quotes.starts_with('"') && name_with_quotes.ends_with('"') {
-                let world_name = &name_with_quotes[1..name_with_quotes.len()-1];
+                let world_name = &name_with_quotes[1..name_with_quotes.len() - 1];
                 Ok(world_name.to_string())
             } else {
                 Err("Invalid JSON format - world name not in quotes".into())
@@ -330,7 +410,6 @@ fn parse_world_name_from_json(json_str: &str) -> Result<String, Box<dyn std::err
         Err("No world_name field found".into())
     }
 }
-
 
 fn parse_chunk_coords_from_path(path: &str) -> Vec<(i32, i32)> {
     // Extract coordinates from path like /api/chunks?coords=0,0&coords=1,0
@@ -376,4 +455,3 @@ fn list_saved_worlds() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     worlds.sort();
     Ok(worlds)
 }
-

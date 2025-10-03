@@ -1,8 +1,7 @@
 /// Consideration system for Utility AI
-/// 
+///
 /// Considerations evaluate context to produce utility scores (0.0 to 1.0).
 /// Multiple considerations combine to determine action utility.
-
 use bevy::prelude::*;
 
 /// Response curve types for considerations
@@ -25,14 +24,18 @@ impl ResponseCurve {
     /// Apply the curve to a normalized input value [0, 1]
     pub fn evaluate(&self, input: f32) -> f32 {
         let clamped = input.clamp(0.0, 1.0);
-        
+
         match self {
             ResponseCurve::Linear => clamped,
             ResponseCurve::Quadratic => clamped * clamped,
             ResponseCurve::InverseQuadratic => 1.0 - (1.0 - clamped).powi(2),
             ResponseCurve::Exponential(exp) => clamped.powf(*exp),
             ResponseCurve::Boolean(threshold) => {
-                if clamped >= *threshold { 1.0 } else { 0.0 }
+                if clamped >= *threshold {
+                    1.0
+                } else {
+                    0.0
+                }
             }
         }
     }
@@ -42,18 +45,18 @@ impl ResponseCurve {
 pub trait Consideration: Send + Sync {
     /// Evaluate this consideration and return a score [0, 1]
     fn evaluate(&self, world: &World, entity: Entity) -> f32;
-    
+
     /// Get the response curve for this consideration
     fn curve(&self) -> ResponseCurve {
         ResponseCurve::Linear
     }
-    
+
     /// Get the final score (evaluation + curve)
     fn score(&self, world: &World, entity: Entity) -> f32 {
         let raw_value = self.evaluate(world, entity);
         self.curve().evaluate(raw_value)
     }
-    
+
     /// Get consideration name for debugging
     fn name(&self) -> &'static str;
 }
@@ -84,35 +87,28 @@ impl ConsiderationSet {
             combination_method: method,
         }
     }
-    
+
     pub fn add<C: Consideration + 'static>(&mut self, consideration: C) {
         self.considerations.push(Box::new(consideration));
     }
-    
+
     /// Evaluate all considerations and combine into final utility
     pub fn evaluate(&self, world: &World, entity: Entity) -> f32 {
         if self.considerations.is_empty() {
             return 0.0;
         }
-        
-        let scores: Vec<f32> = self.considerations
+
+        let scores: Vec<f32> = self
+            .considerations
             .iter()
             .map(|c| c.score(world, entity))
             .collect();
-        
+
         match self.combination_method {
-            CombinationMethod::Multiply => {
-                scores.iter().product()
-            }
-            CombinationMethod::Average => {
-                scores.iter().sum::<f32>() / scores.len() as f32
-            }
-            CombinationMethod::Min => {
-                scores.iter().cloned().fold(f32::INFINITY, f32::min)
-            }
-            CombinationMethod::Max => {
-                scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
-            }
+            CombinationMethod::Multiply => scores.iter().product(),
+            CombinationMethod::Average => scores.iter().sum::<f32>() / scores.len() as f32,
+            CombinationMethod::Min => scores.iter().cloned().fold(f32::INFINITY, f32::min),
+            CombinationMethod::Max => scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
         }
     }
 }
@@ -134,7 +130,7 @@ impl ThirstConsideration {
             curve: ResponseCurve::Quadratic, // Urgency increases rapidly
         }
     }
-    
+
     pub fn with_curve(curve: ResponseCurve) -> Self {
         Self { curve }
     }
@@ -143,7 +139,7 @@ impl ThirstConsideration {
 impl Consideration for ThirstConsideration {
     fn evaluate(&self, world: &World, entity: Entity) -> f32 {
         use crate::entities::stats::Thirst;
-        
+
         if let Some(thirst) = world.get::<Thirst>(entity) {
             // Return normalized thirst (0-1, where 1 = very thirsty)
             thirst.0.normalized()
@@ -151,11 +147,11 @@ impl Consideration for ThirstConsideration {
             0.0
         }
     }
-    
+
     fn curve(&self) -> ResponseCurve {
         self.curve
     }
-    
+
     fn name(&self) -> &'static str {
         "Thirst"
     }
@@ -182,10 +178,10 @@ impl DistanceConsideration {
 impl Consideration for DistanceConsideration {
     fn evaluate(&self, world: &World, entity: Entity) -> f32 {
         use crate::entities::TilePosition;
-        
+
         if let Some(pos) = world.get::<TilePosition>(entity) {
             let distance = pos.tile.as_vec2().distance(self.target.as_vec2());
-            
+
             // Normalize: 0 distance = 1.0, max_distance = 0.0
             let normalized = 1.0 - (distance / self.max_distance).min(1.0);
             normalized.max(0.0)
@@ -193,11 +189,11 @@ impl Consideration for DistanceConsideration {
             0.0
         }
     }
-    
+
     fn curve(&self) -> ResponseCurve {
         self.curve
     }
-    
+
     fn name(&self) -> &'static str {
         "Distance"
     }

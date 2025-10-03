@@ -10,20 +10,18 @@ pub use chunk::{Chunk, ChunkCoordinate, CHUNK_SIZE};
 pub use chunk_manager::{ChunkLoadRequest, ChunkManager, ChunkManagerStatistics, LoadPriority};
 pub use terrain::{TerrainProperties, TerrainType};
 pub use terrain_query::{AreaAnalysis, PositionComponent, TerrainQuery, TerrainQuerySystem};
-pub use world_generator::{
-    WorldConfig, WorldGenerator, WorldMetadata, WorldStatistics,
-};
+pub use world_generator::{WorldConfig, WorldGenerator, WorldMetadata, WorldStatistics};
 
-use bevy::prelude::*;
+use crate::tilemap::chunk_manager::{MAX_LOADED_CHUNKS, UNLOAD_DISTANCE, VIEW_DISTANCE};
 use bevy::log::{info, warn};
-use crate::tilemap::chunk_manager::{VIEW_DISTANCE, UNLOAD_DISTANCE, MAX_LOADED_CHUNKS};
+use bevy::prelude::*;
 
 pub struct TilemapPlugin;
 
 impl Plugin for TilemapPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ChunkManager>()
-        .insert_resource(WorldGenerator::new(WorldConfig::default()))
+            .insert_resource(WorldGenerator::new(WorldConfig::default()))
             .add_systems(Startup, tilemap_init_system)
             .add_systems(
                 Update,
@@ -36,10 +34,7 @@ impl Plugin for TilemapPlugin {
     }
 }
 
-fn tilemap_init_system(
-    _commands: Commands,
-    world_generator: Res<WorldGenerator>,
-) {
+fn tilemap_init_system(_commands: Commands, world_generator: Res<WorldGenerator>) {
     info!("TILEMAP: Initializing headless tilemap system");
 
     // Generate initial world statistics
@@ -60,7 +55,10 @@ fn tilemap_init_system(
 
     // Log world metadata
     let world_metadata = WorldMetadata::new(WorldConfig::default(), world_stats);
-    info!("TILEMAP: World metadata generated at {:?}", world_metadata.generated_at);
+    info!(
+        "TILEMAP: World metadata generated at {:?}",
+        world_metadata.generated_at
+    );
 }
 
 #[derive(Debug, Clone, Resource)]
@@ -174,12 +172,8 @@ pub fn handle_pathfinding_events(
     chunks_query: Query<&Chunk>,
 ) {
     for event in path_events.read() {
-        let path = TerrainQuerySystem::find_path(
-            &chunk_manager,
-            event.start,
-            event.goal,
-            &chunks_query,
-        );
+        let path =
+            TerrainQuerySystem::find_path(&chunk_manager, event.start, event.goal, &chunks_query);
 
         let cost = path.as_ref().map(|p| {
             if p.len() < 2 {
@@ -187,9 +181,9 @@ pub fn handle_pathfinding_events(
             } else {
                 let mut total_cost = 0.0;
                 for i in 1..p.len() {
-                    let dx = p[i].0 - p[i-1].0;
-                    let dy = p[i].1 - p[i-1].1;
-                    total_cost += ((dx*dx + dy*dy) as f32).sqrt();
+                    let dx = p[i].0 - p[i - 1].0;
+                    let dy = p[i].1 - p[i - 1].1;
+                    total_cost += ((dx * dx + dy * dy) as f32).sqrt();
                 }
                 total_cost
             }

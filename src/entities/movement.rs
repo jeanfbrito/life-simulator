@@ -82,12 +82,15 @@ pub fn initiate_pathfinding(
 ) {
     for (entity, position, order) in query.iter() {
         // Remove MoveOrder and add PathRequest
-        commands.entity(entity).remove::<MoveOrder>().insert(PathRequest {
-            origin: position.tile,
-            destination: order.destination,
-            allow_diagonal: order.allow_diagonal,
-            max_steps: Some(5000), // Prevent infinite search (needs to be high for fragmented world terrain)
-        });
+        commands
+            .entity(entity)
+            .remove::<MoveOrder>()
+            .insert(PathRequest {
+                origin: position.tile,
+                destination: order.destination,
+                allow_diagonal: order.allow_diagonal,
+                max_steps: Some(5000), // Prevent infinite search (needs to be high for fragmented world terrain)
+            });
 
         info!(
             "Entity {:?} requesting path from {:?} to {:?}",
@@ -142,12 +145,18 @@ pub fn tick_movement_system(
             // Check if path is complete
             if path.is_complete() {
                 info!("Entity {:?} reached destination at {:?}", entity, target);
-                commands.entity(entity).remove::<Path>().remove::<MovementState>();
+                commands
+                    .entity(entity)
+                    .remove::<Path>()
+                    .remove::<MovementState>();
             }
         } else {
             // Path is empty but not marked complete (shouldn't happen)
             warn!("Entity {:?} has empty path, removing", entity);
-            commands.entity(entity).remove::<Path>().remove::<MovementState>();
+            commands
+                .entity(entity)
+                .remove::<Path>()
+                .remove::<MovementState>();
         }
     }
 }
@@ -186,10 +195,7 @@ pub fn stop_movement(commands: &mut Commands, entity: Entity) {
 }
 
 /// Check if entity is currently moving
-pub fn is_moving(
-    entity: Entity,
-    query: &Query<(), (With<Path>, With<MovementState>)>,
-) -> bool {
+pub fn is_moving(entity: Entity, query: &Query<(), (With<Path>, With<MovementState>)>) -> bool {
     query.get(entity).is_ok()
 }
 

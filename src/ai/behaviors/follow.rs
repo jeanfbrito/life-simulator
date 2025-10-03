@@ -1,12 +1,11 @@
+use crate::ai::action::ActionType;
+use crate::ai::planner::UtilityScore;
+use crate::entities::TilePosition;
 /// Follow Behavior - make one entity follow another at a comfortable distance
 ///
 /// This behavior chooses the nearest rabbit and asks the follower to move toward it
 /// until within a stop distance. Intended for simple "follow the leader" examples.
-
 use bevy::prelude::*;
-use crate::entities::TilePosition;
-use crate::ai::action::ActionType;
-use crate::ai::planner::UtilityScore;
 
 /// Evaluate the utility of following the nearest rabbit
 /// - entity: the follower entity id (for logging, not used for scoring)
@@ -34,10 +33,14 @@ pub fn evaluate_follow_behavior(
         }
     }
 
-    let Some((target, target_pos, dist)) = best else { return None; };
+    let Some((target, target_pos, dist)) = best else {
+        return None;
+    };
 
     // If already within stop distance, very low utility to move
-    if dist <= stop_distance { return None; }
+    if dist <= stop_distance {
+        return None;
+    }
 
     // Utility scales with distance beyond stop_distance up to max_follow_distance
     let effective = (dist - stop_distance) as f32;
@@ -48,7 +51,10 @@ pub fn evaluate_follow_behavior(
     let priority = 20;
 
     Some(UtilityScore {
-        action_type: ActionType::Follow { target, stop_distance },
+        action_type: ActionType::Follow {
+            target,
+            stop_distance,
+        },
         utility,
         priority,
     })

@@ -1,10 +1,10 @@
+use bevy::log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use bevy::log::{info, warn, error};
 
-use super::{WorldConfig};
-use crate::serialization::{WorldSerializer, SerializedWorld};
+use super::WorldConfig;
+use crate::serialization::{SerializedWorld, WorldSerializer};
 
 /// World loader for Life Simulator
 ///
@@ -85,7 +85,11 @@ impl WorldLoader {
     }
 
     /// Get all terrain layers for a chunk
-    pub fn get_chunk_layers(&self, chunk_x: i32, chunk_y: i32) -> Option<HashMap<String, Vec<Vec<String>>>> {
+    pub fn get_chunk_layers(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) -> Option<HashMap<String, Vec<Vec<String>>>> {
         let chunk_key = format!("{},{}", chunk_x, chunk_y);
 
         if let Some(chunk) = self.world.chunks.get(&chunk_key) {
@@ -93,13 +97,21 @@ impl WorldLoader {
         } else {
             // Return empty layers if chunk not found
             let mut layers = HashMap::new();
-            layers.insert("terrain".to_string(), vec![vec!["Grass".to_string(); 16]; 16]);
+            layers.insert(
+                "terrain".to_string(),
+                vec![vec!["Grass".to_string(); 16]; 16],
+            );
             Some(layers)
         }
     }
 
     /// Get a specific layer for a chunk
-    pub fn get_chunk_layer(&self, chunk_x: i32, chunk_y: i32, layer_name: &str) -> Option<Vec<Vec<String>>> {
+    pub fn get_chunk_layer(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+        layer_name: &str,
+    ) -> Option<Vec<Vec<String>>> {
         self.get_chunk_layers(chunk_x, chunk_y)
             .and_then(|layers| layers.get(layer_name).cloned())
     }
@@ -117,7 +129,9 @@ impl WorldLoader {
 
     /// Get all available chunk coordinates
     pub fn get_chunk_coordinates(&self) -> Vec<(i32, i32)> {
-        self.world.chunks.keys()
+        self.world
+            .chunks
+            .keys()
             .filter_map(|key| {
                 if let Some((x_str, y_str)) = key.split_once(',') {
                     if let (Ok(x), Ok(y)) = (x_str.parse::<i32>(), y_str.parse::<i32>()) {
@@ -141,8 +155,8 @@ impl WorldLoader {
             return ((0, 0), (0, 0));
         }
 
-        let min_x = coords.iter().map(|( x, _)| *x).min().unwrap_or(0);
-        let max_x = coords.iter().map(|( x, _)| *x).max().unwrap_or(0);
+        let min_x = coords.iter().map(|(x, _)| *x).min().unwrap_or(0);
+        let max_x = coords.iter().map(|(x, _)| *x).max().unwrap_or(0);
         let min_y = coords.iter().map(|(_, y)| *y).min().unwrap_or(0);
         let max_y = coords.iter().map(|(_, y)| *y).max().unwrap_or(0);
 
@@ -151,13 +165,17 @@ impl WorldLoader {
 
     /// Check if the world has resources layer data
     pub fn has_resources(&self) -> bool {
-        self.world.chunks.values()
+        self.world
+            .chunks
+            .values()
             .any(|chunk| chunk.layers.contains_key("resources"))
     }
 
     /// Check if the world has terrain layer data
     pub fn has_terrain(&self) -> bool {
-        self.world.chunks.values()
+        self.world
+            .chunks
+            .values()
             .any(|chunk| chunk.layers.contains_key("terrain"))
     }
 
@@ -177,15 +195,16 @@ impl WorldLoader {
         // Convert world coordinates to chunk coordinates
         let chunk_x = world_x.div_euclid(16);
         let chunk_y = world_y.div_euclid(16);
-        
+
         // Get local tile coordinates within chunk
         let local_x = world_x.rem_euclid(16) as usize;
         let local_y = world_y.rem_euclid(16) as usize;
-        
+
         // Get terrain layer for this chunk
         self.get_chunk_layer(chunk_x, chunk_y, "terrain")
             .and_then(|terrain| {
-                terrain.get(local_y)
+                terrain
+                    .get(local_y)
                     .and_then(|row| row.get(local_x))
                     .cloned()
             })
@@ -196,15 +215,16 @@ impl WorldLoader {
         // Convert world coordinates to chunk coordinates
         let chunk_x = world_x.div_euclid(16);
         let chunk_y = world_y.div_euclid(16);
-        
+
         // Get local tile coordinates within chunk
         let local_x = world_x.rem_euclid(16) as usize;
         let local_y = world_y.rem_euclid(16) as usize;
-        
+
         // Get resources layer for this chunk
         self.get_chunk_layer(chunk_x, chunk_y, "resources")
             .and_then(|resources| {
-                resources.get(local_y)
+                resources
+                    .get(local_y)
                     .and_then(|row| row.get(local_x))
                     .cloned()
             })
