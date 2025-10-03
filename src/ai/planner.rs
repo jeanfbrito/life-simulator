@@ -6,7 +6,7 @@ use crate::ai::herbivore_toolkit::{
 use crate::entities::{
     reproduction::{Age, MatingIntent, Mother, ReproductionConfig},
     stats::{Energy, Hunger, Thirst},
-    BehaviorConfig, Deer, Rabbit, TilePosition,
+    BehaviorConfig, Deer, Rabbit, Raccoon, TilePosition,
 };
 use crate::world_loader::WorldLoader;
 /// Utility Planner for TQUAI
@@ -63,6 +63,22 @@ pub fn plan_entity_actions(
         With<Deer>,
     >,
     deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
+    raccoon_query: Query<
+        (
+            Entity,
+            &TilePosition,
+            &Thirst,
+            &Hunger,
+            &Energy,
+            &BehaviorConfig,
+            Option<&Age>,
+            Option<&Mother>,
+            Option<&MatingIntent>,
+            Option<&ReproductionConfig>,
+        ),
+        With<Raccoon>,
+    >,
+    raccoon_positions: Query<(Entity, &TilePosition), With<Raccoon>>,
     rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
     world_loader: Res<WorldLoader>,
     tick: Res<crate::simulation::SimulationTick>,
@@ -318,6 +334,125 @@ pub fn plan_entity_actions(
         } else if has_actions {
             warn!(
                 "❌ Deer {:?} - No actions above threshold {:.2}",
+                entity, UTILITY_THRESHOLD
+            );
+        }
+    }
+
+    let mut raccoon_pos_map: HashMap<u32, IVec2> = HashMap::new();
+    for (e, pos) in raccoon_positions.iter() {
+        raccoon_pos_map.insert(e.index(), pos.tile);
+    }
+
+    for (
+        entity,
+        position,
+        thirst,
+        hunger,
+        energy,
+        behavior_config,
+        age,
+        mother,
+        mating_intent,
+        repro_cfg,
+    ) in raccoon_query.iter()
+    {
+        if queue.has_action(entity) {
+            continue;
+        }
+
+        let mut actions = crate::entities::types::raccoon::RaccoonBehavior::evaluate_actions(
+            position,
+            thirst,
+            hunger,
+            energy,
+            behavior_config,
+            &world_loader,
+        );
+
+        let mate_added = maybe_add_mate_action(
+            &mut actions,
+            mating_intent,
+            repro_cfg,
+            thirst,
+            hunger,
+            energy,
+            MateActionParams {
+                utility: 0.42,
+                priority: 320,
+                threshold_margin: 0.05,
+                energy_margin: 0.05,
+            },
+        );
+        if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
+            debug!(
+                "🦝⏸️ Raccoon {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
+                entity,
+                thirst.0.normalized(),
+                hunger.0.normalized(),
+                energy.0.normalized()
+            );
+        }
+
+        let mother_position = mother.and_then(|m| raccoon_pos_map.get(&m.0.index()).copied());
+        let followed = maybe_add_follow_mother(
+            &mut actions,
+            entity,
+            position,
+            hunger,
+            thirst,
+            energy,
+            behavior_config,
+            age,
+            mother,
+            mother_position,
+            FollowConfig {
+                stop_distance: 2,
+                max_distance: 18,
+            },
+        );
+        if mother.is_some() && !followed && mother_position.is_none() {
+            commands.entity(entity).remove::<Mother>();
+        }
+
+        if !actions.is_empty() {
+            info!(
+                "🧠 Raccoon {:?} at {:?} - Thirst: {:.1}% - Evaluated {} actions",
+                entity,
+                position.tile,
+                thirst.0.percentage(),
+                actions.len()
+            );
+            for action in &actions {
+                info!(
+                    "   - {:?} utility: {:.3}",
+                    action.action_type, action.utility
+                );
+            }
+        }
+
+        let has_actions = !actions.is_empty();
+
+        if let Some(best_action) = actions
+            .into_iter()
+            .filter(|a| a.utility >= UTILITY_THRESHOLD)
+            .max_by(|a, b| a.utility.partial_cmp(&b.utility).unwrap())
+        {
+            info!(
+                "✅ Raccoon {:?} queuing action {:?} with utility {:.2}",
+                entity, best_action.action_type, best_action.utility
+            );
+
+            queue.queue_action(
+                entity,
+                best_action.action_type,
+                best_action.utility,
+                best_action.priority,
+                tick.0,
+            );
+        } else if has_actions {
+            warn!(
+                "❌ Raccoon {:?} - No actions above threshold {:.2}",
                 entity, UTILITY_THRESHOLD
             );
         }

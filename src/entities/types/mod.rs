@@ -4,6 +4,7 @@ pub mod deer;
 /// This module provides modular behavior configuration for different entity types.
 /// Each entity can have a BehaviorConfig component attached that defines its AI parameters.
 pub mod rabbit;
+pub mod raccoon;
 
 use bevy::prelude::*;
 

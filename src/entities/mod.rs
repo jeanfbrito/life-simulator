@@ -26,13 +26,14 @@ pub use stats::{
 
 pub use entity_types::{
     count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,
-    Deer, EntityTemplate, Human, Rabbit, Wolf,
+    spawn_raccoon, Deer, EntityTemplate, Human, Rabbit, Raccoon, Wolf,
 };
 
 pub use reproduction::{
     deer_birth_system, deer_mate_matching_system, rabbit_birth_system, rabbit_mate_matching_system,
-    tick_reproduction_timers_system, update_age_and_wellfed_system, Age, MatingIntent, Mother,
-    Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
+    raccoon_birth_system, raccoon_mate_matching_system, tick_reproduction_timers_system,
+    update_age_and_wellfed_system, Age, MatingIntent, Mother, Pregnancy, ReproductionConfig,
+    ReproductionCooldown, Sex, WellFedStreak,
 };
 
 pub use types::{BehaviorConfig, SpeciesNeeds};
@@ -89,8 +90,10 @@ impl Plugin for EntitiesPlugin {
                     tick_reproduction_timers_system, // Timers for repro
                     rabbit_mate_matching_system,     // Pairing (rabbits)
                     deer_mate_matching_system,       // Pairing (deer)
+                    raccoon_mate_matching_system,    // Pairing (raccoons)
                     rabbit_birth_system,             // Rabbit births
                     deer_birth_system,               // Deer births
+                    raccoon_birth_system,            // Raccoon births
                     stats::death_system,             // Handle death
                 )
                     .run_if(should_run_tick_systems),

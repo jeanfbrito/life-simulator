@@ -283,6 +283,8 @@ export class Renderer {
                 juvenileScale = 0.7;
             } else if (entity.entity_type === 'Deer') {
                 juvenileScale = 0.8;
+            } else if (entity.entity_type === 'Raccoon') {
+                juvenileScale = 0.75;
             }
         }
         const baseSize = CONFIG.TILE_SIZE * config.sizeMultiplier * juvenileScale;

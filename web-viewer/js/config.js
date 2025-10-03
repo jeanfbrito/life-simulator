@@ -127,6 +127,12 @@ export const ENTITY_CONFIG = {
         offsetX: 0,
         offsetY: -0.18
     },
+'Raccoon': {
+        emoji: '🦝',
+        sizeMultiplier: 0.65,
+        offsetX: 0,
+        offsetY: -0.12
+    },
     'Wolf': {
         emoji: '🐺',
         sizeMultiplier: 1.0,  // Similar to human

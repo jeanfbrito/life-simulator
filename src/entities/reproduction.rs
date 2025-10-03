@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use rand::Rng;
 
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
-use crate::entities::{Rabbit, TilePosition};
+use crate::entities::{Rabbit, Raccoon, TilePosition};
 
 // -----------------------------
 // Config
@@ -456,6 +456,133 @@ mod systems {
             "Fawn",
         );
     }
+
+    pub fn raccoon_mate_matching_system(
+        mut commands: Commands,
+        raccoons: Query<
+            (
+                Entity,
+                &TilePosition,
+                &Age,
+                &ReproductionCooldown,
+                &Energy,
+                &Health,
+                &WellFedStreak,
+                Option<&Pregnancy>,
+                Option<&Sex>,
+                Option<&MatingIntent>,
+                &ReproductionConfig,
+            ),
+            With<Raccoon>,
+        >,
+        tick: Res<crate::simulation::SimulationTick>,
+    ) {
+        use std::collections::HashSet;
+
+        let mut males: Vec<(
+            Entity,
+            IVec2,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            &ReproductionConfig,
+        )> = Vec::new();
+        let mut females: Vec<(
+            Entity,
+            IVec2,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            &ReproductionConfig,
+        )> = Vec::new();
+        let mut interval_checked = false;
+
+        for (e, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in raccoons.iter() {
+            if !interval_checked {
+                interval_checked = true;
+                if tick.0 % cfg.matching_interval_ticks as u64 != 0 {
+                    return;
+                }
+            }
+
+            let Some(sex) = sex_opt.copied() else {
+                continue;
+            };
+            if preg_opt.is_some() || intent_opt.is_some() {
+                continue;
+            }
+            if !is_eligible(age, cd, en, hp, wf, cfg) {
+                continue;
+            }
+            match sex {
+                Sex::Male => males.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
+                Sex::Female => females.push((e, pos.tile, age, cd, en, hp, wf, cfg)),
+            }
+        }
+
+        if males.is_empty() || females.is_empty() {
+            return;
+        }
+
+        let mut used_males: HashSet<Entity> = HashSet::new();
+        for (female_e, fpos, .., fcfg) in females.into_iter() {
+            let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
+            let mut best: Option<(usize, i32)> = None;
+            for (idx, (me, mpos, .., _mcfg)) in males.iter().enumerate() {
+                if used_males.contains(me) {
+                    continue;
+                }
+                let d = fpos - *mpos;
+                let d2 = d.x * d.x + d.y * d.y;
+                if d2 <= radius2 {
+                    if best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
+                        best = Some((idx, d2));
+                    }
+                }
+            }
+            let Some((mi, _)) = best else {
+                continue;
+            };
+            let (male_e, _, .., mcfg) = males[mi];
+            used_males.insert(male_e);
+            let meet = fpos;
+            let duration = fcfg.mating_duration_ticks;
+            commands.entity(female_e).insert(MatingIntent {
+                partner: male_e,
+                meeting_tile: meet,
+                duration_ticks: duration,
+            });
+            commands.entity(male_e).insert(MatingIntent {
+                partner: female_e,
+                meeting_tile: meet,
+                duration_ticks: mcfg.mating_duration_ticks,
+            });
+            info!(
+                "🦝💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
+                female_e, male_e, meet
+            );
+        }
+    }
+
+    pub fn raccoon_birth_system(
+        mut commands: Commands,
+        mut mothers: Query<
+            (Entity, &TilePosition, &mut Pregnancy, &ReproductionConfig),
+            With<Raccoon>,
+        >,
+    ) {
+        birth_common::<Raccoon>(
+            &mut commands,
+            &mut mothers,
+            |cmds, name, pos| crate::entities::entity_types::spawn_raccoon(cmds, name, pos),
+            "🦝🍼",
+            "Kit",
+        );
+    }
 }
 
 // -----------------------------
@@ -467,5 +594,6 @@ pub use components::{
 pub use config::ReproductionConfig;
 pub use systems::{
     deer_birth_system, deer_mate_matching_system, rabbit_birth_system, rabbit_mate_matching_system,
-    tick_reproduction_timers_system, update_age_and_wellfed_system,
+    raccoon_birth_system, raccoon_mate_matching_system, tick_reproduction_timers_system,
+    update_age_and_wellfed_system,
 };

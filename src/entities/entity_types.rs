@@ -1,5 +1,6 @@
 use super::types::deer::DeerBehavior;
 use super::types::rabbit::RabbitBehavior;
+use super::types::raccoon::RaccoonBehavior;
 use super::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
 use crate::pathfinding::PathfindingGrid;
 /// Modular entity types system
@@ -24,6 +25,10 @@ pub struct Rabbit;
 /// Marker component for deer entities (future)
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Deer;
+
+/// Marker component for raccoon entities
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Raccoon;
 
 /// Marker component for wolf entities (future)
 #[derive(Component, Debug, Clone, Copy)]
@@ -69,6 +74,15 @@ impl EntityTemplate {
         movement_speed: 10, // 1.0 tiles/sec at 10 TPS
         wander_radius: 40,  // Large territory
         emoji: "🦌",
+    };
+
+    /// Raccoon template - nimble scavenger
+    pub const RACCOON: EntityTemplate = EntityTemplate {
+        name_prefix: "Raccoon",
+        species: "Raccoon",
+        movement_speed: 16,
+        wander_radius: 25,
+        emoji: "🦝",
     };
 
     /// Wolf template (future) - fast predator
@@ -182,6 +196,47 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
                 CurrentAction::none(), // Track current action for viewer
+                cfg,
+            ))
+            .id()
+    }
+}
+
+/// Spawn a raccoon entity
+pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+    let template = EntityTemplate::RACCOON;
+
+    {
+        use crate::entities::reproduction::{
+            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
+        };
+        let cfg = RaccoonBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Raccoon,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                RaccoonBehavior::stats_bundle(),
+                RaccoonBehavior::config(),
+                RaccoonBehavior::needs(),
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                },
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(),
                 cfg,
             ))
             .id()

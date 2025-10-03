@@ -16,7 +16,7 @@ mod world_loader;
 
 use ai::TQUAIPlugin;
 use cached_world::CachedWorldPlugin;
-use entities::{spawn_deer, spawn_humans, spawn_rabbit, spawn_rabbits, EntitiesPlugin};
+use entities::{spawn_deer, spawn_raccoon, spawn_humans, spawn_rabbit, spawn_rabbits, EntitiesPlugin};
 use pathfinding::{process_pathfinding_requests, PathfindingGrid};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
@@ -230,6 +230,33 @@ fn spawn_wanderers(mut commands: Commands, pathfinding_grid: Res<PathfindingGrid
         );
     } else {
         eprintln!("   ⚠️ Failed to find walkable positions for deer pair");
+    }
+
+    // Spawn a male and a female raccoon nearby for testing
+    let raccoon_base = bevy::math::IVec2::new(5, -5);
+    let boar_pos = (0..50).find_map(|_| {
+        let dx = rng.gen_range(-4..=4);
+        let dy = rng.gen_range(-4..=4);
+        let candidate = raccoon_base + bevy::math::IVec2::new(dx, dy);
+        pathfinding_grid.is_walkable(candidate).then_some(candidate)
+    });
+    let sow_pos = (0..50).find_map(|_| {
+        let dx = rng.gen_range(-4..=4);
+        let dy = rng.gen_range(-4..=4);
+        let candidate = raccoon_base + bevy::math::IVec2::new(dx, dy);
+        pathfinding_grid.is_walkable(candidate).then_some(candidate)
+    });
+    if let (Some(mpos), Some(fpos)) = (boar_pos, sow_pos) {
+        let male = spawn_raccoon(&mut commands, "Bandit", mpos);
+        let female = spawn_raccoon(&mut commands, "Maple", fpos);
+        commands.entity(male).insert(Sex::Male);
+        commands.entity(female).insert(Sex::Female);
+        println!(
+            "   🦝 Spawned raccoon pair: Bandit at {:?}, Maple at {:?}",
+            mpos, fpos
+        );
+    } else {
+        eprintln!("   ⚠️ Failed to find walkable positions for raccoon pair");
     }
 
     if spawned_count > 0 {
