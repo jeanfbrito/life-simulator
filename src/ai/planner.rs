@@ -59,11 +59,14 @@ pub fn plan_entity_actions(
             &Hunger,
             &Energy,
             &BehaviorConfig,
+            Option<&crate::entities::reproduction::Age>,
+            Option<&crate::entities::reproduction::Mother>,
             Option<&MatingIntent>,
             Option<&ReproductionConfig>,
         ),
         With<Deer>,
     >,
+    deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
     rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
     world_loader: Res<WorldLoader>,
     tick: Res<crate::simulation::SimulationTick>,
@@ -213,8 +216,23 @@ pub fn plan_entity_actions(
         .map(|(e, pos)| (e, pos.tile))
         .collect();
 
-    for (entity, position, thirst, hunger, energy, behavior_config, mating_intent, repro_cfg) in
-        deer_query.iter()
+    let mut deer_pos_map: HashMap<u32, IVec2> = HashMap::new();
+    for (e, pos) in deer_positions.iter() {
+        deer_pos_map.insert(e.index(), pos.tile);
+    }
+
+    for (
+        entity,
+        position,
+        thirst,
+        hunger,
+        energy,
+        behavior_config,
+        age,
+        mother,
+        mating_intent,
+        repro_cfg,
+    ) in deer_query.iter()
     {
         if queue.has_action(entity) {
             continue;
@@ -256,6 +274,29 @@ pub fn plan_entity_actions(
                     "🦌⏸️ Deer {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
                     entity, thirst_level, hunger_level, energy_level
                 );
+            }
+        }
+
+        if let (Some(age), Some(mother)) = (age, mother) {
+            if !age.is_adult() {
+                let hunger_ok = hunger.0.normalized() < behavior_config.hunger_threshold;
+                let thirst_ok = thirst.0.normalized() < behavior_config.thirst_threshold;
+                let energy_ok = energy.0.normalized() > behavior_config.energy_threshold;
+
+                if hunger_ok && thirst_ok && energy_ok {
+                    if let Some(&mpos) = deer_pos_map.get(&mother.0.index()) {
+                        let deer_slice = [(mother.0, mpos)];
+                        if let Some(follow) =
+                            evaluate_follow_behavior(entity, position, &deer_slice, 2, 25)
+                        {
+                            actions.push(follow);
+                        }
+                    } else {
+                        commands
+                            .entity(entity)
+                            .remove::<crate::entities::reproduction::Mother>();
+                    }
+                }
             }
         }
 
