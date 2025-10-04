@@ -309,6 +309,15 @@ mod tests {
             energy: Some(80.0),
             health: Some(100.0),
             current_action: None,
+            sex: None,
+            is_juvenile: None,
+            well_fed_streak: None,
+            well_fed_required_ticks: None,
+            eligible_to_mate: None,
+            pregnancy_remaining_ticks: None,
+            gestation_total_ticks: None,
+            reproduction_cooldown_ticks: None,
+            ticks_to_adult: None,
         };
 
         tracker.update(1, data);
@@ -334,6 +343,15 @@ mod tests {
                 energy: Some(80.0),
                 health: Some(100.0),
                 current_action: None,
+                sex: None,
+                is_juvenile: None,
+                well_fed_streak: None,
+                well_fed_required_ticks: None,
+                eligible_to_mate: None,
+                pregnancy_remaining_ticks: None,
+                gestation_total_ticks: None,
+                reproduction_cooldown_ticks: None,
+                ticks_to_adult: None,
             },
         );
 

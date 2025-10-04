@@ -6,6 +6,7 @@ pub mod entity_types;
 pub mod movement;
 pub mod registry;
 pub mod reproduction;
+pub mod spawn_config;
 pub mod stats;
 pub mod systems_registry;
 pub mod types;
@@ -32,10 +33,9 @@ pub use entity_types::{
 };
 
 pub use registry::{
-    SPECIES_REGISTRY, SpeciesDescriptor, SpeciesRegistry,
-    spawn_using_registry, spawn_species_batch,
-    spawn_human_legacy, spawn_rabbit_legacy, spawn_deer_legacy, spawn_raccoon_legacy,
-    spawn_humans_legacy, spawn_rabbits_legacy,
+    spawn_deer_legacy, spawn_human_legacy, spawn_humans_legacy, spawn_rabbit_legacy,
+    spawn_rabbits_legacy, spawn_raccoon_legacy, spawn_species_batch, spawn_using_registry,
+    SpeciesDescriptor, SpeciesRegistry, SPECIES_REGISTRY,
 };
 
 /// Generate JSON metadata for all species for viewer configuration
@@ -84,8 +84,8 @@ pub fn get_species_metadata_json() -> String {
 }
 
 pub use systems_registry::{
-    SPECIES_SYSTEMS_REGISTRY, SpeciesSystemsDescriptor, SpeciesSystemsRegistry,
-    get_mate_matching_system_names, get_birth_system_names, get_planner_system_names,
+    get_birth_system_names, get_mate_matching_system_names, get_planner_system_names,
+    SpeciesSystemsDescriptor, SpeciesSystemsRegistry, SPECIES_SYSTEMS_REGISTRY,
 };
 
 pub use reproduction::{
@@ -99,6 +99,11 @@ pub use types::raccoon::{raccoon_birth_system, raccoon_mate_matching_system};
 pub use types::{BehaviorConfig, SpeciesNeeds};
 
 pub use current_action::CurrentAction;
+
+pub use spawn_config::{
+    spawn_entities_from_config, SpawnArea, SpawnConfig, SpawnGroup, SpawnMessages, SpawnSettings,
+    SpawnSex,
+};
 
 // ============================================================================
 // ENTITY TYPES

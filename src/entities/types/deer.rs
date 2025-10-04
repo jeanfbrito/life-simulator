@@ -134,13 +134,7 @@ pub fn plan_deer_actions(
         &deer_positions,
         |entity, position, thirst, hunger, energy, behavior| {
             DeerBehavior::evaluate_actions(
-                entity,
-                position,
-                thirst,
-                hunger,
-                energy,
-                behavior,
-                loader,
+                entity, position, thirst, hunger, energy, behavior, loader,
             )
         },
         Some(MateActionParams {

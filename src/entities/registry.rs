@@ -3,15 +3,13 @@
 /// This module provides a centralized registry for all species in the game.
 /// Instead of hard-coding spawn logic, behavior configs, and stats in multiple places,
 /// species register themselves with descriptors that the core engine can iterate over.
-
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::entities::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
-use crate::entities::reproduction::{Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak};
-use crate::pathfinding::PathfindingGrid;
-use super::types::{BehaviorConfig, SpeciesNeeds};
 use super::{Deer, Human, Rabbit, Raccoon, Wolf};
+use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+use crate::entities::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
+use crate::pathfinding::PathfindingGrid;
 
 // ============================================================================
 // REGISTRY TYPES
@@ -209,10 +207,7 @@ fn spawn_human_registry(commands: &mut Commands, name: String, position: IVec2) 
 fn spawn_rabbit_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
     let descriptor = SPECIES_REGISTRY.rabbit();
 
-    // Import behavior modules
     use super::types::rabbit::RabbitBehavior;
-    use super::types::deer::DeerBehavior;
-    use super::types::raccoon::RaccoonBehavior;
 
     let cfg = RabbitBehavior::reproduction_config();
     let mut rng = rand::thread_rng();
@@ -251,9 +246,7 @@ fn spawn_rabbit_registry(commands: &mut Commands, name: String, position: IVec2)
 fn spawn_deer_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
     let descriptor = SPECIES_REGISTRY.deer();
 
-    use super::types::rabbit::RabbitBehavior;
     use super::types::deer::DeerBehavior;
-    use super::types::raccoon::RaccoonBehavior;
 
     let cfg = DeerBehavior::reproduction_config();
     let mut rng = rand::thread_rng();
@@ -292,8 +285,6 @@ fn spawn_deer_registry(commands: &mut Commands, name: String, position: IVec2) -
 fn spawn_raccoon_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
     let descriptor = SPECIES_REGISTRY.raccoon();
 
-    use super::types::rabbit::RabbitBehavior;
-    use super::types::deer::DeerBehavior;
     use super::types::raccoon::RaccoonBehavior;
 
     let cfg = RaccoonBehavior::reproduction_config();
@@ -364,7 +355,8 @@ pub fn spawn_species_batch(
     spawn_radius: i32,
     grid: &PathfindingGrid,
 ) -> Vec<Entity> {
-    let descriptor = SPECIES_REGISTRY.find_by_species(species)
+    let descriptor = SPECIES_REGISTRY
+        .find_by_species(species)
         .unwrap_or_else(|| panic!("Unknown species: {}", species));
 
     let mut entities = Vec::new();
@@ -377,7 +369,10 @@ pub fn spawn_species_batch(
             entities.push(entity);
             info!("Spawned {} at {:?}", species, spawn_pos);
         } else {
-            warn!("Couldn't find walkable spawn position for {} {}", species, i);
+            warn!(
+                "Couldn't find walkable spawn position for {} {}",
+                species, i
+            );
         }
     }
 
@@ -391,7 +386,8 @@ pub fn spawn_using_registry(
     name: String,
     position: IVec2,
 ) -> Entity {
-    let descriptor = SPECIES_REGISTRY.find_by_species(species)
+    let descriptor = SPECIES_REGISTRY
+        .find_by_species(species)
         .unwrap_or_else(|| panic!("Unknown species: {}", species));
 
     (descriptor.spawn_fn)(commands, name, position)
@@ -437,22 +433,38 @@ fn pick_random_walkable_tile(
 // ============================================================================
 
 /// Legacy wrapper for spawn_human - maintains compatibility
-pub fn spawn_human_legacy(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+pub fn spawn_human_legacy(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: IVec2,
+) -> Entity {
     spawn_human_registry(commands, name.into(), position)
 }
 
 /// Legacy wrapper for spawn_rabbit - maintains compatibility
-pub fn spawn_rabbit_legacy(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+pub fn spawn_rabbit_legacy(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: IVec2,
+) -> Entity {
     spawn_rabbit_registry(commands, name.into(), position)
 }
 
 /// Legacy wrapper for spawn_deer - maintains compatibility
-pub fn spawn_deer_legacy(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+pub fn spawn_deer_legacy(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: IVec2,
+) -> Entity {
     spawn_deer_registry(commands, name.into(), position)
 }
 
 /// Legacy wrapper for spawn_raccoon - maintains compatibility
-pub fn spawn_raccoon_legacy(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+pub fn spawn_raccoon_legacy(
+    commands: &mut Commands,
+    name: impl Into<String>,
+    position: IVec2,
+) -> Entity {
     spawn_raccoon_registry(commands, name.into(), position)
 }
 

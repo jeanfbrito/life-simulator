@@ -4,7 +4,6 @@
 /// without attempting dynamic system registration (which is complex in Bevy).
 /// Instead, it provides information about which systems each species has,
 /// allowing for more readable and maintainable plugin code.
-
 use bevy::prelude::*;
 
 // ============================================================================
@@ -78,13 +77,11 @@ impl SpeciesSystemsRegistry {
                 .with_mate_matching()
                 .with_birth_system()
                 .with_planner_system(),
-
             // Deer systems
             SpeciesSystemsDescriptor::new("Deer")
                 .with_mate_matching()
                 .with_birth_system()
                 .with_planner_system(),
-
             // Raccoon systems
             SpeciesSystemsDescriptor::new("Raccoon")
                 .with_mate_matching()

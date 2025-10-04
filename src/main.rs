@@ -16,9 +16,7 @@ mod world_loader;
 
 use ai::TQUAIPlugin;
 use cached_world::CachedWorldPlugin;
-use entities::{
-    spawn_deer, spawn_humans, spawn_rabbit, spawn_rabbits, spawn_raccoon, EntitiesPlugin,
-};
+use entities::EntitiesPlugin;
 use pathfinding::{process_pathfinding_requests, PathfindingGrid};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
@@ -45,7 +43,10 @@ fn main() {
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
-        .add_systems(Startup, (setup, spawn_wanderers.after(setup)))
+        .add_systems(
+            Startup,
+            (setup, entities::spawn_entities_from_config.after(setup)),
+        )
         .add_systems(
             Update,
             (
@@ -149,131 +150,6 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
 
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);
-}
-
-fn spawn_wanderers(mut commands: Commands, pathfinding_grid: Res<PathfindingGrid>) {
-    println!("🎯 LIFE_SIMULATOR: Spawning 5 rabbits for testing...");
-
-    // Import the spawn function that attaches BehaviorConfig
-    // use entities::spawn_rabbit;  // already imported above
-
-    // Find walkable spawn positions near origin
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-
-    let rabbit_names = ["Bugs", "Roger", "Thumper", "Peter", "Clover"];
-    let mut spawned_count = 0;
-    let mut first_rabbit_pos: Option<bevy::math::IVec2> = None;
-
-    for (idx, name) in rabbit_names.iter().enumerate() {
-        // Try to find a walkable tile near origin
-        let spawn_pos = (0..30).find_map(|_| {
-            let x = rng.gen_range(-15..=15);
-            let y = rng.gen_range(-15..=15);
-            let candidate = bevy::math::IVec2::new(x, y);
-            if pathfinding_grid.is_walkable(candidate) {
-                Some(candidate)
-            } else {
-                None
-            }
-        });
-
-        if let Some(spawn_pos) = spawn_pos {
-            // Use the proper spawn function that attaches BehaviorConfig
-            let rabbit = spawn_rabbit(&mut commands, *name, spawn_pos);
-            if first_rabbit_pos.is_none() {
-                first_rabbit_pos = Some(spawn_pos);
-            }
-            spawned_count += 1;
-            println!(
-                "   ✅ Spawned rabbit #{}: {} 🐇 at {:?}",
-                idx + 1,
-                name,
-                spawn_pos
-            );
-        } else {
-            eprintln!("   ❌ Failed to find walkable spawn position for {}!", name);
-        }
-    }
-
-    // Spawn a male and a female deer near origin for quick reproduction test
-    use crate::entities::reproduction::Sex;
-    // Find two nearby walkable tiles around origin
-    let base_pos = bevy::math::IVec2::new(0, 0);
-    let male_pos = (0..50).find_map(|_| {
-        let dx = rng.gen_range(-5..=5);
-        let dy = rng.gen_range(-5..=5);
-        let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
-        if pathfinding_grid.is_walkable(candidate) {
-            Some(candidate)
-        } else {
-            None
-        }
-    });
-    let female_pos = (0..50).find_map(|_| {
-        let dx = rng.gen_range(-5..=5);
-        let dy = rng.gen_range(-5..=5);
-        let candidate = base_pos + bevy::math::IVec2::new(dx, dy);
-        if pathfinding_grid.is_walkable(candidate) {
-            Some(candidate)
-        } else {
-            None
-        }
-    });
-    if let (Some(mpos), Some(fpos)) = (male_pos, female_pos) {
-        let male = spawn_deer(&mut commands, "Stag", mpos);
-        let female = spawn_deer(&mut commands, "Doe", fpos);
-        // Force explicit sexes to ensure pairing
-        commands.entity(male).insert(Sex::Male);
-        commands.entity(female).insert(Sex::Female);
-        println!(
-            "   🦌 Spawned deer pair: Stag at {:?}, Doe at {:?}",
-            mpos, fpos
-        );
-    } else {
-        eprintln!("   ⚠️ Failed to find walkable positions for deer pair");
-    }
-
-    // Spawn a male and a female raccoon nearby for testing
-    let raccoon_base = bevy::math::IVec2::new(5, -5);
-    let boar_pos = (0..50).find_map(|_| {
-        let dx = rng.gen_range(-4..=4);
-        let dy = rng.gen_range(-4..=4);
-        let candidate = raccoon_base + bevy::math::IVec2::new(dx, dy);
-        pathfinding_grid.is_walkable(candidate).then_some(candidate)
-    });
-    let sow_pos = (0..50).find_map(|_| {
-        let dx = rng.gen_range(-4..=4);
-        let dy = rng.gen_range(-4..=4);
-        let candidate = raccoon_base + bevy::math::IVec2::new(dx, dy);
-        pathfinding_grid.is_walkable(candidate).then_some(candidate)
-    });
-    if let (Some(mpos), Some(fpos)) = (boar_pos, sow_pos) {
-        let male = spawn_raccoon(&mut commands, "Bandit", mpos);
-        let female = spawn_raccoon(&mut commands, "Maple", fpos);
-        commands.entity(male).insert(Sex::Male);
-        commands.entity(female).insert(Sex::Female);
-        println!(
-            "   🦝 Spawned raccoon pair: Bandit at {:?}, Maple at {:?}",
-            mpos, fpos
-        );
-    } else {
-        eprintln!("   ⚠️ Failed to find walkable positions for raccoon pair");
-    }
-
-    if spawned_count > 0 {
-        println!(
-            "✅ LIFE_SIMULATOR: Spawned {} rabbits successfully!",
-            spawned_count
-        );
-        println!("   📊 Rabbits will only move when thirsty/hungry (no wandering)");
-        println!("   🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range");
-        println!("   🦌 Example: Deer follows the nearest rabbit while idle");
-        println!("🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html");
-        println!("🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities");
-    } else {
-        eprintln!("❌ LIFE_SIMULATOR: Failed to spawn any rabbits!");
-    }
 }
 
 fn simulation_system(world_loader: Res<WorldLoader>) {
