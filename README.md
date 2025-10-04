@@ -1,203 +1,76 @@
-# Life Simulator
+# Life Simulator 🦌🐇🦝
 
-A headless life simulation game with **separated world generation** and web-based visualization, built with Bevy 0.16.
+Life Simulator is a cozy headless world where rabbits, deer, raccoons (and more to come) eat, drink, sleep, and raise their young on handcrafted islands. The core sim runs in Bevy 0.16 without graphics; you peek inside through a lightweight web viewer or by calling the HTTP API.
 
-## Overview
+## Why you might love this project
 
-This project demonstrates a **separated architecture** where world generation is completely independent from the running simulation engine. Maps are generated as a separate step using a dedicated CLI tool, and the life simulator loads pre-generated worlds. This approach provides consistent, reproducible worlds and allows for world sharing and versioning.
+- **Watch ecosystems evolve** – animals form pairs, carry pregnancies, birth litters, and juveniles imprint on their mothers.
+- **Plug-and-play species** – reproduction, AI planners, and viewer metadata all come from per-species modules, so cloning behaviour is as easy as cloning a descriptor.
+- **Data-driven bootstrapping** – demo spawns, names, and logging live in a RON config you can tweak without recompiling.
+- **Shareable worlds** – generate islands once with the map CLI, then replay the same world forever or ship it to a friend.
+- **Headless & scriptable** – everything streams over HTTP/websocket, perfect for dashboards, bots, or further automation.
 
-## Features
+## Tour of the experience
 
-- **Separated Architecture**: World generation completely separate from simulation engine
-- **Standalone Map Generator**: CLI tool for generating and saving worlds independently
-- **Bevy 0.16**: Built with the latest version of the Bevy game engine in headless mode
-- **Pre-Generated Worlds**: Load existing worlds instead of generating procedurally at runtime
-- **World Selection**: Switch between different generated worlds via API
-- **Web-Based Visualization**: Interactive HTML viewer with zoom and pan capabilities
-- **HTTP API Server**: RESTful API for world and terrain data access
-- **ECS Architecture**: Entity-Component-System based design
-- **Multi-Layer Support**: Terrain and resources layers stored separately
+| Feature | What you'll see |
+| --- | --- |
+| 🗺️ Island worlds | Sand-lined beaches leading into forests, mountains, and ponds, all generated with deterministic maths. |
+| 🐇 Rabbits | Fast-reproducing herbivores that graze aggressively and form pairs quickly. |
+| 🦌 Deer | Slower, majestic creatures whose fawns trail their mothers until adulthood. |
+| 🦝 Raccoons | Opportunistic foragers that balance thirst and hunger before seeking mates. |
+| 🌐 Web viewer | A HTML/JS viewer (in `web-viewer/viewer.html`) that queries `127.0.0.1:54321` for terrain and entity data. |
 
-### Terrain Generation
+## Quick start (5 minutes)
 
-- **Circular Islands**: Mathematical distance-based island generation
-- **Realistic Beaches**: Proper water transitions (Deep Water → Shallow Water → Sand → Land)
-- **Natural Variations**: Controlled irregularity using sine/cosine functions
-- **Terrain Types**: Deep water, shallow water, sand, grass, forest, desert, dirt, mountains, snow, stone, swamps
+1. **Clone & enter the project**
+   ```bash
+   git clone <repository-url>
+   cd life-simulator
+   ```
 
-## Project Structure
+2. **Generate an island** – this produces `maps/generated_world.ron`.
+   ```bash
+   cargo run --bin map_generator
+   # or customise it
+   cargo run --bin map_generator -- --name spring_isle --seed 123456 --radius 12
+   ```
 
-```
-life-simulator/
-├── src/
-│   ├── main.rs              # Main application entry point (headless)
-│   ├── lib.rs               # Library exports
-│   ├── map_generator.rs     # Standalone map generator binary
-│   ├── world_loader.rs      # World loading and management
-│   ├── web_server_simple.rs # HTTP server for world API
-│   ├── tilemap/             # Chunk-based terrain system
-│   ├── serialization.rs     # World save/load functionality
-│   ├── resources.rs         # Resource generation
-│   ├── cached_world.rs      # World caching system
-│   └── web/                 # WebSocket and web components
-├── maps/                    # Directory for generated world files
-├── web-viewer/
-│   └── viewer.html          # Interactive terrain visualization
-├── Cargo.toml               # Project configuration
-└── README.md               # This file
-```
+3. **Run the sim**
+   ```bash
+   cargo run --bin life-simulator
+   ```
 
-## Quick Start
+4. **Open the viewer**
+   - Visit http://127.0.0.1:54321/viewer.html
+   - Drag to pan, scroll to zoom, click an entity to inspect its stats.
 
-### Prerequisites
+The demo spawn config will introduce rabbits near the origin, a deer pair, and a raccoon couple so you can immediately watch behaviour unfold. Tweak `config/spawn_config.ron` to change names, counts, or logging.
 
-- Rust 1.70+ (recommended to use [rustup](https://rustup.rs/))
-- Git
-- A modern web browser
+## Under the hood (at a glance)
 
-### Installation
+- **Headless Bevy** runs the ECS, ticking stats, movement, AI planners, and reproduction systems.
+- **Species registry** lives in `src/entities/registry.rs`, exposing spawn handlers, viewer metadata, and default behaviours.
+- **AI planners** reuse shared herbivore logic, with species contributing thresholds and follow/mate preferences.
+- **Viewer API** (`web_server_simple.rs`) serves `/api/entities`, `/api/species`, and chunk endpoints for the browser client.
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd life-simulator
-```
+Curious how it all works? Dive into the docs:
 
-2. **Generate a world first** (required step):
-```bash
-# Generate a default world (radius 5, random seed)
-cargo run --bin map_generator
+- [Species Architecture](docs/SPECIES_ARCHITECTURE.md) – registry, planner hooks, viewer metadata
+- [Technical Overview & Developer Guide](docs/TECH_OVERVIEW.md) – project layout, build commands, testing tips
+- `docs/` folder – fix-it journals and design notes accumulated during development
 
-# Or generate with custom parameters
-cargo run --bin map_generator -- --name "my_world" --seed 12345 --radius 10 --verbose
-```
+## Extending the sim
 
-3. Run the life simulator:
-```bash
-cargo run --bin life-simulator
-```
+Want to introduce a new animal or tweak behaviour?
 
-4. Open the web viewer:
-```bash
-# The server starts on http://127.0.0.1:54321
-# Open http://127.0.0.1:54321/viewer.html in your browser
-```
+1. Copy an existing module in `src/entities/types/` and adjust stats + reproduction config.
+2. Register it in the species registry (spawn fn + metadata) and spawn config.
+3. Add viewer styling via the metadata returned from `/api/species`.
+4. Run `cargo check` + `cargo test` (see `docs/TECH_OVERVIEW.md` for details).
 
-### Map Generator Usage
+The modular layout keeps species-specific logic out of engine code, letting you iterate quickly without touching the core systems.
 
-The standalone map generator provides these options:
-
-```bash
-cargo run --bin map_generator -- --help
-
-Options:
-  -n, --name <NAME>         World name [default: generated_world]
-  -s, --seed <SEED>         World generation seed (random if not specified)
-  -r, --radius <RADIUS>     World size in chunks radius [default: 5]
-  -o, --output-dir <DIR>    Output directory [default: maps]
-  -p, --preview             Generate HTML preview
-  -v, --verbose             Verbose output
-```
-
-### Web Viewer Features
-
-- **Interactive Map**: Click and drag to pan around the island
-- **Zoom**: Mouse wheel to zoom in/out
-- **Terrain Display**: 12 different terrain types with distinct colors
-- **Real-time Generation**: Terrain is generated procedurally as you explore
-- **Dark Theme**: Optimized for comfortable viewing
-
-
-## Development
-
-### Building
-
-```bash
-# Development build
-cargo build
-
-# Release build
-cargo build --release
-
-# Run all tests
-cargo test
-
-# Run specific test with output
-cargo test --test pathfinding_test -- --nocapture
-
-# Run with logging
-RUST_LOG=debug cargo run
-RUST_LOG=info cargo run  # Less verbose, recommended for normal operation
-```
-
-### Testing
-
-#### Integration Tests
-
-The project includes integration tests in the `tests/` directory that validate core functionality against real world data:
-
-**`tests/pathfinding_test.rs`** - Pathfinding System Test
-- Loads actual generated world from `maps/` directory
-- Builds pathfinding grid using same logic as main simulation
-- Tests pathfinding from multiple spawn points to water sources
-- Validates terrain accessibility and resource blocking
-- Reports detailed diagnostics for path failures
-
-Run with:
-```bash
-cargo test --test pathfinding_test -- --nocapture
-```
-
-Expected output:
-- ✅ Paths found for most spawn points (75-100% success rate)
-- 🔍 Diagnostic info about blocked terrain and resources
-- 📊 Grid statistics (tiles processed, walkable, blocked)
-
-#### Test-Driven Debugging
-
-When debugging gameplay issues:
-1. Create integration test that reproduces the issue
-2. Test against real world data (not mocks)
-3. Use `--nocapture` flag to see diagnostic output
-4. Validate fixes work across multiple scenarios
-
-See `PATHFINDING_FIX.md` for example of this debugging approach.
-
-### Code Style
-
-This project follows standard Rust formatting:
-```bash
-cargo fmt
-cargo clippy
-```
-
-## Architecture
-
-The project is organized around Bevy's ECS architecture in headless mode:
-
-- **Components**: Data attached to entities
-- **Systems**: Logic that operates on components
-- **Resources**: Global data and configuration
-- **Headless Operation**: No graphics rendering, all visualization via web interface
-
-### Terrain Generation System
-
-The terrain generation uses mathematical algorithms to create realistic islands:
-
-1. **Circular Island Base**
-   - Distance-based calculations from center point
-   - Controlled irregularity using sine/cosine functions
-   - Distinct terrain zones with smooth transitions
-
-2. **Terrain Zones**
-   - Deep Water: Outer ocean (#003366)
-   - Shallow Water: Coastal transition zone (#4a7ba7)
-   - Sand Beach: Island border (#f4e4bc)
-   - Land Interior: Various biomes with grass center
-
-3. **Chunk-Based Architecture**
-   - 16x16 tile chunks for efficient memory usage
-   - Procedural generation on-demand
+Happy simming! 🐾
    - HTTP API for terrain data access
 
 ## Dependencies
