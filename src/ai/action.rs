@@ -19,6 +19,9 @@ pub enum ActionResult {
     Failed,
     /// Action is still in progress (will continue next tick)
     InProgress,
+    /// Action completed but should trigger a follow-up action
+    /// Used for giving-up behavior when patch quality is too low
+    TriggerFollowUp,
 }
 
 /// Request to queue an action
@@ -284,6 +287,16 @@ impl Action for DrinkWaterAction {
 pub struct GrazeAction {
     pub target_tile: IVec2,
     pub started: bool,
+    /// Initial biomass at the grazing location
+    /// Used to determine when to give up on a patch
+    initial_biomass: Option<f32>,
+    /// Number of feeding attempts made at this location
+    feeding_attempts: u32,
+    /// Duration of grazing action in ticks
+    /// Adjusted based on biomass availability
+    duration_ticks: u32,
+    /// Ticks elapsed during grazing
+    ticks_elapsed: u32,
 }
 
 impl GrazeAction {
@@ -291,7 +304,32 @@ impl GrazeAction {
         Self {
             target_tile,
             started: false,
+            initial_biomass: None,
+            feeding_attempts: 0,
+            duration_ticks: 0, // Will be calculated when we arrive at the tile
+            ticks_elapsed: 0,
         }
+    }
+
+    /// Calculate grazing duration based on biomass availability
+    /// Higher biomass = longer feeding time, lower biomass = shorter feeding time
+    fn calculate_duration(biomass: f32) -> u32 {
+        // Base duration: 10 ticks (1 second at 10 TPS)
+        let base_duration = 10;
+
+        // Duration multiplier based on biomass quality (0.1 to 2.0)
+        // Biomass range: 0.0 - 100.0
+        // Good biomass (50+) = longer feeding
+        // Poor biomass (<20) = quick feeding
+        let duration_multiplier = if biomass >= 50.0 {
+            2.0 // High quality: graze longer
+        } else if biomass >= 20.0 {
+            1.0 // Medium quality: normal duration
+        } else {
+            0.5 // Low quality: quick feeding, move to next patch
+        };
+
+        (base_duration as f32 * duration_multiplier) as u32
     }
 }
 
@@ -323,7 +361,7 @@ impl Action for GrazeAction {
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
         // Get entity position
         let Some(position) = world.get::<TilePosition>(entity).copied() else {
-            warn!("Entity {:?} has no position, cannot wander", entity);
+            warn!("Entity {:?} has no position, cannot graze", entity);
             return ActionResult::Failed;
         };
 
@@ -332,7 +370,7 @@ impl Action for GrazeAction {
         // Check if pathfinding failed for this entity
         if world.get::<PathfindingFailed>(entity).is_some() {
             debug!(
-                "Entity {:?} pathfinding failed to reach wander target {:?}, aborting Wander action",
+                "Entity {:?} pathfinding failed to reach graze target {:?}, aborting Graze action",
                 entity,
                 self.target_tile
             );
@@ -345,9 +383,101 @@ impl Action for GrazeAction {
 
         // Check if we've arrived at target
         if current_pos == self.target_tile {
+            // Record initial biomass on first visit and calculate duration
+            if self.initial_biomass.is_none() {
+                if let Some(vegetation_grid) = world.get_resource::<crate::vegetation::VegetationGrid>() {
+                    if let Some(vegetation) = vegetation_grid.get(self.target_tile) {
+                        self.initial_biomass = Some(vegetation.biomass);
+                        self.duration_ticks = Self::calculate_duration(vegetation.biomass);
+                    }
+                }
+            }
+
+            // Check if we should continue grazing
+            if self.ticks_elapsed < self.duration_ticks {
+                self.ticks_elapsed += 1;
+
+                // Still have time to graze, consume some biomass every 2 ticks
+                if self.ticks_elapsed % 2 == 0 { // Consume every 2 ticks
+
+                    // Get entity's hunger to determine demand
+                    let demand = if let Some(hunger) = world.get::<crate::entities::stats::Hunger>(entity) {
+                        hunger.0.max - hunger.0.current
+                    } else {
+                        warn!("Entity {:?} has no hunger component, cannot graze", entity);
+                        return ActionResult::Failed;
+                    };
+
+                    // Check giving-up conditions before consuming
+                    let should_give_up = if let Some(initial_biomass) = self.initial_biomass {
+                        if let Some(vegetation_grid) = world.get_resource::<crate::vegetation::VegetationGrid>() {
+                            if let Some(current_vegetation) = vegetation_grid.get(self.target_tile) {
+                                let giving_up_absolute = crate::vegetation::consumption::GIVING_UP_THRESHOLD;
+                                let giving_up_ratio = initial_biomass * crate::vegetation::consumption::GIVING_UP_THRESHOLD_RATIO;
+                                let giving_up_threshold = giving_up_absolute.max(giving_up_ratio);
+
+                                if current_vegetation.biomass < giving_up_threshold {
+                                    info!(
+                                        "🌾 Entity {:?} giving up early - biomass {:.1} < threshold {:.1}",
+                                        entity, current_vegetation.biomass, giving_up_threshold
+                                    );
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    };
+
+                    // Try to consume biomass
+                    if let Some(mut vegetation_grid) = world.get_resource_mut::<crate::vegetation::VegetationGrid>() {
+                        let (consumed, _remaining) = vegetation_grid.consume(
+                            self.target_tile,
+                            demand,
+                            crate::vegetation::consumption::MAX_MEAL_FRACTION
+                        );
+
+                        if consumed > 0.0 && !should_give_up {
+                            // Successfully consumed, reduce hunger
+                            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                                if let Some(mut hunger) = entity_mut.get_mut::<crate::entities::stats::Hunger>() {
+                                    hunger.0.change(consumed);
+                                }
+                            }
+
+                            debug!(
+                                "🐇 Entity {:?} grazing tick {}/{} - consumed {:.1} biomass",
+                                entity, self.ticks_elapsed, self.duration_ticks, consumed
+                            );
+                        } else if consumed == 0.0 || should_give_up {
+                            // No biomass or giving up, finish grazing
+                            debug!(
+                                "🌾 Entity {:?} {} grazing",
+                                entity,
+                                if should_give_up { "giving up early" } else { "found no biomass" }
+                            );
+                            return ActionResult::Success;
+                        }
+                    } else {
+                        warn!("VegetationGrid resource not available for grazing");
+                        return ActionResult::Failed;
+                    }
+                }
+
+                // Continue grazing
+                return ActionResult::InProgress;
+            }
+
+            // Grazing duration completed successfully
             debug!(
-                "🐇 Entity {:?} arrived at grass {:?} on tick {}",
-                entity, self.target_tile, tick
+                "✅ Entity {:?} completed grazing at {:?} after {} ticks",
+                entity, self.target_tile, self.ticks_elapsed
             );
             return ActionResult::Success;
         }
@@ -355,7 +485,7 @@ impl Action for GrazeAction {
         // Start moving if not started yet
         if !self.started {
             debug!(
-                "🐇 Entity {:?} moving to grass at {:?}",
+                "🐇 Entity {:?} moving to graze at {:?}",
                 entity, self.target_tile
             );
 

@@ -1,0 +1,196 @@
+/// Vegetation system constants and parameters
+///
+/// This module consolidates all vegetation-related parameters for the plant system,
+/// including growth rates, consumption limits, and foraging behavior constants.
+
+/// Plant growth parameters
+pub mod growth {
+    /// Logistic growth rate coefficient (r)
+    /// Controls how fast vegetation biomass regenerates
+    /// Higher values = faster regrowth, but can lead to instability
+    pub const GROWTH_RATE: f32 = 0.05; // 5% per tick at optimal conditions
+
+    /// Maximum sustainable biomass per tile (Bmax)
+    /// Represents the carrying capacity of vegetation on a single tile
+    /// Measured in biomass units (arbitrary but consistent across the system)
+    pub const MAX_BIOMASS: f32 = 100.0;
+
+    /// Growth system update frequency
+    /// Plant growth runs every N ticks (1 tick = 100ms at 10 TPS)
+    /// Every 10 ticks = 1 second for growth updates
+    pub const GROWTH_INTERVAL_TICKS: u64 = 10;
+
+    /// Minimum biomass threshold for considering a tile "depleted"
+    /// Tiles below this threshold provide negligible nutrition
+    pub const DEPLETED_THRESHOLD: f32 = 5.0;
+
+    /// Biomass recovery threshold for active tile tracking
+    /// Tiles below this threshold are marked as "active" for faster updates
+    pub const ACTIVE_TILE_THRESHOLD: f32 = 95.0; // 95% of Bmax
+}
+
+/// Herbivore consumption parameters
+pub mod consumption {
+    use super::growth::MAX_BIOMASS;
+
+    /// Maximum biomass an herbivore can consume in a single meal
+    /// This is species-specific but capped at 30% of available biomass
+    pub const MAX_MEAL_FRACTION: f32 = 0.3; // 30% rule from plan
+
+    /// Maximum absolute biomass consumable per meal
+    /// Prevents unrealistic consumption from very high biomass tiles
+    pub const MAX_MEAL_ABSOLUTE: f32 = MAX_BIOMASS * MAX_MEAL_FRACTION; // 30 units
+
+    /// Minimum biomass required for a tile to be considered "forageable"
+    /// Tiles below this level are skipped during foraging searches
+    pub const FORAGE_MIN_BIOMASS: f32 = 10.0;
+
+    /// Biomass level at which herbivores give up on a patch
+    /// When biomass falls below this, animals seek new grazing areas
+    pub const GIVING_UP_THRESHOLD: f32 = 20.0;
+
+    /// Giving-up threshold as percentage of optimal biomass
+    /// Animals will leave patches below this percentage of maximum biomass
+    pub const GIVING_UP_THRESHOLD_RATIO: f32 = 0.25; // 25% of optimal biomass
+
+    /// Cooldown ticks before re-evaluating the same depleted tile
+    /// Prevents animals from repeatedly checking exhausted patches
+    pub const DEPLETED_TILE_COOLDOWN: u64 = 50; // 5 seconds at 10 TPS
+}
+
+/// Species-specific consumption profiles
+/// These values integrate with the existing SpeciesNeeds system
+pub mod species {
+    /// Rabbit-specific vegetation consumption
+    pub mod rabbit {
+        use super::super::growth::MAX_BIOMASS;
+
+        /// Meal size as fraction of rabbit's daily needs
+        /// Rabbits eat small, frequent meals
+        pub const MEAL_SIZE_FRACTION: f32 = 0.15; // 15% of daily intake per meal
+
+        /// Daily biomass intake requirement
+        /// Based on rabbit metabolic needs and vegetation nutritional value
+        pub const DAILY_BIOMASS_NEED: f32 = 25.0; // biomass units per day
+
+        /// Preferred biomass range for rabbit foraging
+        /// Rabbits avoid both depleted and overly dense patches
+        pub const PREFERRED_BIOMASS_MIN: f32 = 30.0;
+        pub const PREFERRED_BIOMASS_MAX: f32 = 80.0;
+
+        /// Rabbit foraging search parameters
+        pub const SEARCH_RADIUS: i32 = 15; // tiles
+        pub const SAMPLE_SIZE: usize = 8; // candidate tiles to evaluate
+    }
+
+    /// Deer-specific vegetation consumption (future)
+    pub mod deer {
+        /// Deer eat larger meals less frequently
+        pub const MEAL_SIZE_FRACTION: f32 = 0.25; // 25% of daily intake per meal
+
+        /// Daily biomass intake requirement (larger than rabbit)
+        pub const DAILY_BIOMASS_NEED: f32 = 80.0; // biomass units per day
+
+        /// Preferred biomass range for deer foraging
+        pub const PREFERRED_BIOMASS_MIN: f32 = 40.0;
+        pub const PREFERRED_BIOMASS_MAX: f32 = 90.0;
+
+        /// Deer foraging search parameters (wider range than rabbits)
+        pub const SEARCH_RADIUS: i32 = 25; // tiles
+        pub const SAMPLE_SIZE: usize = 12; // candidate tiles to evaluate
+    }
+}
+
+/// Predator fear and behavioral modifiers
+pub mod predator_effects {
+    /// Feeding duration reduction when predators are nearby
+    /// Represents the trade-off between feeding and vigilance
+    pub const FEAR_FEEDING_REDUCTION: f32 = 0.3; // 30% shorter feeding
+
+    /// Radius at which predator presence affects herbivore behavior
+    /// Distance in tiles at which herbivores become cautious
+    pub const FEAR_RADIUS: i32 = 20; // tiles
+
+    /// Biomass threshold increase under fear (less selective when scared)
+    /// Desperate herbivores accept lower quality food when threatened
+    pub const FEAR_BIOMASS_TOLERANCE: f32 = 0.2; // 20% lower threshold
+
+    /// Movement speed increase when fleeing perceived danger
+    /// Herbivores move faster when leaving areas due to predator presence
+    pub const FEAR_SPEED_BOOST: f32 = 1.5; // 1.5x normal speed
+}
+
+/// Terrain-specific vegetation modifiers
+pub mod terrain_modifiers {
+    use super::growth::MAX_BIOMASS;
+
+    /// Maximum biomass multiplier by terrain type
+    /// Some terrains support more vegetation than others
+    pub fn max_biomass_multiplier(terrain: &str) -> f32 {
+        match terrain {
+            "Grass" => 1.0, // Baseline
+            "Forest" => 1.2, // Understory vegetation
+            "Dirt" => 0.7, // Poor soil
+            "Swamp" => 0.8, // Water-logged but productive
+            "Sand" | "Desert" => 0.2, // Sparse vegetation
+            "Stone" | "Mountain" => 0.1, // Lichens, mosses only
+            "Snow" => 0.3, // Limited alpine vegetation
+            _ => 0.0, // No vegetation on water, deep water
+        }
+    }
+
+    /// Growth rate modifier by terrain type
+    /// Some terrains promote faster or slower vegetation growth
+    pub fn growth_rate_modifier(terrain: &str) -> f32 {
+        match terrain {
+            "Grass" => 1.0, // Baseline growth rate
+            "Forest" => 1.1, // Protected environment, slightly faster
+            "Dirt" => 0.8, // Poorer nutrients, slower growth
+            "Swamp" => 1.2, // High moisture, faster growth
+            "Sand" | "Desert" => 0.4, // Water-limited, slow growth
+            "Stone" | "Mountain" => 0.3, // Harsh conditions, very slow
+            "Snow" => 0.5, // Cold-limited, slow growth
+            _ => 0.0, // No growth on water
+        }
+    }
+}
+
+/// Performance and optimization parameters
+pub mod performance {
+    /// Maximum number of active tiles to process per growth cycle
+    /// Limits CPU usage for vegetation updates on large maps
+    pub const MAX_ACTIVE_TILES_PER_UPDATE: usize = 1000;
+
+    /// Random sample size of inactive tiles to update per cycle
+    /// Ensures inactive tiles still get occasional updates
+    pub const INACTIVE_SAMPLE_SIZE: usize = 100;
+
+    /// Grid chunk size for spatial organization
+    /// Aligns with map chunk system for cache efficiency
+    pub const CHUNK_SIZE: usize = 16; // Same as map chunks
+
+    /// Memory optimization threshold
+    /// Switch to sparse storage when vegetation density falls below this
+    pub const SPARSE_STORAGE_THRESHOLD: f32 = 0.1; // 10% of tiles have vegetation
+}
+
+/// Debug and monitoring parameters
+pub mod debug {
+    /// Enable detailed vegetation logging
+    pub const VERBOSE_LOGGING: bool = false;
+
+    /// Biomass reporting interval (in ticks)
+    /// How often to report vegetation statistics
+    pub const REPORTING_INTERVAL: u64 = 600; // Every 60 seconds at 10 TPS
+
+    /// Sample size for biomass quality checks
+    /// Number of tiles to sample for quality metrics
+    pub const QUALITY_SAMPLE_SIZE: usize = 50;
+
+    /// Enable biomass overlay in web viewer
+    pub const ENABLE_OVERLAY: bool = true;
+
+    /// Heatmap normalization range for viewer
+    pub const HEATMAP_MIN: f32 = 0.0;
+    pub const HEATMAP_MAX: f32 = 1.0;
+}

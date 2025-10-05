@@ -8,7 +8,8 @@ use crate::ai::behaviors::{
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{BehaviorConfig, TilePosition};
+use crate::entities::{BehaviorConfig, TilePosition, FearState};
+use crate::vegetation::VegetationGrid;
 use crate::world_loader::WorldLoader;
 
 /// Evaluate the baseline herbivore actions (drink, eat, rest, graze).
@@ -22,8 +23,13 @@ pub fn evaluate_core_actions(
     energy: &Energy,
     behavior_config: &BehaviorConfig,
     world_loader: &WorldLoader,
+    vegetation_grid: &VegetationGrid,
+    fear_state: Option<&FearState>,
 ) -> Vec<UtilityScore> {
     let mut actions = Vec::new();
+
+    // Get fear utility modifier if fear state is available
+    let fear_modifier = fear_state.map_or(1.0, |f| f.get_utility_modifier());
 
     if let Some(drink) = evaluate_drinking_behavior(
         position,
@@ -39,8 +45,10 @@ pub fn evaluate_core_actions(
         position,
         hunger,
         world_loader,
+        vegetation_grid,
         behavior_config.hunger_threshold,
         behavior_config.food_search_radius,
+        behavior_config.foraging_strategy,
     ) {
         actions.push(eat);
     }
@@ -55,6 +63,32 @@ pub fn evaluate_core_actions(
         evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
     {
         actions.push(graze);
+    }
+
+    // Apply fear modifiers to action utilities
+    if fear_modifier < 1.0 {
+        for action in &mut actions {
+            // Reduce feeding-related utilities under fear
+            match action.action_type {
+                ActionType::Graze { .. } => {
+                    action.utility *= fear_modifier;
+                }
+                // Drinking and resting utilities might be less affected
+                ActionType::DrinkWater { .. } | ActionType::Rest { .. } => {
+                    action.utility *= (1.0 + fear_modifier) / 2.0; // Moderate reduction
+                }
+                // Other actions (wandering, following, mating, etc.) are not affected
+                _ => {}
+            }
+
+            // Log fear modification for debugging
+            if fear_modifier < 0.9 {
+                debug!(
+                    "🦊 Fear modified action utility: {:?} {:.2} → {:.2} (modifier: {:.2})",
+                    action.action_type, action.utility / fear_modifier, action.utility, fear_modifier
+                );
+            }
+        }
     }
 
     actions

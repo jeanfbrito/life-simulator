@@ -13,6 +13,7 @@ use crate::entities::reproduction::{
     ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
+use crate::entities::FearState;
 use crate::entities::Mother;
 use crate::entities::{Deer, TilePosition};
 use crate::simulation::SimulationTick;
@@ -84,13 +85,14 @@ impl DeerBehavior {
     /// Evaluate Deer actions
     /// Note: Follow-mother behavior is handled by the planner using maybe_add_follow_mother
     pub fn evaluate_actions(
-        entity: bevy::prelude::Entity,
         position: &crate::entities::TilePosition,
         thirst: &crate::entities::stats::Thirst,
         hunger: &crate::entities::stats::Hunger,
         energy: &crate::entities::stats::Energy,
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
+        vegetation_grid: &crate::vegetation::VegetationGrid,
+        fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::herbivore_toolkit::evaluate_core_actions(
             position,
@@ -99,6 +101,8 @@ impl DeerBehavior {
             energy,
             behavior_config,
             world_loader,
+            vegetation_grid,
+            fear_state,
         )
     }
 }
@@ -118,11 +122,13 @@ pub fn plan_deer_actions(
             Option<&Mother>,
             Option<&MatingIntent>,
             Option<&ReproductionConfig>,
+            Option<&FearState>,
         ),
         With<Deer>,
     >,
     deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
     world_loader: Res<WorldLoader>,
+    vegetation_grid: Res<crate::vegetation::VegetationGrid>,
     tick: Res<SimulationTick>,
 ) {
     let loader = world_loader.as_ref();
@@ -132,10 +138,8 @@ pub fn plan_deer_actions(
         queue.as_mut(),
         &deer,
         &deer_positions,
-        |entity, position, thirst, hunger, energy, behavior| {
-            DeerBehavior::evaluate_actions(
-                entity, position, thirst, hunger, energy, behavior, loader,
-            )
+        |_, position, thirst, hunger, energy, behavior, fear_state| {
+            DeerBehavior::evaluate_actions(position, thirst, hunger, energy, behavior, loader, &vegetation_grid, fear_state)
         },
         Some(MateActionParams {
             utility: 0.45,

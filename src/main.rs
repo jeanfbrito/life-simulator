@@ -11,6 +11,7 @@ mod resources;
 mod serialization;
 mod simulation;
 mod tilemap;
+mod vegetation;
 mod web;
 mod world_loader;
 
@@ -21,6 +22,7 @@ use pathfinding::{process_pathfinding_requests, PathfindingGrid};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
 use tilemap::{TilemapPlugin, WorldConfig};
+use vegetation::VegetationPlugin;
 use world_loader::WorldLoader;
 
 mod web_server_simple;
@@ -39,7 +41,7 @@ fn main() {
         // TilemapPlugin removed - we're loading a world, not generating one
         // WorldSerializationPlugin removed - not needed for running simulation
         .add_plugins(CachedWorldPlugin)
-        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin)) // Core plugins
+        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin, VegetationPlugin)) // Core plugins
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()

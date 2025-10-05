@@ -1,7 +1,7 @@
 use super::types::deer::DeerBehavior;
 use super::types::rabbit::RabbitBehavior;
 use super::types::raccoon::RaccoonBehavior;
-use super::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
+use super::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition, FearState};
 use crate::pathfinding::PathfindingGrid;
 /// Modular entity types system
 ///
@@ -154,6 +154,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
                 WellFedStreak::default(),
                 CurrentAction::none(), // Track current action for viewer
                 cfg,
+                FearState::new(), // Initialize fear state for predator detection
                 // NO Wanderer component - movement driven by utility AI!
             ))
             .id()
@@ -197,6 +198,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                 WellFedStreak::default(),
                 CurrentAction::none(), // Track current action for viewer
                 cfg,
+                FearState::new(), // Initialize fear state for predator detection
             ))
             .id()
     }
@@ -238,6 +240,7 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
                 WellFedStreak::default(),
                 CurrentAction::none(),
                 cfg,
+                FearState::new(), // Initialize fear state for predator detection
             ))
             .id()
     }

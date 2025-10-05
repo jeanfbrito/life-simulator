@@ -41,7 +41,8 @@ impl Plugin for TQUAIPlugin {
                     crate::entities::types::deer::plan_deer_actions,
                     crate::entities::types::raccoon::plan_raccoon_actions,
                 )
-                    .run_if(resource_exists::<crate::world_loader::WorldLoader>),
+                    .run_if(resource_exists::<crate::world_loader::WorldLoader>)
+                    .run_if(resource_exists::<crate::vegetation::VegetationGrid>),
             );
     }
 }

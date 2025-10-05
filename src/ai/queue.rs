@@ -171,6 +171,20 @@ impl ActionQueue {
                     to_remove.push(*entity);
                     self.stats.actions_failed += 1;
                 }
+                ActionResult::TriggerFollowUp => {
+                    debug!(
+                        "🔄 Entity {:?} completed action '{}' with follow-up needed after {} ticks",
+                        entity,
+                        active.action.name(),
+                        tick - active.started_at_tick
+                    );
+                    // Clear current action to allow AI to plan next action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
+                    to_remove.push(*entity);
+                    self.stats.actions_completed += 1;
+                }
                 ActionResult::InProgress => {
                     // Continue next tick - action already set
                 }
@@ -249,6 +263,18 @@ impl ActionQueue {
                         entity_mut.insert(CurrentAction::none());
                     }
                     self.stats.actions_failed += 1;
+                }
+                ActionResult::TriggerFollowUp => {
+                    debug!(
+                        "🔄 Entity {:?} completed action '{}' with follow-up needed",
+                        queued.entity,
+                        queued.action.name()
+                    );
+                    // Clear current action to allow AI to plan next action
+                    if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
+                        entity_mut.insert(CurrentAction::none());
+                    }
+                    self.stats.actions_completed += 1;
                 }
                 ActionResult::InProgress => {
                     // Action needs multiple ticks - move to active

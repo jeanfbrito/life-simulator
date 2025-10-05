@@ -39,6 +39,7 @@ pub fn plan_species_actions<M: Component>(
             Option<&Mother>,
             Option<&MatingIntent>,
             Option<&ReproductionConfig>,
+            Option<&crate::entities::FearState>,
         ),
         With<M>,
     >,
@@ -50,6 +51,7 @@ pub fn plan_species_actions<M: Component>(
         &Hunger,
         &Energy,
         &BehaviorConfig,
+        Option<&crate::entities::FearState>,
     ) -> Vec<UtilityScore>,
     mate_params: Option<MateActionParams>,
     follow_cfg: Option<FollowConfig>,
@@ -73,6 +75,7 @@ pub fn plan_species_actions<M: Component>(
         mother,
         mating_intent,
         repro_cfg,
+        fear_state,
     ) in query.iter()
     {
         if queue.has_action(entity) {
@@ -80,7 +83,7 @@ pub fn plan_species_actions<M: Component>(
         }
 
         let mut actions =
-            evaluate_actions(entity, position, thirst, hunger, energy, behavior_config);
+            evaluate_actions(entity, position, thirst, hunger, energy, behavior_config, fear_state);
 
         if let Some(params) = mate_params {
             let mate_added = maybe_add_mate_action(

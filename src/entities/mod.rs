@@ -3,6 +3,7 @@ pub mod current_action;
 pub mod entity_tracker;
 pub mod entity_types;
 /// Entities module - manages creatures and their behaviors
+pub mod fear;
 pub mod movement;
 pub mod registry;
 pub mod reproduction;
@@ -26,6 +27,8 @@ pub use stats::{
     death_system, get_most_urgent_need, tick_stats_system, utility_drink, utility_eat,
     utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
 };
+
+pub use fear::{FearState, FearPlugin, predator_proximity_system, fear_speed_system};
 
 pub use entity_types::{
     count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,
@@ -133,6 +136,8 @@ pub struct EntitiesPlugin;
 impl Plugin for EntitiesPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Add fear system plugin
+            .add_plugins(FearPlugin)
             // Startup
             .add_systems(Startup, entity_tracker::init_entity_tracker)
             // Non-tick systems (run every frame)

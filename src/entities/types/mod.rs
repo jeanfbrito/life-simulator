@@ -8,6 +8,21 @@ pub mod raccoon;
 
 use bevy::prelude::*;
 
+/// Foraging search strategies for herbivores
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ForagingStrategy {
+    /// Search all tiles within radius (thorough, more expensive)
+    Exhaustive,
+    /// Sample K random tiles within radius (faster, good approximation)
+    Sampled { sample_size: usize },
+}
+
+impl Default for ForagingStrategy {
+    fn default() -> Self {
+        Self::Exhaustive // Default to thorough search for correctness
+    }
+}
+
 /// Species-level needs and consumption profile
 #[derive(Component, Debug, Clone)]
 pub struct SpeciesNeeds {
@@ -52,6 +67,10 @@ pub struct BehaviorConfig {
 
     /// General wander radius when no needs are urgent
     pub wander_radius: i32,
+
+    /// Foraging search strategy
+    /// Determines how entities search for food: exhaustive vs. sampling
+    pub foraging_strategy: ForagingStrategy,
 }
 
 impl Default for BehaviorConfig {
@@ -64,6 +83,7 @@ impl Default for BehaviorConfig {
             water_search_radius: 50,
             food_search_radius: 50,
             wander_radius: 20,
+            foraging_strategy: ForagingStrategy::default(),
         }
     }
 }
@@ -87,6 +107,30 @@ impl BehaviorConfig {
             water_search_radius,
             food_search_radius,
             wander_radius,
+            foraging_strategy: ForagingStrategy::default(),
+        }
+    }
+
+    /// Create a custom behavior configuration with foraging strategy
+    pub fn new_with_foraging(
+        thirst_threshold: f32,
+        hunger_threshold: f32,
+        energy_threshold: f32,
+        graze_range: (i32, i32),
+        water_search_radius: i32,
+        food_search_radius: i32,
+        wander_radius: i32,
+        foraging_strategy: ForagingStrategy,
+    ) -> Self {
+        Self {
+            thirst_threshold,
+            hunger_threshold,
+            energy_threshold,
+            graze_range,
+            water_search_radius,
+            food_search_radius,
+            wander_radius,
+            foraging_strategy,
         }
     }
 }
