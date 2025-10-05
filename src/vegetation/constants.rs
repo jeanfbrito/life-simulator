@@ -172,6 +172,81 @@ pub mod performance {
     /// Memory optimization threshold
     /// Switch to sparse storage when vegetation density falls below this
     pub const SPARSE_STORAGE_THRESHOLD: f32 = 0.1; // 10% of tiles have vegetation
+
+    /// Phase 4 performance budget targets
+    /// CPU time budget per growth cycle (in microseconds)
+    /// Vegetation updates should stay within this budget at 1 Hz
+    pub const CPU_BUDGET_US: u64 = 1000; // 1ms per growth cycle
+
+    /// Maximum tiles to process in a single batch
+    /// Prevents large spikes in CPU usage by breaking updates into chunks
+    pub const BATCH_SIZE: usize = 250; // Process 250 tiles per batch
+
+    /// Maximum time per batch before yielding (in microseconds)
+    /// Ensures the system doesn't exceed time budget per batch
+    pub const BATCH_TIME_BUDGET_US: u64 = 250; // 0.25ms per batch
+
+    /// Performance profiling intervals
+    /// How often to collect detailed performance metrics
+    pub const PROFILING_INTERVAL_TICKS: u64 = 300; // Every 30 seconds at 10 TPS
+
+    /// Target average biomass for performance scaling
+    /// Used to adjust update frequency based on system load
+    pub const TARGET_AVG_BIOMASS: f32 = 50.0; // 50% of maximum
+
+    /// Adaptive scaling thresholds
+    /// When average biomass is above this, reduce update frequency
+    pub const HIGH_BIOMASS_THRESHOLD: f32 = 80.0; // 80% of maximum
+
+    /// When average biomass is below this, increase update frequency
+    pub const LOW_BIOMASS_THRESHOLD: f32 = 20.0; // 20% of maximum
+}
+
+/// Memory optimization parameters for Phase 4
+pub mod memory {
+    /// Memory usage thresholds for optimization triggers
+    /// High memory usage threshold (in bytes)
+    pub const HIGH_MEMORY_THRESHOLD: usize = 50 * 1024 * 1024; // 50MB
+
+    /// Medium memory usage threshold (in bytes)
+    pub const MEDIUM_MEMORY_THRESHOLD: usize = 20 * 1024 * 1024; // 20MB
+
+    /// Low memory usage threshold (in bytes)
+    pub const LOW_MEMORY_THRESHOLD: usize = 5 * 1024 * 1024; // 5MB
+
+    /// Per-tile memory overhead threshold
+    /// Above this, we should optimize storage
+    pub const PER_TILE_OVERHEAD_THRESHOLD: usize = 45; // bytes
+
+    /// Regional grid configuration for cache efficiency
+    /// Size of each region in tiles (power of 2 for cache efficiency)
+    pub const REGION_SIZE: usize = 64; // 8x8 tiles per region
+
+    /// Maximum tiles per region before splitting
+    pub const MAX_TILES_PER_REGION: usize = REGION_SIZE * REGION_SIZE; // 4096 tiles
+
+    /// Memory optimization intervals
+    /// How often to analyze memory usage (in ticks)
+    pub const MEMORY_ANALYSIS_INTERVAL_TICKS: u64 = 600; // Every minute at 10 TPS
+
+    /// Storage optimization recommendations
+    /// When to recommend u16 storage vs f32
+    pub const U16_STORAGE_RECOMMENDATION_THRESHOLD: f32 = 20.0; // 20% savings
+
+    /// When to recommend regional grid organization
+    pub const REGIONAL_GRID_RECOMMENDATION_TILES: usize = 10000; // 10k tiles
+
+    /// Cache efficiency thresholds
+    /// Minimum acceptable cache hit rate
+    pub const MIN_CACHE_HIT_RATE: f32 = 0.7; // 70%
+
+    /// Memory compression thresholds
+    /// When to consider data compression
+    pub const COMPRESSION_RECOMMENDATION_BYTES: usize = 100 * 1024 * 1024; // 100MB
+
+    /// Sparse storage optimization
+    /// When to use sparse storage vs dense storage
+    pub const SPARSE_STORAGE_DENSITY_THRESHOLD: f32 = 0.05; // 5% tile coverage
 }
 
 /// Debug and monitoring parameters

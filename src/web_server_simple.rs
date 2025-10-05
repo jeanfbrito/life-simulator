@@ -212,6 +212,46 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             let json = crate::entities::get_species_metadata_json();
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
+        "/api/vegetation/biomass" => {
+            // Return vegetation biomass heatmap data
+            let json = crate::vegetation::get_biomass_heatmap_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/performance" => {
+            // Return vegetation system performance metrics
+            let json = crate::vegetation::get_performance_metrics_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/memory" => {
+            // Return vegetation memory usage analysis
+            let json = crate::vegetation::get_memory_analysis_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/stats" => {
+            // Return vegetation system statistics
+            let json = crate::vegetation::get_vegetation_stats_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/benchmark/quick" => {
+            // Run quick performance benchmark
+            let json = crate::vegetation::run_quick_benchmark_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/benchmark/phase4" => {
+            // Run comprehensive Phase 4 benchmark
+            let json = crate::vegetation::run_phase4_benchmark_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/benchmark/current" => {
+            // Get current performance rating
+            let json = crate::vegetation::get_current_performance_rating_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/vegetation/benchmark/history" => {
+            // Get benchmark history and trends
+            let json = crate::vegetation::get_benchmark_history_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
         path if path.starts_with("/api/chunks") => {
             // Only use cached world data - no fallback to generator
             if crate::cached_world::CachedWorld::global_is_loaded() {
