@@ -135,6 +135,48 @@ All timings below assume the current simulation rate of **10 ticks per second**.
 
 ---
 
+## Biomass Consumption Mapping (Phase 5 Metrics)
+
+The following sections detail how each species interacts with the vegetation system for the Phase 5 metrics dashboard. All consumption values are per feeding action and impact the vegetation biomass tracking system.
+
+### Rabbits 🐇
+- **Biomass per graze**: **2.8 units** (28 hunger units ÷ 10 conversion ratio)
+- **Graze frequency**: Every **50-80 ticks** when hungry ≥ 50%
+- **Daily biomass impact**: ~**8-12 units** per rabbit (3-4 grazes per day at 10 TPS)
+- **Preferred terrain**: Grass and Forest tiles (terrain multiplier: 1.0-1.2)
+- **Foraging pattern**: Short hops within 3-8 tiles, creates localized grazing pressure
+
+### Deer 🦌
+- **Biomass per graze**: **6.0 units** (60 hunger units ÷ 10 conversion ratio)
+- **Graze frequency**: Every **100-150 ticks** when hungry ≥ 45%
+- **Daily biomass impact**: ~**24-36 units** per deer (4-6 grazes per day)
+- **Preferred terrain**: Grass and Forest tiles (terrain multiplier: 1.0-1.2)
+- **Foraging pattern**: Medium distance grazing within 5-15 tiles, moderate territory pressure
+
+### Raccoons 🦝
+- **Biomass per forage**: **4.5 units** (45 hunger units ÷ 10 conversion ratio)
+- **Forage frequency**: Every **75-120 ticks** when hungry ≥ 45%
+- **Daily biomass impact**: ~**12-18 units** per raccoon (3-4 forages per day)
+- **Preferred terrain**: All vegetated tiles (generalist forager)
+- **Foraging pattern**: Opportunistic within 4-12 tiles, varied grazing pressure
+
+### Biomass Impact Metrics
+
+The Phase 5 metrics dashboard tracks the following biomass consumption patterns:
+
+- **Total Biomass Consumed**: Cumulative consumption across all herbivores
+- **Consumption Rate**: Average biomass units consumed per tick
+- **Grazing Pressure**: Number of active feeding actions per simulation tick
+- **Terrain Impact**: Biomass depletion patterns by terrain type
+- **Species Impact**: Per-species consumption contribution to total depletion
+
+### Vegetation Recovery Parameters
+
+- **Growth Rate**: 0.02 per tick on suitable tiles (logistic growth model)
+- **Carrying Capacity**: Varies by terrain (Grass: 100, Forest: 120, Desert: 40)
+- **Recovery Time**: 50-200 ticks to reach 80% carrying capacity after grazing
+- **Active Tile Tracking**: Recently grazed tiles (< 100 ticks) get priority growth updates
+
 ### Using this guide when adding a new species
 
 1. **Clone a template** – copy one of the behaviour modules (`src/entities/types/`) and adjust the reproduction, behaviour, and stat sections. Use the tables above to decide on ranges.
@@ -142,5 +184,6 @@ All timings below assume the current simulation rate of **10 ticks per second**.
 3. **Planner wiring** – create `plan_<species>_actions` mirroring the mate/follow parameters that suit your animal.
 4. **Spawn config** – update `config/spawn_config.ron` (or its default in `SpawnConfig::default()`) with counts, names, and optional sex patterns.
 5. **Viewer vibes** – ensure `/api/species` reflects the emoji/scale so the browser client renders juveniles correctly.
+6. **Biomass mapping** – calculate consumption impact using: `hunger_pool_consumed ÷ 10 = biomass_units_consumed`
 
 Match the numbers above when you want comparable behaviour, or push them deliberately to explore new ecosystems.

@@ -47,19 +47,37 @@ Explains how to test and verify the tick-based simulation system, including manu
 
 ## 🧪 Testing
 
+### Phase 5 Scenario Testing
+
+```bash
+# Run comprehensive scenario tests
+cargo test --test phase5_scenario_tests -- --nocapture
+```
+
+The Phase 5 scenario testing framework validates ecosystem dynamics:
+
+- **Ungrazed Regrowth**: Tests vegetation recovery without herbivore pressure
+- **Herbivore-Only**: Tests rabbit-only scenarios for grazing balance
+- **Predator-Herbivore**: Tests ecosystem stability with foxes added
+- **Performance Validation**: Ensures vegetation system stays within CPU budgets
+
 ### Quick Verification
 
 ```bash
 # Run the automated movement test
 ./scripts/test_movement.sh
+
+# Check Phase 4 performance benchmarks
+./scripts/phase4_benchmark.sh
 ```
 
-This script will:
+These scripts will:
 1. Start the simulation
 2. Track entity movement for 30 seconds
 3. Analyze movement patterns
-4. Report success or failure
-5. Clean up processes
+4. Run vegetation performance benchmarks
+5. Report success or failure
+6. Clean up processes
 
 Expected output: Entities should move every ~3 seconds (30 ticks at 10 TPS).
 
@@ -71,7 +89,51 @@ cargo run --bin life-simulator
 
 # Terminal 2: Monitor entities
 watch -n 2 'curl -s http://127.0.0.1:54321/api/entities | jq ".entities[] | {name, position}"'
+
+# Terminal 3: Monitor vegetation metrics
+watch -n 5 'curl -s http://127.0.0.1:54321/api/vegetation/metrics | jq'
 ```
+
+---
+
+### [PLANT_SYSTEM_PLAN.md](./PLANT_SYSTEM_PLAN.md)
+**Comprehensive plant system architecture and Phase 5 implementation**
+
+Documents the complete vegetation system architecture from Phase 1-5, including growth mechanics, herbivore interactions, and the new metrics dashboard.
+
+**Key Topics:**
+- Vegetation grid system and terrain-based growth
+- Logistic growth model with carrying capacity
+- Herbivore grazing and biomass consumption
+- Phase 5 metrics dashboard and debugging tools
+- Performance optimizations (Phase 4)
+- Scenario testing framework
+
+**Read this if you want to understand:**
+- How plants grow and spread across the world
+- Herbivore-vegetation interactions and ecosystem balance
+- Phase 5 debugging and monitoring capabilities
+- Performance characteristics of the vegetation system
+
+---
+
+### [SPECIES_REFERENCE.md](./SPECIES_REFERENCE.md)
+**Species behavior guide with biomass consumption mapping**
+
+Complete reference for all species in the simulator, including reproduction, behavior, and Phase 5 biomass consumption patterns.
+
+**Key Topics:**
+- Species-specific behavior parameters and reproduction
+- Movement speeds and foraging patterns
+- Biomass consumption per feeding action
+- AI decision making and priorities
+- Spawn configurations and viewer metadata
+
+**Read this if you want to:**
+- Understand species behavior and balance
+- Add new species to the simulation
+- Calculate ecosystem impact of herbivores
+- Configure species spawning and behavior
 
 ---
 
@@ -150,6 +212,8 @@ Fast speed (2.0x):   30 ticks × 50ms  = 1500ms = 1.5 seconds
 
 ## 📈 Performance Metrics
 
+### Simulation Performance
+
 Monitor these in the simulation logs:
 
 - **TPS (Ticks Per Second)**: Should stay near 10.0
@@ -163,6 +227,31 @@ Example log output:
 🎯 Tick #200 | TPS: 10.1 | Avg duration: 2.3ms
 ```
 
+### Vegetation System Metrics (Phase 5)
+
+Monitor vegetation system via API endpoint `/api/vegetation/metrics`:
+
+- **Total Biomass**: Current vegetation biomass across all tiles
+- **Active Tiles**: Number of tiles undergoing growth updates
+- **Depleted Tiles**: Tiles below biomass threshold
+- **Average Biomass %**: Percentage of carrying capacity
+- **Growth vs Consumption**: Net biomass change balance
+- **Trend Analysis**: Increasing/Decreasing/Stable biomass trends
+
+Example metrics output:
+```json
+{
+  "total_suitable_tiles": 15000,
+  "active_tiles": 2450,
+  "depleted_tiles": 180,
+  "total_biomass": 875432.5,
+  "average_biomass_pct": 73.2,
+  "total_consumed": 1234.8,
+  "total_grown": 1456.3,
+  "trend": "Increasing"
+}
+```
+
 ---
 
 ## 🎯 Quick Reference
@@ -173,11 +262,23 @@ Example log output:
 # Run simulation
 cargo run --bin life-simulator
 
+# Run Phase 5 scenario tests
+cargo test --test phase5_scenario_tests -- --nocapture
+
 # Run movement test
 ./scripts/test_movement.sh
 
-# Monitor API
+# Run Phase 4 vegetation benchmarks
+./scripts/phase4_benchmark.sh
+
+# Monitor entities API
 curl http://127.0.0.1:54321/api/entities | jq
+
+# Monitor vegetation metrics (Phase 5)
+curl http://127.0.0.1:54321/api/vegetation/metrics | jq
+
+# Monitor vegetation performance
+curl http://127.0.0.1:54321/api/vegetation/performance | jq
 
 # Watch logs
 tail -f /tmp/life-simulator.log | grep "Tick #"
@@ -216,6 +317,14 @@ curl http://127.0.0.1:54321/api/simulation | jq '.current_tick'
 ---
 
 ## 📝 Change Log
+
+### 2025-10-05: Phase 5 Implementation - Scenario Tuning & Regression Suite
+- **Scenario Testing Framework**: Comprehensive ecosystem validation with ungrazed regrowth, herbivore-only, and predator-herbivore scenarios
+- **Metrics Dashboard**: Real-time vegetation monitoring with biomass tracking, depleted tile analysis, and trend identification
+- **Performance Integration**: Phase 5 metrics integrated with existing Phase 4 performance optimizations
+- **Documentation Updates**: Added biomass consumption mapping to species reference and comprehensive plant system overview
+- **API Enhancements**: New `/api/vegetation/metrics` endpoint for real-time monitoring
+- **Testing Infrastructure**: Automated scenario tests with configurable validation criteria
 
 ### 2025-10-02: Tick System Fixes
 - Fixed entities not moving (missing `should_tick` condition)

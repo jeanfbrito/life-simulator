@@ -232,6 +232,11 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             let json = crate::vegetation::get_vegetation_stats_json();
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
+        "/api/vegetation/metrics" => {
+            // Return Phase 5 metrics dashboard data
+            let json = crate::vegetation::get_metrics_dashboard_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
         "/api/vegetation/benchmark/quick" => {
             // Run quick performance benchmark
             let json = crate::vegetation::run_quick_benchmark_json();
