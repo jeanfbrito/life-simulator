@@ -8,8 +8,8 @@ use crate::ai::behaviors::{
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{BehaviorConfig, TilePosition, FearState};
-use crate::vegetation::VegetationGrid;
+use crate::entities::{BehaviorConfig, FearState, TilePosition};
+use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;
 
 /// Evaluate the baseline herbivore actions (drink, eat, rest, graze).
@@ -23,7 +23,7 @@ pub fn evaluate_core_actions(
     energy: &Energy,
     behavior_config: &BehaviorConfig,
     world_loader: &WorldLoader,
-    vegetation_grid: &VegetationGrid,
+    resource_grid: &ResourceGrid,
     fear_state: Option<&FearState>,
 ) -> Vec<UtilityScore> {
     let mut actions = Vec::new();
@@ -45,7 +45,7 @@ pub fn evaluate_core_actions(
         position,
         hunger,
         world_loader,
-        vegetation_grid,
+        resource_grid,
         behavior_config.hunger_threshold,
         behavior_config.food_search_radius,
         behavior_config.foraging_strategy,
@@ -85,7 +85,10 @@ pub fn evaluate_core_actions(
             if fear_modifier < 0.9 {
                 debug!(
                     "🦊 Fear modified action utility: {:?} {:.2} → {:.2} (modifier: {:.2})",
-                    action.action_type, action.utility / fear_modifier, action.utility, fear_modifier
+                    action.action_type,
+                    action.utility / fear_modifier,
+                    action.utility,
+                    fear_modifier
                 );
             }
         }

@@ -69,6 +69,12 @@ pub trait Action: Send + Sync {
     /// Returns Success/Failed/InProgress
     fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult;
 
+    /// Cancel the action (called when a higher priority action needs to interrupt)
+    /// Default implementation does nothing - override for actions that need cleanup
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        // Default: no cleanup needed
+    }
+
     /// Get action name for debugging
     fn name(&self) -> &'static str;
 }
@@ -371,8 +377,7 @@ impl Action for GrazeAction {
         if world.get::<PathfindingFailed>(entity).is_some() {
             debug!(
                 "Entity {:?} pathfinding failed to reach graze target {:?}, aborting Graze action",
-                entity,
-                self.target_tile
+                entity, self.target_tile
             );
             // Remove the PathfindingFailed component
             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
@@ -385,10 +390,12 @@ impl Action for GrazeAction {
         if current_pos == self.target_tile {
             // Record initial biomass on first visit and calculate duration
             if self.initial_biomass.is_none() {
-                if let Some(vegetation_grid) = world.get_resource::<crate::vegetation::VegetationGrid>() {
-                    if let Some(vegetation) = vegetation_grid.get(self.target_tile) {
-                        self.initial_biomass = Some(vegetation.biomass);
-                        self.duration_ticks = Self::calculate_duration(vegetation.biomass);
+                if let Some(resource_grid) =
+                    world.get_resource::<crate::vegetation::resource_grid::ResourceGrid>()
+                {
+                    if let Some(cell) = resource_grid.get_cell(self.target_tile) {
+                        self.initial_biomass = Some(cell.total_biomass);
+                        self.duration_ticks = Self::calculate_duration(cell.total_biomass);
                     }
                 }
             }
@@ -398,28 +405,36 @@ impl Action for GrazeAction {
                 self.ticks_elapsed += 1;
 
                 // Still have time to graze, consume some biomass every 2 ticks
-                if self.ticks_elapsed % 2 == 0 { // Consume every 2 ticks
+                if self.ticks_elapsed % 2 == 0 {
+                    // Consume every 2 ticks
 
                     // Get entity's hunger to determine demand
-                    let demand = if let Some(hunger) = world.get::<crate::entities::stats::Hunger>(entity) {
-                        hunger.0.max - hunger.0.current
-                    } else {
-                        warn!("Entity {:?} has no hunger component, cannot graze", entity);
-                        return ActionResult::Failed;
-                    };
+                    let demand =
+                        if let Some(hunger) = world.get::<crate::entities::stats::Hunger>(entity) {
+                            hunger.0.max - hunger.0.current
+                        } else {
+                            warn!("Entity {:?} has no hunger component, cannot graze", entity);
+                            return ActionResult::Failed;
+                        };
 
-                    // Check giving-up conditions before consuming
+                    // Check giving-up conditions before consuming using ResourceGrid
                     let should_give_up = if let Some(initial_biomass) = self.initial_biomass {
-                        if let Some(vegetation_grid) = world.get_resource::<crate::vegetation::VegetationGrid>() {
-                            if let Some(current_vegetation) = vegetation_grid.get(self.target_tile) {
-                                let giving_up_absolute = crate::vegetation::consumption::GIVING_UP_THRESHOLD;
-                                let giving_up_ratio = initial_biomass * crate::vegetation::consumption::GIVING_UP_THRESHOLD_RATIO;
+                        if let Some(resource_grid) =
+                            world.get_resource::<crate::vegetation::resource_grid::ResourceGrid>()
+                        {
+                            if let Some(current_cell) = resource_grid.get_cell(self.target_tile)
+                            {
+                                // Giving up thresholds from old system
+                                const GIVING_UP_THRESHOLD: f32 = 5.0;
+                                const GIVING_UP_THRESHOLD_RATIO: f32 = 0.2;
+                                let giving_up_absolute = GIVING_UP_THRESHOLD;
+                                let giving_up_ratio = initial_biomass * GIVING_UP_THRESHOLD_RATIO;
                                 let giving_up_threshold = giving_up_absolute.max(giving_up_ratio);
 
-                                if current_vegetation.biomass < giving_up_threshold {
+                                if current_cell.total_biomass < giving_up_threshold {
                                     info!(
                                         "🌾 Entity {:?} giving up early - biomass {:.1} < threshold {:.1}",
-                                        entity, current_vegetation.biomass, giving_up_threshold
+                                        entity, current_cell.total_biomass, giving_up_threshold
                                     );
                                     true
                                 } else {
@@ -435,18 +450,24 @@ impl Action for GrazeAction {
                         false
                     };
 
-                    // Try to consume biomass
-                    if let Some(mut vegetation_grid) = world.get_resource_mut::<crate::vegetation::VegetationGrid>() {
-                        let (consumed, _remaining) = vegetation_grid.consume(
+                    // Try to consume biomass using ResourceGrid's consume_at method
+                    if let Some(mut resource_grid) =
+                        world.get_resource_mut::<crate::vegetation::resource_grid::ResourceGrid>()
+                    {
+                        // MAX_MEAL_FRACTION from old system
+                        const MAX_MEAL_FRACTION: f32 = 0.3;
+                        let consumed = resource_grid.consume_at(
                             self.target_tile,
                             demand,
-                            crate::vegetation::consumption::MAX_MEAL_FRACTION
+                            MAX_MEAL_FRACTION,
                         );
 
                         if consumed > 0.0 && !should_give_up {
                             // Successfully consumed, reduce hunger
                             if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
-                                if let Some(mut hunger) = entity_mut.get_mut::<crate::entities::stats::Hunger>() {
+                                if let Some(mut hunger) =
+                                    entity_mut.get_mut::<crate::entities::stats::Hunger>()
+                                {
                                     hunger.0.change(consumed);
                                 }
                             }
@@ -460,12 +481,16 @@ impl Action for GrazeAction {
                             debug!(
                                 "🌾 Entity {:?} {} grazing",
                                 entity,
-                                if should_give_up { "giving up early" } else { "found no biomass" }
+                                if should_give_up {
+                                    "giving up early"
+                                } else {
+                                    "found no biomass"
+                                }
                             );
                             return ActionResult::Success;
                         }
                     } else {
-                        warn!("VegetationGrid resource not available for grazing");
+                        warn!("ResourceGrid resource not available for grazing");
                         return ActionResult::Failed;
                     }
                 }
@@ -579,6 +604,19 @@ impl Action for RestAction {
         }
 
         ActionResult::InProgress
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        // Reset energy state back to active when interrupted
+        if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+            if let Some(mut energy) = entity_mut.get_mut::<Energy>() {
+                energy.set_active();
+                debug!(
+                    "🚫 Entity {:?} resting interrupted, switching to active energy mode",
+                    entity
+                );
+            }
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -853,6 +891,28 @@ impl Action for MateAction {
         }
 
         ActionResult::Success
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        use crate::entities::reproduction::MatingIntent;
+
+        // Clean up mating intents when interrupted
+        if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+            entity_mut.remove::<MatingIntent>();
+            debug!(
+                "🚫 Entity {:?} mating interrupted, clearing mating intent",
+                entity
+            );
+        }
+
+        // Also clean up partner's intent
+        if let Some(mut partner_mut) = world.get_entity_mut(self.partner).ok() {
+            partner_mut.remove::<MatingIntent>();
+            debug!(
+                "🚫 Entity {:?} partner mating interrupted, clearing partner mating intent",
+                entity
+            );
+        }
     }
 
     fn name(&self) -> &'static str {

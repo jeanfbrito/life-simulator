@@ -2,8 +2,8 @@ use crate::ai::action::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{stats::Hunger, TilePosition};
 use crate::tilemap::TerrainType;
+use crate::vegetation::resource_grid::*;
 use crate::world_loader::WorldLoader;
-use crate::vegetation::{VegetationGrid, consumption::FORAGE_MIN_BIOMASS};
 /// Eating Behavior - for herbivores that consume grass
 ///
 /// This behavior makes entities find and eat grass when hungry.
@@ -29,7 +29,7 @@ pub fn evaluate_eating_behavior(
     position: &TilePosition,
     hunger: &Hunger,
     world_loader: &WorldLoader,
-    vegetation_grid: &VegetationGrid,
+    resource_grid: &ResourceGrid,
     hunger_threshold: f32,
     search_radius: i32,
     foraging_strategy: crate::entities::types::ForagingStrategy,
@@ -42,13 +42,13 @@ pub fn evaluate_eating_behavior(
 
     // Note: We don't check if already on suitable vegetation because eating is handled by action execution
 
-    // Find nearest suitable vegetation tile with sufficient biomass
-    let forage_tile = find_best_forage_tile_with_strategy(
+    // Find nearest suitable vegetation cell with sufficient biomass using new ResourceGrid
+    let forage_tile = find_best_forage_cell_with_strategy(
         position.tile,
         search_radius,
         world_loader,
-        vegetation_grid,
-        foraging_strategy.into()
+        resource_grid,
+        foraging_strategy.into(),
     )?;
 
     // Calculate utility based on hunger and distance
@@ -77,53 +77,29 @@ pub fn evaluate_eating_behavior(
     })
 }
 
-/// Find the best forage tile using configurable search strategy
-fn find_best_forage_tile(
+/// Find the best forage cell using new ResourceGrid system
+fn find_best_forage_cell_with_strategy(
     from: IVec2,
     max_radius: i32,
     world_loader: &WorldLoader,
-    vegetation_grid: &VegetationGrid,
-) -> Option<IVec2> {
-    find_best_forage_tile_with_strategy(
-        from,
-        max_radius,
-        world_loader,
-        vegetation_grid,
-        ForageSearchStrategy::Exhaustive,
-    )
-}
-
-/// Search strategies for forage tile selection
-#[derive(Debug, Clone)]
-enum ForageSearchStrategy {
-    /// Search all tiles within radius (thorough, more expensive)
-    Exhaustive,
-    /// Sample K random tiles within radius (faster, good approximation)
-    Sampled { sample_size: usize },
-}
-
-impl From<crate::entities::types::ForagingStrategy> for ForageSearchStrategy {
-    fn from(strategy: crate::entities::types::ForagingStrategy) -> Self {
-        match strategy {
-            crate::entities::types::ForagingStrategy::Exhaustive => Self::Exhaustive,
-            crate::entities::types::ForagingStrategy::Sampled { sample_size } => Self::Sampled { sample_size },
-        }
-    }
-}
-
-/// Find the best forage tile using specified search strategy
-fn find_best_forage_tile_with_strategy(
-    from: IVec2,
-    max_radius: i32,
-    world_loader: &WorldLoader,
-    vegetation_grid: &VegetationGrid,
+    resource_grid: &ResourceGrid,
     strategy: ForageSearchStrategy,
 ) -> Option<IVec2> {
-    let mut best_tile: Option<(IVec2, f32)> = None; // (position, utility_score)
+    // Use ResourceGrid's built-in optimization first
+    if let ForageSearchStrategy::Exhaustive = strategy {
+        // Try the ResourceGrid's optimized search first
+        if let Some((pos, biomass)) = resource_grid.find_best_cell(from, max_radius) {
+            // Verify the cell is accessible (no blocking resources)
+            if is_cell_accessible(pos, world_loader) && supports_vegetation_at(pos, world_loader) {
+                return Some(pos);
+            }
+        }
+    }
 
+    // Fallback to our own search with sampling if needed
     match strategy {
         ForageSearchStrategy::Exhaustive => {
-            // Search all tiles in expanding square pattern
+            // Exhaustive search with ResourceGrid lookups
             for radius in 1..=max_radius {
                 for dx in -radius..=radius {
                     for dy in -radius..=radius {
@@ -133,28 +109,15 @@ fn find_best_forage_tile_with_strategy(
                         }
 
                         let check_pos = from + IVec2::new(dx, dy);
-                        if let Some(score) = evaluate_forage_tile(
-                            check_pos, from, world_loader, vegetation_grid
-                        ) {
-                            if let Some((_, best_utility)) = best_tile {
-                                if score > best_utility {
-                                    best_tile = Some((check_pos, score));
-                                }
-                            } else {
-                                best_tile = Some((check_pos, score));
-                            }
+                        if is_cell_suitable_for_foraging(check_pos, from, world_loader, resource_grid) {
+                            return Some(check_pos);
                         }
                     }
-                }
-
-                // Early exit if we found suitable vegetation at this radius
-                if best_tile.is_some() {
-                    break;
                 }
             }
         }
         ForageSearchStrategy::Sampled { sample_size } => {
-            // Sample K random tiles within radius
+            // Random sampling within radius
             let mut candidates = Vec::new();
 
             for radius in 1..=max_radius {
@@ -177,63 +140,88 @@ fn find_best_forage_tile_with_strategy(
 
             // Evaluate first K candidates
             for check_pos in candidates.into_iter().take(sample_size) {
-                if let Some(score) = evaluate_forage_tile(
-                    check_pos, from, world_loader, vegetation_grid
-                ) {
-                    if let Some((_, best_utility)) = best_tile {
-                        if score > best_utility {
-                            best_tile = Some((check_pos, score));
-                        }
-                    } else {
-                        best_tile = Some((check_pos, score));
-                    }
+                if is_cell_suitable_for_foraging(check_pos, from, world_loader, resource_grid) {
+                    return Some(check_pos);
                 }
             }
         }
     }
 
-    best_tile.map(|(pos, _)| pos)
+    None
 }
 
-/// Evaluate a tile for foraging suitability and return utility score
-fn evaluate_forage_tile(
-    tile: IVec2,
-    from: IVec2,
-    world_loader: &WorldLoader,
-    vegetation_grid: &VegetationGrid,
-) -> Option<f32> {
-    // Check if this tile supports vegetation (grass, forest, etc.)
-    if let Some(terrain_str) = world_loader.get_terrain_at(tile.x, tile.y) {
-        if let Some(terrain) = TerrainType::from_str(&terrain_str) {
-            if supports_vegetation(&terrain) {
-                // Check if tile has sufficient biomass
-                if let Some(vegetation) = vegetation_grid.get(tile) {
-                    if vegetation.biomass >= FORAGE_MIN_BIOMASS {
-                        // Check if tile is accessible (no blocking resources)
-                        let has_resource = world_loader
-                            .get_resource_at(tile.x, tile.y)
-                            .map(|r| !r.is_empty())
-                            .unwrap_or(false);
+/// Search strategies for forage cell selection
+#[derive(Debug, Clone)]
+enum ForageSearchStrategy {
+    /// Search all tiles within radius (thorough, more expensive)
+    Exhaustive,
+    /// Sample K random tiles within radius (faster, good approximation)
+    Sampled { sample_size: usize },
+}
 
-                        if !has_resource {
-                            // Calculate utility: biomass / (1 + distance_penalty)
-                            let distance = from.as_vec2().distance(tile.as_vec2());
-                            let distance_penalty = distance * 0.1;
-                            let utility_score = vegetation.biomass / (1.0 + distance_penalty);
-                            return Some(utility_score);
-                        }
-                    }
-                }
+impl From<crate::entities::types::ForagingStrategy> for ForageSearchStrategy {
+    fn from(strategy: crate::entities::types::ForagingStrategy) -> Self {
+        match strategy {
+            crate::entities::types::ForagingStrategy::Exhaustive => Self::Exhaustive,
+            crate::entities::types::ForagingStrategy::Sampled { sample_size } => {
+                Self::Sampled { sample_size }
             }
         }
     }
-    None
+}
+
+/// Check if a cell is suitable for foraging using ResourceGrid
+fn is_cell_suitable_for_foraging(
+    cell: IVec2,
+    from: IVec2,
+    world_loader: &WorldLoader,
+    resource_grid: &ResourceGrid,
+) -> bool {
+    // Check if this cell supports vegetation
+    if !supports_vegetation_at(cell, world_loader) {
+        return false;
+    }
+
+    // Check if cell is accessible (no blocking resources)
+    if !is_cell_accessible(cell, world_loader) {
+        return false;
+    }
+
+    // Check if cell has sufficient biomass using ResourceGrid
+    if let Some(cell_data) = resource_grid.get_cell(cell) {
+        // Minimum biomass threshold (FORAGE_MIN_BIOMASS from old system)
+        const FORAGE_MIN_BIOMASS: f32 = 10.0;
+        cell_data.total_biomass >= FORAGE_MIN_BIOMASS && !cell_data.is_depleted()
+    } else {
+        false
+    }
+}
+
+/// Check if terrain at position supports vegetation growth
+fn supports_vegetation_at(pos: IVec2, world_loader: &WorldLoader) -> bool {
+    if let Some(terrain_str) = world_loader.get_terrain_at(pos.x, pos.y) {
+        if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+            return supports_vegetation(&terrain);
+        }
+    }
+    false
+}
+
+/// Check if a cell is accessible (no blocking resources)
+fn is_cell_accessible(pos: IVec2, world_loader: &WorldLoader) -> bool {
+    !world_loader
+        .get_resource_at(pos.x, pos.y)
+        .map(|r| !r.is_empty())
+        .unwrap_or(false)
 }
 
 /// Check if a terrain type supports vegetation growth
 fn supports_vegetation(terrain: &TerrainType) -> bool {
     use TerrainType::*;
-    matches!(terrain, Grass | Forest | Dirt | Swamp | Desert | Stone | Snow)
+    matches!(
+        terrain,
+        Grass | Forest | Dirt | Swamp | Desert | Stone | Snow
+    )
 }
 
 #[cfg(test)]

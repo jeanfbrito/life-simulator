@@ -82,7 +82,7 @@ impl RaccoonBehavior {
         energy: &crate::entities::stats::Energy,
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
-        vegetation_grid: &crate::vegetation::VegetationGrid,
+        vegetation_grid: &crate::vegetation::resource_grid::ResourceGrid,
         fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::herbivore_toolkit::evaluate_core_actions(
@@ -114,15 +114,20 @@ pub fn plan_raccoon_actions(
             Option<&MatingIntent>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
+            Option<&crate::ai::event_driven_planner::NeedsReplanning>,
         ),
         With<Raccoon>,
     >,
     raccoon_positions: Query<(Entity, &TilePosition), With<Raccoon>>,
     world_loader: Res<WorldLoader>,
-    vegetation_grid: Res<crate::vegetation::VegetationGrid>,
+    vegetation_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
     tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
     let loader = world_loader.as_ref();
+
+    let _timer =
+        crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_raccoon_actions");
 
     plan_species_actions(
         &mut commands,
@@ -130,7 +135,16 @@ pub fn plan_raccoon_actions(
         &raccoons,
         &raccoon_positions,
         |_, position, thirst, hunger, energy, behavior, fear_state| {
-            RaccoonBehavior::evaluate_actions(position, thirst, hunger, energy, behavior, loader, &vegetation_grid, fear_state)
+            RaccoonBehavior::evaluate_actions(
+                position,
+                thirst,
+                hunger,
+                energy,
+                behavior,
+                loader,
+                &vegetation_grid,
+                fear_state,
+            )
         },
         Some(MateActionParams {
             utility: 0.42,
