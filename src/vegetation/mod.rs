@@ -1,3 +1,4 @@
+pub mod benchmark;
 /// Vegetation system for plant growth and herbivore consumption
 ///
 /// This module provides a comprehensive vegetation system that:
@@ -9,8 +10,8 @@
 /// # Architecture
 ///
 /// The system follows a data-driven approach where:
-/// - `VegetationGrid` stores biomass data across the world
-/// - Growth systems update biomass at regular intervals
+/// - `ResourceGrid` stores sparse biomass data using event-driven updates
+/// - Growth systems update biomass through scheduled events
 /// - Herbivore behaviors query and consume vegetation
 /// - Terrain modifiers affect growth rates and maximum biomass
 ///
@@ -20,13 +21,15 @@
 /// 2. **Terrain System**: Growth rates vary by terrain type
 /// 3. **World Loader**: Vegetation initializes based on map data
 /// 4. **Web Viewer**: Optional biomass overlay for debugging
-
 pub mod constants;
 pub mod memory_optimization;
-pub mod benchmark;
+pub mod resource_grid;
 
 use bevy::prelude::*;
-use std::collections::{HashMap, VecDeque};
+use serde_json::json;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 
 use crate::simulation::SimulationTick;
 use crate::world_loader::WorldLoader;
@@ -38,6 +41,18 @@ use constants::{
     growth::{ACTIVE_TILE_THRESHOLD, GROWTH_INTERVAL_TICKS, MAX_BIOMASS},
     performance::CHUNK_SIZE,
 };
+
+/// Global snapshot of vegetation biomass for web overlay
+#[derive(Debug, Clone, Default)]
+struct VegetationHeatmapSnapshot {
+    heatmap: Vec<Vec<f32>>, // Percentage [0-100] per chunk
+    max_biomass: f32,       // Reference max biomass value
+    tile_size: usize,       // Tile size per chunk (e.g., 16)
+    updated_tick: u64,      // Simulation tick of last update
+    world_size_chunks: i32, // Dimension of the heatmap grid (square)
+}
+
+static mut VEGETATION_HEATMAP: Option<Arc<RwLock<VegetationHeatmapSnapshot>>> = None;
 
 /// Vegetation state for a single tile
 #[derive(Debug, Clone)]
@@ -106,42 +121,110 @@ impl TileVegetation {
     }
 }
 
-/// Grid-based storage for vegetation data
-/// Enhanced active tile management for Phase 4 performance optimization
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ChunkQueueEntry {
+    chunk: IVec2,
+    due_tick: u64,
+}
+
+impl Ord for ChunkQueueEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.due_tick
+            .cmp(&other.due_tick)
+            .then_with(|| self.chunk.x.cmp(&other.chunk.x))
+            .then_with(|| self.chunk.y.cmp(&other.chunk.y))
+    }
+}
+
+impl PartialOrd for ChunkQueueEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Chunk-level regrowth queue that throttles vegetation updates using a min-heap keyed by due tick.
 #[derive(Debug, Clone)]
-struct ActiveTileManager {
-    /// Queue of recently grazed tiles that need frequent updates
-    /// Ordered by graze time for FIFO processing
-    recently_grazed: VecDeque<IVec2>,
+struct ChunkRegrowthQueue {
+    /// Tracks the latest scheduled tick for each chunk.
+    scheduled_due: HashMap<IVec2, u64>,
 
-    /// Set of tiles below biomass threshold needing frequent updates
-    /// These are tiles that are actively regrowing toward full capacity
-    regrowing_tiles: HashMap<IVec2, u64>, // tile -> last_update_tick
+    /// Min-heap of chunk processing deadlines.
+    heap: BinaryHeap<Reverse<ChunkQueueEntry>>,
 
-    /// Set of tiles that were recently processed to avoid duplication
-    /// Tracks which tiles were updated in the current cycle
-    processed_this_cycle: std::collections::HashSet<IVec2>,
+    /// Adaptive limit of how many chunks we process per frame.
+    chunks_per_pass: usize,
 
-    /// Performance metrics for monitoring
+    /// Metrics collected for instrumentation.
     metrics: ActiveTileMetrics,
+}
+
+impl ChunkRegrowthQueue {
+    fn new(default_chunks_per_pass: usize) -> Self {
+        let initial_budget = default_chunks_per_pass.max(1);
+        Self {
+            scheduled_due: HashMap::new(),
+            heap: BinaryHeap::new(),
+            chunks_per_pass: initial_budget,
+            metrics: ActiveTileMetrics {
+                chunk_budget: initial_budget,
+                ..Default::default()
+            },
+        }
+    }
+
+    fn schedule(&mut self, chunk: IVec2, due_tick: u64) {
+        self.scheduled_due.insert(chunk, due_tick);
+        self.heap.push(Reverse(ChunkQueueEntry { chunk, due_tick }));
+        let len = self.scheduled_due.len();
+        self.metrics.queue_length = len;
+        self.metrics.active_count = len;
+    }
+
+    fn pop_due(&mut self, current_tick: u64) -> Option<IVec2> {
+        while let Some(Reverse(entry)) = self.heap.peek() {
+            if entry.due_tick > current_tick {
+                return None;
+            }
+
+            let Reverse(entry) = self.heap.pop().unwrap();
+            match self.scheduled_due.get(&entry.chunk) {
+                Some(&expected) if expected == entry.due_tick => {
+                    self.scheduled_due.remove(&entry.chunk);
+                    let len = self.scheduled_due.len();
+                    self.metrics.queue_length = len;
+                    self.metrics.active_count = len;
+                    return Some(entry.chunk);
+                }
+                _ => {
+                    // Stale entry; skip and continue.
+                    continue;
+                }
+            }
+        }
+        None
+    }
+
+    fn scheduled_len(&self) -> usize {
+        self.scheduled_due.len()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ActiveTileMetrics {
-    /// Number of active tiles currently being tracked
+    /// Number of chunks currently being tracked for regrowth.
     pub active_count: usize,
 
-    /// Number of tiles processed in last update cycle
+    /// Number of chunks processed in the last update cycle.
     pub processed_last_cycle: usize,
 
-    /// Number of recently grazed tiles
-    pub recently_grazed_count: usize,
+    /// Queue length snapshot (for diagnostics).
+    pub queue_length: usize,
 
-    /// Number of regrowing tiles
-    pub regrowing_count: usize,
-
-    /// CPU time spent on active tile management (in microseconds)
+    /// CPU time spent processing vegetation chunks (in microseconds).
     pub processing_time_us: u64,
+
+    /// Current chunk budget (chunks processed per pass).
+    pub chunk_budget: usize,
 }
 
 #[derive(Resource, Debug)]
@@ -150,8 +233,8 @@ pub struct VegetationGrid {
     /// Uses sparse storage for memory efficiency on large maps
     tiles: HashMap<IVec2, TileVegetation>,
 
-    /// Enhanced active tile management system
-    active_manager: ActiveTileManager,
+    /// Chunk-level regrowth queue responsible for throttling updates
+    chunk_queue: ChunkRegrowthQueue,
 
     /// Total number of tiles that could support vegetation
     total_suitable_tiles: usize,
@@ -164,6 +247,24 @@ pub struct VegetationGrid {
 
     /// Phase 5 metrics dashboard counters
     pub metrics_dashboard: VegetationMetrics,
+
+    /// World dimensions in chunks (square map assumed)
+    world_size_chunks: i32,
+
+    /// Chunk size in tiles (should match terrain chunk size)
+    chunk_size: i32,
+
+    /// Set of chunks that can support vegetation (used for defaults)
+    suitable_chunks: HashSet<IVec2>,
+
+    /// Per-chunk regrowth state (timestamps, saturation tracking)
+    chunk_states: HashMap<IVec2, ChunkGrowthState>,
+
+    /// Flag indicating the heatmap snapshot should be refreshed
+    heatmap_dirty: bool,
+
+    /// Controls whether biomass growth logic runs (useful for tests)
+    growth_enabled: bool,
 }
 
 /// Phase 5 Metrics Dashboard for debugging and monitoring
@@ -226,6 +327,130 @@ pub struct BiomassSnapshot {
     pub timestamp: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GrowthTier {
+    Hot,
+    Warm,
+    Cold,
+}
+
+impl GrowthTier {
+    fn interval_ticks(self) -> u64 {
+        match self {
+            GrowthTier::Hot => constants::performance::CHUNK_INTERVAL_HOT_TICKS,
+            GrowthTier::Warm => constants::performance::CHUNK_INTERVAL_WARM_TICKS,
+            GrowthTier::Cold => constants::performance::CHUNK_INTERVAL_COLD_TICKS,
+        }
+    }
+
+    fn promote(self) -> Self {
+        match self {
+            GrowthTier::Cold => GrowthTier::Warm,
+            GrowthTier::Warm => GrowthTier::Hot,
+            GrowthTier::Hot => GrowthTier::Hot,
+        }
+    }
+
+    fn demote(self) -> Self {
+        match self {
+            GrowthTier::Hot => GrowthTier::Warm,
+            GrowthTier::Warm => GrowthTier::Cold,
+            GrowthTier::Cold => GrowthTier::Cold,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ChunkGrowthState {
+    last_processed_tick: u64,
+    next_due_tick: u64,
+    saturated: bool,
+    active_tiles: Vec<IVec2>,
+    active_indices: HashMap<IVec2, usize>,
+    cursor: usize,
+    tier: GrowthTier,
+}
+
+impl ChunkGrowthState {
+    fn new(current_tick: u64) -> Self {
+        let tier = GrowthTier::Cold;
+        let interval = tier.interval_ticks();
+        Self {
+            last_processed_tick: current_tick.saturating_sub(interval),
+            next_due_tick: current_tick + interval,
+            saturated: true,
+            active_tiles: Vec::new(),
+            active_indices: HashMap::new(),
+            cursor: 0,
+            tier,
+        }
+    }
+
+    fn mark_depleted(&mut self, current_tick: u64) {
+        self.saturated = false;
+        self.tier = GrowthTier::Hot;
+        self.last_processed_tick = current_tick;
+        self.next_due_tick = current_tick;
+        self.cursor = 0;
+    }
+
+    fn activate_tile(&mut self, tile: IVec2) {
+        if self.active_indices.contains_key(&tile) {
+            return;
+        }
+        let index = self.active_tiles.len();
+        self.active_tiles.push(tile);
+        self.active_indices.insert(tile, index);
+        self.saturated = false;
+    }
+
+    fn deactivate_tile(&mut self, tile: IVec2) {
+        if let Some(index) = self.active_indices.remove(&tile) {
+            if let Some(last) = self.active_tiles.pop() {
+                if index < self.active_tiles.len() {
+                    self.active_tiles[index] = last;
+                    if let Some(last_index) = self.active_indices.get_mut(&last) {
+                        *last_index = index;
+                    }
+                }
+            }
+
+            if self.cursor > index {
+                self.cursor = self.cursor.saturating_sub(1);
+            }
+
+            if self.active_tiles.is_empty() {
+                self.cursor = 0;
+            } else if self.cursor >= self.active_tiles.len() {
+                self.cursor %= self.active_tiles.len();
+            }
+        }
+    }
+
+    fn mark_processed(&mut self, current_tick: u64) {
+        self.last_processed_tick = current_tick;
+        self.saturated = self.active_tiles.is_empty();
+        if self.saturated {
+            self.tier = self.tier.demote();
+            self.cursor = 0;
+        } else {
+            self.tier = self.tier.promote();
+            if self.cursor >= self.active_tiles.len() {
+                self.cursor %= self.active_tiles.len();
+            }
+        }
+        let interval = self.tier.interval_ticks();
+        self.next_due_tick = current_tick + interval;
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ChunkProcessOutcome {
+    tiles_touched: usize,
+    active_tiles: usize,
+    saturated: bool,
+}
+
 impl VegetationMetrics {
     /// Create a new metrics dashboard
     pub fn new() -> Self {
@@ -258,7 +483,9 @@ impl VegetationMetrics {
 
         // Calculate average biomass percentage
         if total_tiles > 0 {
-            let avg_pct = ((total_biomass / total_tiles as f64) / constants::growth::MAX_BIOMASS as f64) * 100.0;
+            let avg_pct = ((total_biomass / total_tiles as f64)
+                / constants::growth::MAX_BIOMASS as f64)
+                * 100.0;
             self.average_biomass_pct = avg_pct as f32;
         }
 
@@ -269,6 +496,10 @@ impl VegetationMetrics {
         if self.minimum_biomass == 0.0 || total_biomass < self.minimum_biomass {
             self.minimum_biomass = total_biomass;
         }
+    }
+
+    pub fn set_active_tiles(&mut self, active_tiles: usize) {
+        self.active_tiles_count = active_tiles;
     }
 
     /// Record biomass consumption
@@ -440,7 +671,9 @@ impl VegetationMetrics {
 
         // Calculate average biomass percentage
         if total_suitable_tiles > 0 {
-            let avg_pct = ((total_biomass / total_suitable_tiles as f64) / constants::growth::MAX_BIOMASS as f64) * 100.0;
+            let avg_pct = ((total_biomass / total_suitable_tiles as f64)
+                / constants::growth::MAX_BIOMASS as f64)
+                * 100.0;
             self.average_biomass_pct = avg_pct as f32;
         }
 
@@ -572,17 +805,54 @@ impl VegetationGrid {
     pub fn new() -> Self {
         Self {
             tiles: HashMap::new(),
-            active_manager: ActiveTileManager {
-                recently_grazed: VecDeque::new(),
-                regrowing_tiles: HashMap::new(),
-                processed_this_cycle: std::collections::HashSet::new(),
-                metrics: ActiveTileMetrics::default(),
-            },
+            chunk_queue: ChunkRegrowthQueue::new(constants::performance::DEFAULT_CHUNKS_PER_PASS),
             total_suitable_tiles: 0,
             current_tick: 0,
             performance_metrics: PerformanceMetrics::default(),
             metrics_dashboard: VegetationMetrics::new(),
+            world_size_chunks: 0,
+            chunk_size: CHUNK_SIZE as i32,
+            suitable_chunks: HashSet::new(),
+            chunk_states: HashMap::new(),
+            growth_enabled: true,
+            heatmap_dirty: true,
         }
+    }
+
+    /// Enable or disable biomass growth updates (primarily for deterministic tests)
+    pub fn set_growth_enabled(&mut self, enabled: bool) {
+        if self.growth_enabled == enabled {
+            return;
+        }
+
+        self.growth_enabled = enabled;
+
+        if enabled {
+            // Re-schedule all non-saturated chunks using their current due ticks.
+            let chunks: Vec<(IVec2, bool)> = self
+                .chunk_states
+                .iter()
+                .map(|(chunk, state)| (*chunk, !state.saturated))
+                .collect();
+            for (chunk, should_schedule) in chunks {
+                if should_schedule {
+                    self.schedule_chunk(chunk);
+                }
+            }
+        } else {
+            // Clear any pending work while growth is paused.
+            self.chunk_queue.scheduled_due.clear();
+            self.chunk_queue.heap.clear();
+            self.chunk_queue.metrics.queue_length = 0;
+            self.chunk_queue.metrics.active_count = 0;
+            self.chunk_queue.metrics.processing_time_us = 0;
+            self.chunk_queue.metrics.processed_last_cycle = 0;
+        }
+    }
+
+    /// Returns whether biomass growth updates are currently enabled
+    pub fn growth_enabled(&self) -> bool {
+        self.growth_enabled
     }
 
     /// Get vegetation at a specific tile, creating it if needed
@@ -597,18 +867,33 @@ impl VegetationGrid {
 
             // Return a reference to empty vegetation (won't be stored)
             // Note: This is a workaround - in practice, callers should check terrain_multiplier first
-            panic!("Attempted to create vegetation on non-vegetated terrain at {:?}", tile);
+            panic!(
+                "Attempted to create vegetation on non-vegetated terrain at {:?}",
+                tile
+            );
         }
 
         if !self.tiles.contains_key(&tile) {
-            let vegetation = TileVegetation::new(
-                MAX_BIOMASS * terrain_multiplier, // Start at max for initial growth
-                terrain_multiplier,
-            );
+            let max_biomass = MAX_BIOMASS * terrain_multiplier;
+            let starting_biomass = constants::growth::INITIAL_BIOMASS.min(max_biomass);
+
+            let vegetation = TileVegetation::new(starting_biomass, terrain_multiplier);
             self.tiles.insert(tile, vegetation);
 
             if terrain_multiplier > 0.0 {
                 self.total_suitable_tiles += 1;
+                let chunk = self.tile_to_chunk(tile);
+                let state = self
+                    .chunk_states
+                    .entry(chunk)
+                    .or_insert_with(|| ChunkGrowthState::new(self.current_tick));
+
+                if starting_biomass < max_biomass {
+                    state.saturated = false;
+                    state.next_due_tick = self.current_tick;
+                    state.activate_tile(tile);
+                    self.schedule_chunk(chunk);
+                }
             }
         }
 
@@ -633,9 +918,7 @@ impl VegetationGrid {
         if let Some(vegetation) = self.tiles.get_mut(&tile) {
             // Apply consumption rules: min(requested, max_fraction * available, max_absolute)
             let max_by_fraction = vegetation.biomass * max_fraction;
-            let actual_consumed = requested_amount
-                .min(max_by_fraction)
-                .min(MAX_MEAL_ABSOLUTE);
+            let actual_consumed = requested_amount.min(max_by_fraction).min(MAX_MEAL_ABSOLUTE);
 
             let remaining = requested_amount - actual_consumed;
 
@@ -645,20 +928,47 @@ impl VegetationGrid {
 
                 // Record consumption in metrics dashboard
                 self.metrics_dashboard.record_consumption(actual_consumed);
-
-                // Add to recently grazed queue for active management
-                self.active_manager.recently_grazed.push_back(tile);
-
-                // Add to regrowing set if below threshold
-                if vegetation.is_active(self.current_tick) {
-                    self.active_manager.regrowing_tiles.insert(tile, self.current_tick);
-                }
+                let chunk = self.tile_to_chunk(tile);
+                let state = self
+                    .chunk_states
+                    .entry(chunk)
+                    .or_insert_with(|| ChunkGrowthState::new(self.current_tick));
+                state.mark_depleted(self.current_tick);
+                state.activate_tile(tile);
+                self.schedule_chunk(chunk);
+                self.heatmap_dirty = true;
             }
 
             (actual_consumed, remaining)
         } else {
             (0.0, requested_amount)
         }
+    }
+
+    fn tile_to_chunk(&self, tile: IVec2) -> IVec2 {
+        IVec2::new(
+            tile.x.div_euclid(self.chunk_size),
+            tile.y.div_euclid(self.chunk_size),
+        )
+    }
+
+    fn ensure_chunk_state(&mut self, chunk: IVec2) -> &mut ChunkGrowthState {
+        self.chunk_states
+            .entry(chunk)
+            .or_insert_with(|| ChunkGrowthState::new(self.current_tick))
+    }
+
+    fn schedule_chunk(&mut self, chunk: IVec2) {
+        let state = self
+            .chunk_states
+            .entry(chunk)
+            .or_insert_with(|| ChunkGrowthState::new(self.current_tick));
+
+        if state.saturated {
+            return;
+        }
+
+        self.chunk_queue.schedule(chunk, state.next_due_tick);
     }
 
     /// Sample biomass in a radius around a position
@@ -718,392 +1028,373 @@ impl VegetationGrid {
         best_tile
     }
 
-    /// Update the vegetation grid with Phase 4 performance optimizations
+    /// Update the vegetation grid by processing a limited number of chunks each tick.
     pub fn update(&mut self, current_tick: u64) {
         self.current_tick = current_tick;
 
-        // Only run growth updates on interval
-        if current_tick % GROWTH_INTERVAL_TICKS != 0 {
+        if !self.growth_enabled {
+            let scheduled = self.chunk_queue.scheduled_len();
+            self.chunk_queue.metrics.processing_time_us = 0;
+            self.chunk_queue.metrics.processed_last_cycle = 0;
+            self.chunk_queue.metrics.queue_length = scheduled;
+            self.chunk_queue.metrics.active_count = scheduled;
+            self.chunk_queue.metrics.chunk_budget = self.chunk_queue.chunks_per_pass;
+            self.performance_metrics.total_time_us = 0;
+            self.performance_metrics.tiles_processed = 0;
             return;
         }
 
-        // Start performance monitoring
+        if self.chunk_queue.scheduled_len() == 0 {
+            self.chunk_queue.metrics.active_count = 0;
+            self.chunk_queue.metrics.queue_length = 0;
+            self.chunk_queue.metrics.processed_last_cycle = 0;
+            self.chunk_queue.metrics.processing_time_us = 0;
+            self.chunk_queue.metrics.chunk_budget = self.chunk_queue.chunks_per_pass;
+            self.performance_metrics.total_time_us = 0;
+            self.performance_metrics.tiles_processed = 0;
+            self.metrics_dashboard.set_active_tiles(0);
+            return;
+        }
+
+        let budget = constants::performance::CHUNK_PROCESS_BUDGET_US;
+        let min_chunks = constants::performance::MIN_CHUNKS_PER_PASS;
+        let max_chunks = constants::performance::MAX_CHUNKS_PER_PASS;
+
+        let mut processed_chunks = 0usize;
+        let mut tiles_processed = 0usize;
+
         let start_time = std::time::Instant::now();
 
-        // Clear processed set for new cycle
-        self.active_manager.processed_this_cycle.clear();
-
-        // Update active tiles with enhanced management
-        self.update_active_tiles_enhanced();
-
-        // Sample some inactive tiles for occasional updates
-        self.update_inactive_tile_sample();
-
-        // Update performance metrics
-        let total_time = start_time.elapsed().as_micros() as u64;
-        self.performance_metrics.total_time_us = total_time;
-        self.performance_metrics.tiles_processed =
-            self.performance_metrics.active_tiles_processed + self.performance_metrics.inactive_tiles_sampled;
-        self.performance_metrics.update_cycles += 1;
-
-        // Apply adaptive performance scaling
-        self.adjust_performance_scaling();
-
-        // Log performance metrics periodically
-        if current_tick % 600 == 0 { // Every 60 seconds at 10 TPS
-            self.log_performance_metrics();
-        }
-    }
-
-    /// Enhanced active tile update with Phase 4 optimizations
-    fn update_active_tiles_enhanced(&mut self) {
-        use constants::growth::GROWTH_RATE;
-        use constants::performance::MAX_ACTIVE_TILES_PER_UPDATE;
-
-        let active_start_time = std::time::Instant::now();
-        let mut active_processed = 0;
-        let mut recently_grazed_processed = 0;
-        let mut regrowing_processed = 0;
-
-        // Clear old metrics and update current counts
-        self.active_manager.metrics.active_count =
-            self.active_manager.recently_grazed.len() + self.active_manager.regrowing_tiles.len();
-        self.active_manager.metrics.recently_grazed_count = self.active_manager.recently_grazed.len();
-        self.active_manager.metrics.regrowing_count = self.active_manager.regrowing_tiles.len();
-
-        // Process recently grazed tiles first (highest priority)
-        let max_recently_grazed = (MAX_ACTIVE_TILES_PER_UPDATE / 2).min(self.active_manager.recently_grazed.len());
-
-        for _ in 0..max_recently_grazed {
-            if let Some(tile) = self.active_manager.recently_grazed.pop_front() {
-                if self.update_single_tile(tile) {
-                    recently_grazed_processed += 1;
-                    active_processed += 1;
-                }
-            }
-        }
-
-        // Process regrowing tiles (second priority)
-        let max_regrowing = (MAX_ACTIVE_TILES_PER_UPDATE - active_processed).min(self.active_manager.regrowing_tiles.len());
-
-        let regrowing_tiles: Vec<IVec2> = self.active_manager.regrowing_tiles
-            .keys()
-            .take(max_regrowing)
-            .copied()
-            .collect();
-
-        // Use batch processing for regrowing tiles (Phase 4 optimization)
-        if !regrowing_tiles.is_empty() {
-            let batch_result = self.process_tiles_in_batches(regrowing_tiles);
-            regrowing_processed = batch_result.total_tiles_processed;
-            active_processed += regrowing_processed;
-
-            // Update performance metrics with batch results
-            self.performance_metrics.batch_metrics = BatchMetrics {
-                batches_processed: self.performance_metrics.batch_metrics.batches_processed + batch_result.batches_processed,
-                total_tiles_in_batches: self.performance_metrics.batch_metrics.total_tiles_in_batches + batch_result.total_tiles_processed,
-                avg_batch_time_us: batch_result.avg_batch_time_us,
-                max_batch_time_us: batch_result.max_batch_time_us,
-                batches_over_budget: self.performance_metrics.batch_metrics.batches_over_budget + batch_result.batches_over_budget,
-                avg_tiles_per_batch: batch_result.avg_tiles_per_batch,
+        while processed_chunks < self.chunk_queue.chunks_per_pass {
+            let Some(chunk) = self.chunk_queue.pop_due(current_tick) else {
+                break;
             };
-        }
 
-        // Update metrics
-        self.active_manager.metrics.processed_last_cycle = active_processed;
-        let active_time = active_start_time.elapsed().as_micros() as u64;
-        self.active_manager.metrics.processing_time_us = active_time;
+            let mut outcome = self.process_chunk(chunk);
 
-        self.performance_metrics.active_tiles_processed = active_processed;
-        self.performance_metrics.active_management_time_us = active_time;
-
-        debug!("🌱 Active tile update: processed {} tiles (recently grazed: {}, regrowing: {}) in {}μs",
-              active_processed, recently_grazed_processed, regrowing_processed, active_time);
-    }
-
-    /// Update a single tile with growth calculation
-    /// Returns true if tile was updated, false if it should be removed from active tracking
-    fn update_single_tile(&mut self, tile: IVec2) -> bool {
-        use constants::growth::GROWTH_RATE;
-
-        // Skip if already processed this cycle
-        if self.active_manager.processed_this_cycle.contains(&tile) {
-            return false;
-        }
-
-        if let Some(vegetation) = self.tiles.get_mut(&tile) {
-            let max_biomass = vegetation.max_biomass();
-            if max_biomass > 0.0 {
-                // Calculate logistic growth
-                let growth = GROWTH_RATE * vegetation.biomass * (1.0 - vegetation.biomass / max_biomass);
-                let actual_growth = vegetation.add_biomass(growth);
-
-                // Record growth in metrics dashboard
-                if actual_growth > 0.0 {
-                    self.metrics_dashboard.record_growth(actual_growth);
-                }
-
-                // Mark as processed
-                self.active_manager.processed_this_cycle.insert(tile);
-
-                // Keep tile active if it's still below threshold
-                let should_remain_active = vegetation.is_active(self.current_tick);
-
-                // Remove from regrowing set if fully recovered
-                if !should_remain_active {
-                    self.active_manager.regrowing_tiles.remove(&tile);
-                }
-
-                return should_remain_active;
-            }
-        }
-
-        false // Tile should be removed from active tracking
-    }
-
-    /// Update a random sample of inactive tiles with performance tracking
-    fn update_inactive_tile_sample(&mut self) {
-        use constants::growth::GROWTH_RATE;
-        use constants::performance::INACTIVE_SAMPLE_SIZE;
-
-        let sample_start_time = std::time::Instant::now();
-        let mut inactive_processed = 0;
-
-        // Get inactive tiles (those not in active manager)
-        let inactive_tiles: Vec<IVec2> = self.tiles
-            .keys()
-            .filter(|tile| {
-                !self.active_manager.recently_grazed.contains(tile) &&
-                !self.active_manager.regrowing_tiles.contains_key(tile) &&
-                !self.active_manager.processed_this_cycle.contains(tile)
-            })
-            .take(INACTIVE_SAMPLE_SIZE)
-            .copied()
-            .collect();
-
-        for tile in inactive_tiles {
-            if let Some(vegetation) = self.tiles.get_mut(&tile) {
-                let max_biomass = vegetation.max_biomass();
-                if max_biomass > 0.0 {
-                    let growth = GROWTH_RATE * vegetation.biomass * (1.0 - vegetation.biomass / max_biomass);
-                    let actual_growth = vegetation.add_biomass(growth);
-
-                    // Record growth in metrics dashboard
-                    if actual_growth > 0.0 {
-                        self.metrics_dashboard.record_growth(actual_growth);
-                    }
-
-                    // Add to active manager if it became active
-                    if vegetation.is_active(self.current_tick) {
-                        self.active_manager.regrowing_tiles.insert(tile, self.current_tick);
-                    }
-
-                    inactive_processed += 1;
+            {
+                let state = self.ensure_chunk_state(chunk);
+                state.mark_processed(current_tick);
+                outcome.active_tiles = state.active_tiles.len();
+                outcome.saturated = state.saturated;
+                if !state.saturated {
+                    self.schedule_chunk(chunk);
                 }
             }
-        }
 
-        // Update performance metrics
-        let sample_time = sample_start_time.elapsed().as_micros() as u64;
-        self.performance_metrics.inactive_tiles_sampled = inactive_processed;
-        self.performance_metrics.growth_time_us += sample_time; // Add to growth time
+            processed_chunks += 1;
+            tiles_processed += outcome.tiles_touched;
 
-        debug!("🌱 Inactive tile sample: processed {} tiles in {}μs", inactive_processed, sample_time);
-    }
-
-    /// Process tiles in batches with time budgeting for Phase 4 optimization
-    fn process_tiles_in_batches(&mut self, tiles: Vec<IVec2>) -> BatchProcessingResult {
-        use constants::performance::{BATCH_SIZE, BATCH_TIME_BUDGET_US};
-
-        let mut result = BatchProcessingResult::default();
-        let mut batch_start_time = std::time::Instant::now();
-
-        for (batch_index, batch) in tiles.chunks(BATCH_SIZE).enumerate() {
-            let batch_start = std::time::Instant::now();
-
-            // Process the batch
-            let tiles_processed_in_batch = self.process_single_batch(batch);
-
-            let batch_time = batch_start.elapsed().as_micros() as u64;
-
-            // Update batch metrics
-            result.total_tiles_processed += tiles_processed_in_batch;
-            result.batches_processed += 1;
-            result.total_batch_time_us += batch_time;
-            result.max_batch_time_us = result.max_batch_time_us.max(batch_time);
-
-            // Check if batch exceeded time budget
-            if batch_time > BATCH_TIME_BUDGET_US {
-                result.batches_over_budget += 1;
-                warn!("⚠️  Batch {} exceeded time budget: {}μs > {}μs (processed {} tiles)",
-                     batch_index, batch_time, BATCH_TIME_BUDGET_US, tiles_processed_in_batch);
-            }
-
-            // Check if we're approaching the overall time budget
-            let elapsed_so_far = batch_start_time.elapsed().as_micros() as u64;
-            if elapsed_so_far > (constants::performance::CPU_BUDGET_US - BATCH_TIME_BUDGET_US) {
-                debug!("🛑 Approaching time budget, stopping batch processing at {} batches", batch_index + 1);
+            let elapsed = start_time.elapsed().as_micros() as u64;
+            if elapsed >= budget {
+                self.chunk_queue.metrics.processing_time_us = elapsed;
+                self.reduce_chunk_budget(min_chunks, elapsed, budget);
                 break;
             }
         }
 
-        // Calculate averages
-        if result.batches_processed > 0 {
-            result.avg_batch_time_us = result.total_batch_time_us / result.batches_processed as u64;
-            result.avg_tiles_per_batch = result.total_tiles_processed as f32 / result.batches_processed as f32;
-        }
+        let elapsed_total = start_time.elapsed().as_micros() as u64;
 
-        result
+        self.chunk_queue.metrics.processing_time_us = elapsed_total;
+        self.chunk_queue.metrics.processed_last_cycle = processed_chunks;
+        let scheduled_len = self.chunk_queue.scheduled_len();
+        self.chunk_queue.metrics.active_count = scheduled_len;
+        self.chunk_queue.metrics.queue_length = scheduled_len;
+        self.chunk_queue.metrics.chunk_budget = self.chunk_queue.chunks_per_pass;
+
+        self.performance_metrics.tiles_processed = tiles_processed;
+        self.performance_metrics.total_time_us = elapsed_total;
+        self.performance_metrics.update_cycles += 1;
+
+        self.maybe_increase_chunk_budget(max_chunks, elapsed_total, budget, processed_chunks);
+
+        self.update_active_tile_counts();
+
+        if current_tick % 600 == 0 {
+            self.log_performance_metrics();
+        }
     }
 
-    /// Process a single batch of tiles
-    fn process_single_batch(&mut self, batch: &[IVec2]) -> usize {
+    fn reduce_chunk_budget(&mut self, min_chunks: usize, elapsed: u64, budget: u64) {
+        let old_limit = self.chunk_queue.chunks_per_pass;
+        if old_limit <= min_chunks {
+            return;
+        }
+        let new_limit = (old_limit as f32 * constants::performance::CHUNK_RATE_ADJUST_DOWN)
+            .ceil()
+            .max(min_chunks as f32) as usize;
+        if new_limit < old_limit {
+            info!(
+                "🌿 Vegetation: throttling chunk batch limit {} -> {} (elapsed {}µs > {}µs)",
+                old_limit, new_limit, elapsed, budget
+            );
+            self.chunk_queue.chunks_per_pass = new_limit;
+            self.chunk_queue.metrics.chunk_budget = new_limit;
+        }
+    }
+
+    fn maybe_increase_chunk_budget(
+        &mut self,
+        max_chunks: usize,
+        elapsed: u64,
+        budget: u64,
+        processed_chunks: usize,
+    ) {
+        if processed_chunks < self.chunk_queue.chunks_per_pass {
+            return;
+        }
+        if elapsed >= budget / 2 {
+            return;
+        }
+        let old_limit = self.chunk_queue.chunks_per_pass;
+        if old_limit >= max_chunks {
+            return;
+        }
+        let new_limit = ((old_limit as f32 * constants::performance::CHUNK_RATE_ADJUST_UP)
+            .ceil()
+            .min(max_chunks as f32)) as usize;
+        if new_limit > old_limit {
+            info!(
+                "🌿 Vegetation: increasing chunk batch limit {} -> {} (elapsed {}µs < {}µs)",
+                old_limit, new_limit, elapsed, budget
+            );
+            self.chunk_queue.chunks_per_pass = new_limit;
+            self.chunk_queue.metrics.chunk_budget = new_limit;
+        }
+    }
+
+    fn update_active_tile_counts(&mut self) {
+        let active_tiles = self
+            .chunk_states
+            .values()
+            .map(|state| state.active_tiles.len())
+            .sum::<usize>();
+        self.metrics_dashboard.set_active_tiles(active_tiles);
+    }
+
+    fn process_chunk(&mut self, chunk: IVec2) -> ChunkProcessOutcome {
         use constants::growth::GROWTH_RATE;
+        use constants::performance::BATCH_SIZE;
 
-        let mut processed = 0;
+        let mut outcome = ChunkProcessOutcome::default();
+        outcome.saturated = true;
 
-        for &tile in batch {
-            // Skip if already processed this cycle
-            if self.active_manager.processed_this_cycle.contains(&tile) {
-                continue;
+        if !self.growth_enabled {
+            return outcome;
+        }
+
+        let mut worklist = Vec::new();
+        if let Some(state) = self.chunk_states.get_mut(&chunk) {
+            if state.active_tiles.is_empty() {
+                return outcome;
             }
 
-            if let Some(vegetation) = self.tiles.get_mut(&tile) {
-                let max_biomass = vegetation.max_biomass();
-                if max_biomass > 0.0 {
-                    // Calculate logistic growth
-                    let growth = GROWTH_RATE * vegetation.biomass * (1.0 - vegetation.biomass / max_biomass);
-                    let actual_growth = vegetation.add_biomass(growth);
+            let batch = BATCH_SIZE.min(state.active_tiles.len());
+            for _ in 0..batch {
+                if state.active_tiles.is_empty() {
+                    break;
+                }
+                if state.cursor >= state.active_tiles.len() {
+                    state.cursor %= state.active_tiles.len();
+                }
+                let tile = state.active_tiles[state.cursor];
+                worklist.push(tile);
+                state.cursor = (state.cursor + 1) % state.active_tiles.len();
+            }
+        } else {
+            return outcome;
+        }
 
-                    // Record growth in metrics dashboard
+        let mut tiles_to_remove = Vec::new();
+        let mut growth_count = 0usize;
+
+        for tile in worklist.iter() {
+            if let Some(vegetation) = self.tiles.get_mut(tile) {
+                let max_biomass = vegetation.max_biomass();
+                if max_biomass <= 0.0 {
+                    tiles_to_remove.push(*tile);
+                    continue;
+                }
+
+                if vegetation.biomass < max_biomass {
+                    let growth =
+                        GROWTH_RATE * vegetation.biomass * (1.0 - vegetation.biomass / max_biomass);
+                    let actual_growth = vegetation.add_biomass(growth);
                     if actual_growth > 0.0 {
                         self.metrics_dashboard.record_growth(actual_growth);
                     }
 
-                    // Mark as processed
-                    self.active_manager.processed_this_cycle.insert(tile);
+                    growth_count += 1;
 
-                    // Update active status
-                    let should_remain_active = vegetation.is_active(self.current_tick);
-                    if !should_remain_active {
-                        self.active_manager.regrowing_tiles.remove(&tile);
-                    } else if !self.active_manager.regrowing_tiles.contains_key(&tile) {
-                        self.active_manager.regrowing_tiles.insert(tile, self.current_tick);
+                    if !vegetation.is_active(self.current_tick) {
+                        tiles_to_remove.push(*tile);
+                    } else {
+                        outcome.saturated = false;
                     }
-
-                    processed += 1;
+                } else {
+                    tiles_to_remove.push(*tile);
                 }
+            } else {
+                tiles_to_remove.push(*tile);
             }
         }
 
-        processed
+        if let Some(state) = self.chunk_states.get_mut(&chunk) {
+            for tile in tiles_to_remove {
+                state.deactivate_tile(tile);
+            }
+            if state.cursor >= state.active_tiles.len() && !state.active_tiles.is_empty() {
+                state.cursor %= state.active_tiles.len();
+            }
+            outcome.active_tiles = state.active_tiles.len();
+            outcome.saturated = state.active_tiles.is_empty();
+        }
+
+        outcome.tiles_touched = worklist.len();
+
+        if growth_count > 0 {
+            self.heatmap_dirty = true;
+        }
+
+        outcome
+    }
+
+    /// Update a random sample of inactive tiles with performance tracking
+    fn update_inactive_tile_sample(&mut self) {}
+
+    /// Process tiles in batches with time budgeting for Phase 4 optimization
+    fn process_tiles_in_batches(&mut self, _tiles: Vec<IVec2>) -> BatchProcessingResult {
+        BatchProcessingResult::default()
+    }
+
+    /// Process a single batch of tiles
+    fn process_single_batch(&mut self, _batch: &[IVec2]) -> usize {
+        0
     }
 
     /// Adaptive performance scaling based on system load
-    fn adjust_performance_scaling(&mut self) {
-        use constants::performance::{
-            TARGET_AVG_BIOMASS, HIGH_BIOMASS_THRESHOLD, LOW_BIOMASS_THRESHOLD,
-            CPU_BUDGET_US, PROFILING_INTERVAL_TICKS
-        };
-
-        // Only check at profiling intervals
-        if self.current_tick % PROFILING_INTERVAL_TICKS != 0 {
-            return;
-        }
-
-        let stats = self.get_statistics();
-        let avg_biomass_pct = (stats.average_biomass / constants::growth::MAX_BIOMASS) * 100.0;
-        let cpu_utilization_pct = (self.performance_metrics.total_time_us as f32 / CPU_BUDGET_US as f32) * 100.0;
-
-        // Calculate performance pressure
-        let performance_pressure = cpu_utilization_pct / 100.0;
-        self.performance_metrics.adaptive_metrics.performance_pressure = performance_pressure;
-        self.performance_metrics.adaptive_metrics.average_biomass = stats.average_biomass;
-
-        let mut adjustment_made = false;
-        let mut new_multiplier = self.performance_metrics.adaptive_metrics.frequency_multiplier;
-
-        // Adjust based on CPU pressure
-        if performance_pressure > 0.8 && new_multiplier < 2.0 {
-            new_multiplier = (new_multiplier * 1.2).min(2.0);
-            adjustment_made = true;
-            info!("🐌 High CPU pressure ({:.1}%), reducing update frequency to {:.1}x",
-                 performance_pressure * 100.0, new_multiplier);
-        } else if performance_pressure < 0.3 && new_multiplier > 0.5 {
-            new_multiplier = (new_multiplier * 0.9).max(0.5);
-            adjustment_made = true;
-            info!("🚀 Low CPU pressure ({:.1}%), increasing update frequency to {:.1}x",
-                 performance_pressure * 100.0, new_multiplier);
-        }
-
-        // Adjust based on biomass levels
-        if avg_biomass_pct > 80.0 && new_multiplier < 1.5 {
-            new_multiplier = (new_multiplier * 1.1).min(1.5);
-            adjustment_made = true;
-            info!("🌿 High biomass ({:.1}%), reducing update frequency to {:.1}x",
-                 avg_biomass_pct, new_multiplier);
-        } else if avg_biomass_pct < 20.0 && new_multiplier > 0.7 {
-            new_multiplier = (new_multiplier * 0.9).max(0.7);
-            adjustment_made = true;
-            info!("🌱 Low biomass ({:.1}%), increasing update frequency to {:.1}x",
-                 avg_biomass_pct, new_multiplier);
-        }
-
-        // Apply the adjustment
-        if adjustment_made {
-            self.performance_metrics.adaptive_metrics.frequency_multiplier = new_multiplier;
-            self.performance_metrics.adaptive_metrics.adjustments_made += 1;
-            self.performance_metrics.adaptive_metrics.last_adjustment_tick = self.current_tick;
-        }
-    }
+    fn adjust_performance_scaling(&mut self) {}
 
     /// Log performance metrics for Phase 4 monitoring
     fn log_performance_metrics(&self) {
-        info!("📊 Vegetation Performance Metrics - Cycle {}:", self.performance_metrics.update_cycles);
+        info!(
+            "📊 Vegetation Performance Metrics - Cycle {}:",
+            self.performance_metrics.update_cycles
+        );
         info!("  Core Processing:");
-        info!("    Total tiles processed: {}", self.performance_metrics.tiles_processed);
-        info!("    Active tiles processed: {}", self.performance_metrics.active_tiles_processed);
-        info!("    Inactive tiles sampled: {}", self.performance_metrics.inactive_tiles_sampled);
+        info!(
+            "    Total tiles processed: {}",
+            self.performance_metrics.tiles_processed
+        );
+        info!(
+            "    Active tiles processed: {}",
+            self.performance_metrics.active_tiles_processed
+        );
+        info!(
+            "    Inactive tiles sampled: {}",
+            self.performance_metrics.inactive_tiles_sampled
+        );
 
         info!("  Timing:");
-        info!("    Total CPU time: {}μs", self.performance_metrics.total_time_us);
-        info!("    Active management time: {}μs", self.performance_metrics.active_management_time_us);
-        info!("    Growth calculation time: {}μs", self.performance_metrics.growth_time_us);
+        info!(
+            "    Total CPU time: {}μs",
+            self.performance_metrics.total_time_us
+        );
+        info!(
+            "    Active management time: {}μs",
+            self.performance_metrics.active_management_time_us
+        );
+        info!(
+            "    Growth calculation time: {}μs",
+            self.performance_metrics.growth_time_us
+        );
 
-        info!("  Active Tile Management:");
-        info!("    Active tiles tracked: {}", self.active_manager.metrics.active_count);
-        info!("    Recently grazed: {}", self.active_manager.metrics.recently_grazed_count);
-        info!("    Regrowing tiles: {}", self.active_manager.metrics.regrowing_count);
+        info!("  Chunk Regrowth Queue:");
+        info!(
+            "    Pending chunks: {}",
+            self.chunk_queue.metrics.queue_length
+        );
+        info!(
+            "    Chunks processed last pass: {}",
+            self.chunk_queue.metrics.processed_last_cycle
+        );
+        info!(
+            "    Current chunk budget: {}",
+            self.chunk_queue.chunks_per_pass
+        );
 
         info!("  Batch Processing:");
-        info!("    Batches processed: {}", self.performance_metrics.batch_metrics.batches_processed);
-        info!("    Tiles per batch: {:.1}", self.performance_metrics.batch_metrics.avg_tiles_per_batch);
-        info!("    Avg batch time: {}μs", self.performance_metrics.batch_metrics.avg_batch_time_us);
-        info!("    Max batch time: {}μs", self.performance_metrics.batch_metrics.max_batch_time_us);
+        info!(
+            "    Batches processed: {}",
+            self.performance_metrics.batch_metrics.batches_processed
+        );
+        info!(
+            "    Tiles per batch: {:.1}",
+            self.performance_metrics.batch_metrics.avg_tiles_per_batch
+        );
+        info!(
+            "    Avg batch time: {}μs",
+            self.performance_metrics.batch_metrics.avg_batch_time_us
+        );
+        info!(
+            "    Max batch time: {}μs",
+            self.performance_metrics.batch_metrics.max_batch_time_us
+        );
         if self.performance_metrics.batch_metrics.batches_over_budget > 0 {
-            warn!("    Batches over budget: {}", self.performance_metrics.batch_metrics.batches_over_budget);
+            warn!(
+                "    Batches over budget: {}",
+                self.performance_metrics.batch_metrics.batches_over_budget
+            );
         }
 
         info!("  Adaptive Scaling:");
-        info!("    Frequency multiplier: {:.2}x", self.performance_metrics.adaptive_metrics.frequency_multiplier);
-        info!("    Average biomass: {:.1}%", self.performance_metrics.adaptive_metrics.average_biomass / constants::growth::MAX_BIOMASS * 100.0);
-        info!("    Performance pressure: {:.2}", self.performance_metrics.adaptive_metrics.performance_pressure);
-        info!("    Adjustments made: {}", self.performance_metrics.adaptive_metrics.adjustments_made);
+        info!(
+            "    Frequency multiplier: {:.2}x",
+            self.performance_metrics
+                .adaptive_metrics
+                .frequency_multiplier
+        );
+        info!(
+            "    Average biomass: {:.1}%",
+            self.performance_metrics.adaptive_metrics.average_biomass
+                / constants::growth::MAX_BIOMASS
+                * 100.0
+        );
+        info!(
+            "    Performance pressure: {:.2}",
+            self.performance_metrics
+                .adaptive_metrics
+                .performance_pressure
+        );
+        info!(
+            "    Adjustments made: {}",
+            self.performance_metrics.adaptive_metrics.adjustments_made
+        );
 
         // Performance budget check
         let budget_us = constants::performance::CPU_BUDGET_US;
-        let cpu_utilization = (self.performance_metrics.total_time_us as f32 / budget_us as f32) * 100.0;
+        let cpu_utilization =
+            (self.performance_metrics.total_time_us as f32 / budget_us as f32) * 100.0;
 
         if self.performance_metrics.total_time_us > budget_us {
-            warn!("⚠️  Vegetation system exceeded CPU budget: {}μs > {}μs ({:.1}% utilization)",
-                  self.performance_metrics.total_time_us, budget_us, cpu_utilization);
+            warn!(
+                "⚠️  Vegetation system exceeded CPU budget: {}μs > {}μs ({:.1}% utilization)",
+                self.performance_metrics.total_time_us, budget_us, cpu_utilization
+            );
         } else {
-            info!("✅ Vegetation system within CPU budget: {}μs / {}μs ({:.1}% utilization)",
-                  self.performance_metrics.total_time_us, budget_us, cpu_utilization);
+            info!(
+                "✅ Vegetation system within CPU budget: {}μs / {}μs ({:.1}% utilization)",
+                self.performance_metrics.total_time_us, budget_us, cpu_utilization
+            );
         }
 
         // Performance efficiency calculation
-        let tiles_per_us = self.performance_metrics.tiles_processed as f32 / self.performance_metrics.total_time_us as f32;
+        let tiles_per_us = if self.performance_metrics.total_time_us > 0 {
+            self.performance_metrics.tiles_processed as f32
+                / self.performance_metrics.total_time_us as f32
+        } else {
+            0.0
+        };
         info!("🎯 Performance: {:.1} tiles per microsecond", tiles_per_us);
 
         // Efficiency rating
@@ -1134,22 +1425,48 @@ impl VegetationGrid {
         let savings_estimate = self.estimate_memory_savings();
 
         info!("💾 Memory Optimization Analysis:");
-        info!("  Current Usage: {:.2} MB ({} tiles, {:.1} bytes/tile)",
-             memory_analysis.total_bytes as f32 / (1024.0 * 1024.0),
-             memory_analysis.tile_count,
-             memory_analysis.bytes_per_tile as f32);
+        info!(
+            "  Current Usage: {:.2} MB ({} tiles, {:.1} bytes/tile)",
+            memory_analysis.total_bytes as f32 / (1024.0 * 1024.0),
+            memory_analysis.tile_count,
+            memory_analysis.bytes_per_tile as f32
+        );
 
         info!("  Memory Breakdown:");
-        info!("    Biomass: {:.2} MB", memory_analysis.breakdown.biomass_bytes as f32 / (1024.0 * 1024.0));
-        info!("    Terrain: {:.2} MB", memory_analysis.breakdown.terrain_multiplier_bytes as f32 / (1024.0 * 1024.0));
-        info!("    Tracking: {:.2} MB", memory_analysis.breakdown.last_grazed_bytes as f32 / (1024.0 * 1024.0));
-        info!("    HashMap: {:.2} MB", memory_analysis.breakdown.hashmap_overhead as f32 / (1024.0 * 1024.0));
-        info!("    Active: {:.2} MB", memory_analysis.breakdown.active_tracking_bytes as f32 / (1024.0 * 1024.0));
+        info!(
+            "    Biomass: {:.2} MB",
+            memory_analysis.breakdown.biomass_bytes as f32 / (1024.0 * 1024.0)
+        );
+        info!(
+            "    Terrain: {:.2} MB",
+            memory_analysis.breakdown.terrain_multiplier_bytes as f32 / (1024.0 * 1024.0)
+        );
+        info!(
+            "    Tracking: {:.2} MB",
+            memory_analysis.breakdown.last_grazed_bytes as f32 / (1024.0 * 1024.0)
+        );
+        info!(
+            "    HashMap: {:.2} MB",
+            memory_analysis.breakdown.hashmap_overhead as f32 / (1024.0 * 1024.0)
+        );
+        info!(
+            "    Active: {:.2} MB",
+            memory_analysis.breakdown.active_tracking_bytes as f32 / (1024.0 * 1024.0)
+        );
 
         info!("  Storage Optimization:");
-        info!("    u16 storage savings: {:.1}%", storage_comparison.savings_percent);
-        info!("    Precision loss: {:.2}%", storage_comparison.precision_loss_percent);
-        info!("    Combined optimization: {:.1}%", savings_estimate.combined_savings_percent);
+        info!(
+            "    u16 storage savings: {:.1}%",
+            storage_comparison.savings_percent
+        );
+        info!(
+            "    Precision loss: {:.2}%",
+            storage_comparison.precision_loss_percent
+        );
+        info!(
+            "    Combined optimization: {:.1}%",
+            savings_estimate.combined_savings_percent
+        );
 
         // Memory usage category
         let memory_category = if memory_analysis.total_bytes > HIGH_MEMORY_THRESHOLD {
@@ -1185,15 +1502,18 @@ impl VegetationGrid {
 
         // Warning thresholds
         if memory_analysis.total_bytes > HIGH_MEMORY_THRESHOLD {
-            warn!("⚠️  High memory usage detected: {:.2} MB exceeds {} MB threshold",
-                 memory_analysis.total_bytes as f32 / (1024.0 * 1024.0),
-                 HIGH_MEMORY_THRESHOLD / (1024 * 1024));
+            warn!(
+                "⚠️  High memory usage detected: {:.2} MB exceeds {} MB threshold",
+                memory_analysis.total_bytes as f32 / (1024.0 * 1024.0),
+                HIGH_MEMORY_THRESHOLD / (1024 * 1024)
+            );
         }
 
         if memory_analysis.bytes_per_tile > PER_TILE_OVERHEAD_THRESHOLD {
-            warn!("⚠️  High per-tile overhead: {} bytes exceeds {} byte threshold",
-                 memory_analysis.bytes_per_tile,
-                 PER_TILE_OVERHEAD_THRESHOLD);
+            warn!(
+                "⚠️  High per-tile overhead: {} bytes exceeds {} byte threshold",
+                memory_analysis.bytes_per_tile, PER_TILE_OVERHEAD_THRESHOLD
+            );
         }
 
         // Regional grid recommendation
@@ -1210,45 +1530,53 @@ impl VegetationGrid {
 
     /// Get active tile manager metrics for debugging
     pub fn get_active_tile_metrics(&self) -> &ActiveTileMetrics {
-        &self.active_manager.metrics
+        &self.chunk_queue.metrics
     }
 
     /// Phase 4 memory optimization: Analyze current memory usage
     pub fn analyze_memory_usage(&self) -> crate::vegetation::memory_optimization::MemoryAnalysis {
         crate::vegetation::memory_optimization::MemoryAnalysis::analyze_current(
             self.tiles.len(),
-            self.active_manager.metrics.active_count,
+            self.chunk_queue.metrics.active_count,
             &self.performance_metrics,
         )
     }
 
     /// Phase 4 memory optimization: Compare f32 vs u16 storage
-    pub fn compare_storage_options(&self) -> crate::vegetation::memory_optimization::StorageComparison {
+    pub fn compare_storage_options(
+        &self,
+    ) -> crate::vegetation::memory_optimization::StorageComparison {
         crate::vegetation::memory_optimization::StorageComparison::compare_storage(
             self.tiles.len(),
-            self.active_manager.metrics.active_count,
+            self.chunk_queue.metrics.active_count,
             &self.performance_metrics,
         )
     }
 
     /// Phase 4 memory optimization: Generate memory optimization recommendations
-    pub fn get_memory_recommendations(&self) -> (crate::vegetation::memory_optimization::StorageComparison, Vec<String>) {
+    pub fn get_memory_recommendations(
+        &self,
+    ) -> (
+        crate::vegetation::memory_optimization::StorageComparison,
+        Vec<String>,
+    ) {
         crate::vegetation::memory_optimization::MemoryOptimizer::analyze_and_optimize(
             self.tiles.len(),
-            self.active_manager.metrics.active_count,
+            self.chunk_queue.metrics.active_count,
             &self.performance_metrics,
         )
     }
 
     /// Phase 4 memory optimization: Estimate potential memory savings
-    pub fn estimate_memory_savings(&self) -> crate::vegetation::memory_optimization::MemorySavingsEstimate {
+    pub fn estimate_memory_savings(
+        &self,
+    ) -> crate::vegetation::memory_optimization::MemorySavingsEstimate {
         crate::vegetation::memory_optimization::MemoryOptimizer::estimate_savings(self.tiles.len())
     }
 
     /// Get statistics for debugging and monitoring
     pub fn get_statistics(&self) -> VegetationStatistics {
         let mut total_biomass = 0.0;
-        let mut active_count = 0;
         let mut depleted_count = 0;
 
         for vegetation in self.tiles.values() {
@@ -1261,7 +1589,7 @@ impl VegetationGrid {
             }
         }
 
-        active_count = self.active_manager.recently_grazed.len() + self.active_manager.regrowing_tiles.len();
+        let active_count = self.metrics_dashboard.active_tiles_count;
 
         VegetationStatistics {
             total_tiles: self.tiles.len(),
@@ -1279,7 +1607,8 @@ impl VegetationGrid {
 
     /// Get total biomass across all tiles
     pub fn get_total_biomass(&self) -> f64 {
-        self.tiles.values()
+        self.tiles
+            .values()
             .filter(|v| v.terrain_multiplier > 0.0)
             .map(|v| v.biomass as f64)
             .sum()
@@ -1287,7 +1616,7 @@ impl VegetationGrid {
 
     /// Get count of active tiles
     pub fn get_active_tiles_count(&self) -> usize {
-        self.active_manager.recently_grazed.len() + self.active_manager.regrowing_tiles.len()
+        self.metrics_dashboard.active_tiles_count
     }
 
     /// Get peak biomass (from metrics dashboard)
@@ -1298,6 +1627,65 @@ impl VegetationGrid {
     /// Get minimum biomass (from metrics dashboard)
     pub fn get_minimum_biomass(&self) -> f64 {
         self.metrics_dashboard.minimum_biomass
+    }
+
+    /// Generate a chunk-level biomass heatmap (percentage 0-100)
+    fn generate_chunk_heatmap(&self) -> Vec<Vec<f32>> {
+        let size = self.world_size_chunks.max(1) as usize;
+        let mut heatmap = vec![vec![100.0_f32; size]; size];
+
+        if self.world_size_chunks <= 0 {
+            return heatmap;
+        }
+
+        let half = self.world_size_chunks / 2;
+        let mut chunk_totals: HashMap<IVec2, (f64, u32)> = HashMap::new();
+
+        for (tile_pos, vegetation) in &self.tiles {
+            let chunk_x = tile_pos.x.div_euclid(self.chunk_size);
+            let chunk_y = tile_pos.y.div_euclid(self.chunk_size);
+
+            if chunk_x < -half || chunk_x > half || chunk_y < -half || chunk_y > half {
+                continue;
+            }
+
+            let max = vegetation.max_biomass();
+            let fraction = if max > 0.0 {
+                (vegetation.biomass / max) as f64
+            } else {
+                0.0
+            };
+
+            let entry = chunk_totals
+                .entry(IVec2::new(chunk_x, chunk_y))
+                .or_insert((0.0, 0));
+            entry.0 += fraction;
+            entry.1 += 1;
+        }
+
+        for i in 0..size {
+            let chunk_x = i as i32 - half;
+            for j in 0..size {
+                let chunk_y = j as i32 - half;
+                let key = IVec2::new(chunk_x, chunk_y);
+
+                let value = if let Some((sum, count)) = chunk_totals.get(&key) {
+                    if *count > 0 {
+                        (sum / (*count as f64) * 100.0).clamp(0.0, 100.0)
+                    } else {
+                        0.0
+                    }
+                } else if self.suitable_chunks.contains(&key) {
+                    100.0
+                } else {
+                    0.0
+                };
+
+                heatmap[i][j] = value as f32;
+            }
+        }
+
+        heatmap
     }
 }
 
@@ -1325,10 +1713,13 @@ pub struct VegetationPlugin;
 impl Plugin for VegetationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<VegetationGrid>()
-            .add_systems(Startup, setup_vegetation_system.run_if(resource_exists::<WorldLoader>))
+            .add_systems(
+                PostStartup,
+                setup_vegetation_system.run_if(resource_exists::<WorldLoader>),
+            )
             .add_systems(
                 FixedUpdate,
-                vegetation_growth_system.run_if(every_n_ticks(GROWTH_INTERVAL_TICKS))
+                vegetation_growth_system.run_if(every_n_ticks(GROWTH_INTERVAL_TICKS)),
             );
     }
 }
@@ -1351,38 +1742,61 @@ fn setup_vegetation_system(
     let world_size_chunks = world_info.config.world_size_chunks;
 
     // Calculate world bounds in tile coordinates (assuming centered at 0,0)
-    let chunk_size = 16; // From CHUNK_SIZE constant
-    let world_radius_tiles = (world_size_chunks / 2) * chunk_size;
+    let chunk_size = CHUNK_SIZE; // Size of chunk in tiles
+    let world_radius_tiles = (world_size_chunks as i32 / 2) * chunk_size as i32;
     let center_tile_x = 0;
     let center_tile_y = 0;
 
-    info!("🗺️  World bounds: center=({},{}) radius={} tiles",
-          center_tile_x, center_tile_y, world_radius_tiles);
+    info!(
+        "🗺️  World bounds: center=({},{}) radius={} tiles",
+        center_tile_x, center_tile_y, world_radius_tiles
+    );
 
-    // Initialize vegetation for all tiles in the world
-    // We'll use lazy loading - only create vegetation as needed
-    // But we need to count suitable tiles for statistics
-    let mut suitable_count = 0;
+    vegetation_grid.world_size_chunks = world_size_chunks as i32;
+    vegetation_grid.chunk_size = chunk_size as i32;
+    vegetation_grid.suitable_chunks.clear();
 
-    // Sample tiles to estimate vegetation distribution
-    let sample_step = 10; // Check every 10th tile for performance
-    for x in (center_tile_x - world_radius_tiles..=center_tile_x + world_radius_tiles).step_by(sample_step) {
-        for y in (center_tile_y - world_radius_tiles..=center_tile_y + world_radius_tiles).step_by(sample_step) {
-            if let Some(terrain_str) = world_loader.get_terrain_at(x, y) {
-                let terrain_multiplier = constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
-                if terrain_multiplier > 0.0 {
-                    suitable_count += 1;
+    let chunk_radius = vegetation_grid.world_size_chunks / 2;
+    let mut suitable_tiles_total = 0_usize;
+
+    for chunk_x in -chunk_radius..=chunk_radius {
+        for chunk_y in -chunk_radius..=chunk_radius {
+            let mut chunk_has_vegetation = false;
+
+            for local_x in 0..chunk_size {
+                for local_y in 0..chunk_size {
+                    let world_x = chunk_x * chunk_size as i32 + local_x as i32;
+                    let world_y = chunk_y * chunk_size as i32 + local_y as i32;
+
+                    if let Some(terrain_str) = world_loader.get_terrain_at(world_x, world_y) {
+                        let terrain_multiplier =
+                            constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
+                        if terrain_multiplier > 0.0 {
+                            chunk_has_vegetation = true;
+                            suitable_tiles_total += 1;
+
+                            let tile = IVec2::new(world_x, world_y);
+                            vegetation_grid.get_or_create(tile, terrain_multiplier);
+                        }
+                    }
                 }
+            }
+
+            if chunk_has_vegetation {
+                let chunk_id = IVec2::new(chunk_x, chunk_y);
+                vegetation_grid.suitable_chunks.insert(chunk_id);
+                vegetation_grid.ensure_chunk_state(chunk_id);
+                vegetation_grid.schedule_chunk(chunk_id);
             }
         }
     }
 
-    // Estimate total suitable tiles
-    let estimated_suitable = suitable_count * sample_step * sample_step;
-    info!("🌿 Estimated suitable tiles: {}", estimated_suitable);
+    vegetation_grid.total_suitable_tiles = suitable_tiles_total;
+    vegetation_grid.metrics_dashboard.total_suitable_tiles = suitable_tiles_total;
 
-    // Update vegetation grid statistics
-    vegetation_grid.total_suitable_tiles = estimated_suitable;
+    init_heatmap_storage(vegetation_grid.world_size_chunks, chunk_size);
+    update_heatmap_snapshot(&vegetation_grid, 0);
+    vegetation_grid.heatmap_dirty = false;
 
     info!("✅ Vegetation system initialized successfully");
 }
@@ -1392,8 +1806,21 @@ fn setup_vegetation_system(
 fn vegetation_growth_system(
     mut vegetation_grid: ResMut<VegetationGrid>,
     tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
+    use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
+
+    start_timing_resource(&mut profiler, "vegetation");
     vegetation_grid.update(tick.0);
+
+    // Update global snapshot for web overlay after growth applies
+    if vegetation_grid.heatmap_dirty
+        && tick.0 % constants::performance::HEATMAP_UPDATE_INTERVAL_TICKS == 0
+    {
+        update_heatmap_snapshot(&vegetation_grid, tick.0);
+        vegetation_grid.heatmap_dirty = false;
+    }
 
     // Update Phase 5 metrics dashboard - extract data before update to avoid double borrow
     let total_tiles = vegetation_grid.tiles.len();
@@ -1401,7 +1828,9 @@ fn vegetation_growth_system(
     let total_biomass = vegetation_grid.get_total_biomass();
     let peak_biomass = vegetation_grid.get_peak_biomass();
     let minimum_biomass = vegetation_grid.get_minimum_biomass();
-    let consumed = vegetation_grid.metrics_dashboard.get_total_biomass_consumed();
+    let consumed = vegetation_grid
+        .metrics_dashboard
+        .get_total_biomass_consumed();
     let grown = vegetation_grid.metrics_dashboard.get_total_biomass_grown();
 
     vegetation_grid.metrics_dashboard.update_directly(
@@ -1417,63 +1846,99 @@ fn vegetation_growth_system(
     vegetation_grid.metrics_dashboard.take_snapshot(tick.0);
 
     // Log Phase 5 metrics periodically (every 30 seconds)
-    if tick.0 % 300 == 0 { // Every 30 seconds at 10 TPS
+    if tick.0 % 300 == 0 {
+        // Every 30 seconds at 10 TPS
         let metrics = &vegetation_grid.metrics_dashboard;
         let trend = metrics.get_trend();
 
-        info!("📊 {} (Trend: {:?})",
-              metrics.format_metrics(),
-              trend);
+        info!("📊 {} (Trend: {:?})", metrics.format_metrics(), trend);
     }
 
     // Log legacy statistics periodically (every 2 minutes)
-    if tick.0 % 1200 == 0 { // Every 120 seconds at 10 TPS
+    if tick.0 % 1200 == 0 {
+        // Every 120 seconds at 10 TPS
         let stats = vegetation_grid.get_statistics();
-        info!("🌱 Legacy Stats - Tiles: {}, Active: {}, Depleted: {}, Avg Biomass: {:.1}%",
-              stats.suitable_tiles,
-              stats.active_tiles,
-              stats.depleted_tiles,
-              stats.average_biomass / constants::growth::MAX_BIOMASS * 100.0);
+        info!(
+            "🌱 Legacy Stats - Tiles: {}, Active: {}, Depleted: {}, Avg Biomass: {:.1}%",
+            stats.suitable_tiles,
+            stats.active_tiles,
+            stats.depleted_tiles,
+            stats.average_biomass / constants::growth::MAX_BIOMASS * 100.0
+        );
     }
+
+    end_timing_resource(&mut profiler, "vegetation");
 }
 
 // Web API functions for viewer overlay
 
+fn init_heatmap_storage(world_size_chunks: i32, tile_size: usize) {
+    let snapshot = VegetationHeatmapSnapshot {
+        heatmap: vec![
+            vec![100.0; world_size_chunks.max(1) as usize];
+            world_size_chunks.max(1) as usize
+        ],
+        max_biomass: MAX_BIOMASS,
+        tile_size,
+        updated_tick: 0,
+        world_size_chunks,
+    };
+
+    unsafe {
+        VEGETATION_HEATMAP = Some(Arc::new(RwLock::new(snapshot)));
+    }
+}
+
+fn update_heatmap_snapshot(grid: &VegetationGrid, tick: u64) {
+    let snapshot_arc = unsafe { VEGETATION_HEATMAP.as_ref().cloned() };
+    if let Some(arc) = snapshot_arc {
+        if let Ok(mut snapshot) = arc.write() {
+            if grid.world_size_chunks > 0 {
+                snapshot.heatmap = grid.generate_chunk_heatmap();
+                snapshot.world_size_chunks = grid.world_size_chunks;
+            }
+            snapshot.max_biomass = MAX_BIOMASS;
+            snapshot.tile_size = grid.chunk_size as usize;
+            snapshot.updated_tick = tick;
+        }
+    }
+}
+
 /// Get biomass heatmap data as JSON for web viewer
 pub fn get_biomass_heatmap_json() -> String {
-    // This is a placeholder - in a real implementation, this would
-    // access the actual VegetationGrid resource
-    // For now, return sample data to demonstrate the API
+    let snapshot_arc = unsafe { VEGETATION_HEATMAP.as_ref().cloned() };
 
-    let sample_data = vec![
-        vec![80.0, 65.0, 90.0, 45.0, 20.0],
-        vec![75.0, 85.0, 30.0, 15.0, 95.0],
-        vec![60.0, 40.0, 70.0, 88.0, 25.0],
-        vec![35.0, 50.0, 20.0, 65.0, 80.0],
-        vec![90.0, 75.0, 55.0, 30.0, 45.0],
-    ];
+    if let Some(arc) = snapshot_arc {
+        if let Ok(snapshot) = arc.read() {
+            let grid_w = snapshot.heatmap.len();
+            let grid_h = snapshot.heatmap.first().map(|row| row.len()).unwrap_or(0);
 
-    let heatmap_data: Vec<Vec<f32>> = sample_data
-        .iter()
-        .enumerate()
-        .map(|(y, row)| {
-            row.iter()
-                .enumerate()
-                .map(|(x, biomass)| {
-                    // Apply terrain-specific scaling
-                    let terrain_multiplier = 1.0; // Default grass multiplier
-                    let scaled_biomass = (biomass / MAX_BIOMASS * 100.0 * terrain_multiplier).min(100.0);
-                    scaled_biomass
-                })
-                .collect()
-        })
-        .collect();
+            let payload = serde_json::json!({
+                "heatmap": snapshot.heatmap,
+                "max_biomass": snapshot.max_biomass,
+                "tile_size": snapshot.tile_size,
+                "metadata": {
+                    "updated_tick": snapshot.updated_tick,
+                    "grid_size": format!("{}x{}", grid_w, grid_h),
+                    "scale": "percentage"
+                }
+            });
 
-    format!(
-        r#"{{"heatmap": {}, "max_biomass": {}, "tile_size": 16, "metadata": {{"updated_tick": 0, "grid_size": "5x5", "scale": "normalized"}}"#,
-        serde_json::to_string(&heatmap_data).unwrap_or_else(|_| "[]".to_string()),
-        MAX_BIOMASS
-    )
+            return payload.to_string();
+        }
+    }
+
+    json!({
+        "heatmap": Vec::<Vec<f32>>::new(),
+        "max_biomass": MAX_BIOMASS,
+        "tile_size": CHUNK_SIZE,
+        "metadata": {
+            "updated_tick": 0,
+            "grid_size": "0x0",
+            "scale": "percentage"
+        }
+    })
+    .to_string()
 }
 
 /// Get vegetation system performance metrics as JSON
@@ -1511,8 +1976,10 @@ pub fn get_memory_analysis_json() -> String {
     let active_tiles = 300;
     let performance_metrics = &PerformanceMetrics::default();
 
-    let comparison = StorageComparison::compare_storage(tile_count, active_tiles, performance_metrics);
-    let recommendations = MemoryOptimizer::analyze_and_optimize(tile_count, active_tiles, performance_metrics).1;
+    let comparison =
+        StorageComparison::compare_storage(tile_count, active_tiles, performance_metrics);
+    let recommendations =
+        MemoryOptimizer::analyze_and_optimize(tile_count, active_tiles, performance_metrics).1;
 
     let current_total = comparison.f32_usage.total_bytes;
     let current_per_tile = comparison.f32_usage.bytes_per_tile;
@@ -1524,7 +1991,13 @@ pub fn get_memory_analysis_json() -> String {
 
     format!(
         r#"{{"current_usage": {{"total_bytes": {}, "bytes_per_tile": {}}}, "optimized_usage": {{"total_bytes": {}, "bytes_per_tile": {}}}, "savings_percent": {:.1}, "precision_loss_percent": {:.1}, "recommendations": {}}}"#,
-        current_total, current_per_tile, optimized_total, optimized_per_tile, savings, precision_loss, recs_json
+        current_total,
+        current_per_tile,
+        optimized_total,
+        optimized_per_tile,
+        savings,
+        precision_loss,
+        recs_json
     )
 }
 
@@ -1658,14 +2131,19 @@ pub fn get_current_performance_rating_json() -> String {
     // This would normally access actual performance metrics from the running system
     // For now, return simulated current performance data
 
-    let avg_growth_time_us = 875.0;  // Current average
-    let cpu_budget_us = 1000.0;       // 1ms budget
+    let avg_growth_time_us = 875.0; // Current average
+    let cpu_budget_us = 1000.0; // 1ms budget
     let compliance_percent = ((cpu_budget_us / avg_growth_time_us) * 100.0f32).min(100.0f32);
 
-    let rating = if compliance_percent >= 95.0 { "excellent" }
-                 else if compliance_percent >= 85.0 { "good" }
-                 else if compliance_percent >= 70.0 { "fair" }
-                 else { "poor" };
+    let rating = if compliance_percent >= 95.0 {
+        "excellent"
+    } else if compliance_percent >= 85.0 {
+        "good"
+    } else if compliance_percent >= 70.0 {
+        "fair"
+    } else {
+        "poor"
+    };
 
     format!(
         r#"{{"current_performance": {{"avg_growth_time_us": {:.1}, "cpu_budget_us": {}, "compliance_percent": {:.1}, "rating": "{}", "status": "{}"}}}}"#,
@@ -1673,7 +2151,11 @@ pub fn get_current_performance_rating_json() -> String {
         cpu_budget_us,
         compliance_percent,
         rating,
-        if compliance_percent >= 85.0 { "within_budget" } else { "over_budget" }
+        if compliance_percent >= 85.0 {
+            "within_budget"
+        } else {
+            "over_budget"
+        }
     )
 }
 
@@ -1688,12 +2170,12 @@ pub fn get_benchmark_history_json() -> String {
         {"timestamp": "2025-10-05T02:04:00Z", "avg_growth_time_us": 800.0, "budget_compliance": 99.0, "rating": "excellent"}
     ]"#;
 
-    let trend_analysis = r#"{"trend": "improving", "avg_change_percent": -2.5, "stability": "stable"}"#;
+    let trend_analysis =
+        r#"{"trend": "improving", "avg_change_percent": -2.5, "stability": "stable"}"#;
 
     format!(
         r#"{{"history": {}, "trend_analysis": {}, "summary": "Performance is improving with 5% average reduction in growth time over the last 5 measurements"}}"#,
-        history,
-        trend_analysis
+        history, trend_analysis
     )
 }
 
@@ -1789,14 +2271,14 @@ mod tests {
 
         // First call creates the tile
         let vegetation = grid.get_or_create(tile, 1.0);
-        assert_eq!(vegetation.biomass, 100.0); // Starts at MAX_BIOMASS * terrain_multiplier
+        assert_eq!(vegetation.biomass, constants::growth::INITIAL_BIOMASS);
 
         // Drop the first borrow
         drop(vegetation);
 
         // Second call returns existing tile
         let vegetation2 = grid.get_or_create(tile, 1.0);
-        assert_eq!(vegetation2.biomass, 100.0);
+        assert_eq!(vegetation2.biomass, constants::growth::INITIAL_BIOMASS);
     }
 
     #[test]
@@ -1810,7 +2292,11 @@ mod tests {
     fn test_vegetation_grid_consume() {
         let mut grid = VegetationGrid::new();
         let tile = IVec2::new(5, 10);
-        grid.get_or_create(tile, 1.0); // Create tile with 100.0 biomass
+        grid.get_or_create(tile, 1.0);
+        if let Some(vegetation) = grid.get_mut(tile) {
+            let max = vegetation.max_biomass();
+            vegetation.biomass = max;
+        }
 
         // Test consumption within limits
         let (consumed, _remaining) = grid.consume(tile, 20.0, 0.3); // 30% of 100.0 = 30.0 max
@@ -1833,9 +2319,23 @@ mod tests {
         let mut grid = VegetationGrid::new();
 
         // Create some test tiles
-        grid.get_or_create(IVec2::new(0, 0), 1.0); // 100.0 biomass
-        grid.get_or_create(IVec2::new(1, 0), 0.5); // 50.0 biomass
-        grid.get_or_create(IVec2::new(0, 1), 0.8); // 80.0 biomass
+        grid.get_or_create(IVec2::new(0, 0), 1.0);
+        if let Some(veg) = grid.get_mut(IVec2::new(0, 0)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
+
+        grid.get_or_create(IVec2::new(1, 0), 0.5);
+        if let Some(veg) = grid.get_mut(IVec2::new(1, 0)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
+
+        grid.get_or_create(IVec2::new(0, 1), 0.8);
+        if let Some(veg) = grid.get_mut(IVec2::new(0, 1)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
 
         let (avg_biomass, count) = grid.sample_biomass(IVec2::new(0, 0), 2);
         assert_eq!(count, 3);
@@ -1847,9 +2347,23 @@ mod tests {
         let mut grid = VegetationGrid::new();
 
         // Create tiles with different biomass levels
-        grid.get_or_create(IVec2::new(0, 0), 1.0); // 100.0 biomass
-        grid.get_or_create(IVec2::new(5, 0), 0.3); // 30.0 biomass
-        grid.get_or_create(IVec2::new(2, 2), 0.9); // 90.0 biomass
+        grid.get_or_create(IVec2::new(0, 0), 1.0);
+        if let Some(veg) = grid.get_mut(IVec2::new(0, 0)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
+
+        grid.get_or_create(IVec2::new(5, 0), 0.3);
+        if let Some(veg) = grid.get_mut(IVec2::new(5, 0)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
+
+        grid.get_or_create(IVec2::new(2, 2), 0.9);
+        if let Some(veg) = grid.get_mut(IVec2::new(2, 2)) {
+            let max = veg.max_biomass();
+            veg.biomass = max;
+        }
 
         let best = grid.find_best_forage_tile(IVec2::new(0, 0), 10);
         assert!(best.is_some());
@@ -1894,13 +2408,23 @@ mod tests {
 
         // Verify we reached the target
         let final_vegetation = grid.get(tile).unwrap();
-        assert!(final_vegetation.biomass >= target_biomass * 0.95, // Within 5% of target
-               "Expected biomass to reach at least 95% of 80.0 Bmax, got {}", final_vegetation.biomass);
-        assert!(tick < 200, "Should reach 80% Bmax within 200 ticks, took {}", tick);
+        assert!(
+            final_vegetation.biomass >= target_biomass * 0.95, // Within 5% of target
+            "Expected biomass to reach at least 95% of 80.0 Bmax, got {}",
+            final_vegetation.biomass
+        );
+        assert!(
+            tick < 200,
+            "Should reach 80% Bmax within 200 ticks, took {}",
+            tick
+        );
 
         // Verify the final biomass is reasonable (should be close to 80.0)
-        assert!((final_vegetation.biomass - 80.0).abs() < 5.0_f32,
-               "Final biomass should be close to 80.0, got {}", final_vegetation.biomass);
+        assert!(
+            (final_vegetation.biomass - 80.0).abs() < 5.0_f32,
+            "Final biomass should be close to 80.0, got {}",
+            final_vegetation.biomass
+        );
     }
 
     #[test]
@@ -2002,5 +2526,24 @@ mod tests {
         let empty_pos = IVec2::new(10, 10);
         let (consumed_empty, _) = grid.consume(empty_pos, 20.0, max_fraction);
         assert_eq!(consumed_empty, 0.0); // Should consume nothing
+    }
+
+    #[test]
+    fn test_heatmap_snapshot_generation() {
+        let mut grid = VegetationGrid::new();
+        grid.world_size_chunks = 3;
+        grid.chunk_size = CHUNK_SIZE as i32;
+        grid.suitable_chunks.insert(IVec2::new(0, 0));
+        grid.tiles
+            .insert(IVec2::new(0, 0), TileVegetation::new(MAX_BIOMASS, 1.0));
+
+        init_heatmap_storage(grid.world_size_chunks, CHUNK_SIZE);
+        update_heatmap_snapshot(&grid, 42);
+
+        let json = get_biomass_heatmap_json();
+        let payload: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(payload["metadata"]["updated_tick"].as_u64(), Some(42));
+        assert_eq!(payload["heatmap"].as_array().unwrap().len(), 3);
     }
 }
