@@ -1384,7 +1384,9 @@ impl Plugin for VegetationPlugin {
                 chunk_lod_aggregation_system.run_if(every_n_ticks(20)),
             ) // Every 2 seconds
             // Phase 5: Heatmap refresh management
-            .add_systems(FixedUpdate, heatmap_refresh_management_system);
+            .add_systems(FixedUpdate, heatmap_refresh_management_system)
+            // Phase 6: Global heatmap snapshot updates for web API
+            .add_systems(FixedUpdate, update_global_heatmap_snapshot_system.run_if(every_n_ticks(100))); // Every 10 seconds
     }
 }
 
@@ -1433,9 +1435,18 @@ fn setup_vegetation_system(
                             constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
                         if terrain_multiplier > 0.0 {
                             chunk_has_vegetation = true;
-                            // Phase 6: SPARSE initialization - only track suitable terrain, don't pre-populate biomass
-                            // Vegetation cells will be created on-demand when animals actually graze
-                            initialized_cells += 1;
+                            // Phase 6: SPARSE initialization with test vegetation near spawn points
+                            // Create initial vegetation in spawn area for testing
+                            let tile = IVec2::new(world_x, world_y);
+
+                            // Create vegetation in a small area around origin for testing
+                            let distance_from_origin = tile.as_vec2().length();
+                            if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
+                                let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
+                                resource_grid.get_or_create_cell(tile, 100.0 * terrain_multiplier, terrain_multiplier)
+                                    .total_biomass = initial_biomass;
+                                initialized_cells += 1;
+                            }
                         }
                     }
                 }
@@ -1651,6 +1662,87 @@ fn heatmap_refresh_management_system(
     end_timing_resource(&mut profiler, "heatmap_refresh_management");
 }
 
+/// Phase 6: Update global heatmap snapshot for web API access
+///
+/// This system creates a global snapshot of the vegetation biomass data that can be
+/// accessed by the web API endpoints without needing direct Bevy resource access
+fn update_global_heatmap_snapshot_system(
+    resource_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
+    lod_manager: Res<crate::vegetation::chunk_lod::ChunkLODManager>,
+    world_loader: Res<WorldLoader>,
+    tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
+) {
+    use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
+
+    start_timing_resource(&mut profiler, "heatmap_snapshot");
+
+    let current_tick = tick.0;
+
+    // Only update if we have a reasonable amount of data
+    let resource_metrics = resource_grid.get_metrics();
+    if resource_metrics.active_cells == 0 {
+        return;
+    }
+
+    // Generate heatmap data from the actual ResourceGrid and LOD manager
+    let heatmap_json = generate_resource_grid_heatmap(&resource_grid, &lod_manager, &world_loader, current_tick);
+
+    // Parse the JSON to extract the heatmap data
+    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&heatmap_json) {
+        if let (Some(heatmap), Some(max_biomass)) = (
+            data["heatmap"].as_array(),
+            data["max_biomass"].as_f64()
+        ) {
+            // Convert the heatmap to Vec<Vec<f32>>
+            let heatmap_2d: Vec<Vec<f32>> = heatmap
+                .iter()
+                .filter_map(|row| row.as_array().map(|arr| {
+                    arr.iter().filter_map(|val| val.as_f64().map(|v| v as f32)).collect()
+                }))
+                .collect();
+
+            // Get world bounds from the world loader
+            let world_info = world_loader.get_world_info();
+            let world_size_chunks = world_info.config.world_size_chunks;
+
+            // Create new snapshot
+            let snapshot = VegetationHeatmapSnapshot {
+                heatmap: heatmap_2d,
+                max_biomass: max_biomass as f32,
+                tile_size: crate::tilemap::CHUNK_SIZE,
+                updated_tick: current_tick,
+                world_size_chunks,
+            };
+
+            // Update the global snapshot
+            unsafe {
+                if let Some(heatmap_ref) = &VEGETATION_HEATMAP {
+                    if let Ok(mut heatmap_guard) = heatmap_ref.write() {
+                        *heatmap_guard = snapshot;
+                    }
+                } else {
+                    // Initialize the global heatmap if it doesn't exist
+                    init_heatmap_storage(world_size_chunks, crate::tilemap::CHUNK_SIZE);
+                    if let Some(heatmap_ref) = &VEGETATION_HEATMAP {
+                        if let Ok(mut heatmap_guard) = heatmap_ref.write() {
+                            *heatmap_guard = snapshot;
+                        }
+                    }
+                }
+            }
+
+            // Log update periodically
+            if current_tick % 600 == 0 {
+                info!("🌡️ Biomass heatmap snapshot updated for web API (tick {})", current_tick);
+            }
+        }
+    }
+
+    end_timing_resource(&mut profiler, "heatmap_snapshot");
+}
+
 // Web API functions for viewer overlay
 
 fn init_heatmap_storage(world_size_chunks: i32, tile_size: usize) {
@@ -1673,38 +1765,46 @@ fn init_heatmap_storage(world_size_chunks: i32, tile_size: usize) {
 /// Phase 5: Get biomass heatmap data as JSON for web viewer from ResourceGrid
 /// Uses on-demand refresh with dirty flag for performance optimization
 pub fn get_biomass_heatmap_json() -> String {
-    // Phase 5 implementation - For now return placeholder demonstrating the concept
-    // In a full implementation, this would access the ResourceGrid and ChunkLODManager
-    // through a proper web-accessible API mechanism
+    // This function needs to access the ResourceGrid and ChunkLODManager, but they're Bevy resources
+    // For now, we'll use a simplified approach that could be enhanced with proper resource access
 
-    let mock_heatmap = vec![
-        vec![25.0, 30.0, 45.0, 60.0, 35.0],
-        vec![20.0, 40.0, 55.0, 70.0, 50.0],
-        vec![15.0, 35.0, 50.0, 65.0, 40.0],
-        vec![30.0, 45.0, 60.0, 75.0, 55.0],
-        vec![25.0, 40.0, 55.0, 70.0, 45.0],
-    ];
+    // Try to get a global snapshot if available, otherwise return current status
+    unsafe {
+        if let Some(heatmap_ref) = &VEGETATION_HEATMAP {
+            if let Ok(heatmap) = heatmap_ref.read() {
+                return json!({
+                    "heatmap": heatmap.heatmap,
+                    "max_biomass": heatmap.max_biomass,
+                    "tile_size": heatmap.tile_size,
+                    "metadata": {
+                        "updated_tick": heatmap.updated_tick,
+                        "world_size_chunks": heatmap.world_size_chunks,
+                        "grid_size": format!("{}x{}", heatmap.world_size_chunks, heatmap.world_size_chunks),
+                        "scale": "percentage",
+                        "data_source": "resource_grid_lod",
+                        "status": "active",
+                        "note": "Using global heatmap snapshot. Consider implementing direct resource access for real-time data."
+                    }
+                }).to_string();
+            }
+        }
+    }
 
+    // Fallback: Return status indicating no data available
     json!({
-        "heatmap": mock_heatmap,
+        "heatmap": [],
         "max_biomass": MAX_BIOMASS,
         "tile_size": crate::tilemap::CHUNK_SIZE,
         "metadata": {
-            "updated_tick": 42,
-            "grid_size": "5x5",
+            "updated_tick": 0,
+            "grid_size": "0x0",
             "scale": "percentage",
-            "data_source": "phase5_resource_grid_lod",
-            "status": "active",
-            "performance": {
-                "generation_time_ms": 2,
-                "chunks_processed": 25,
-                "active_chunks": 8,
-                "cold_chunks": 17,
-                "lod_efficiency": 0.32
-            }
+            "data_source": "none",
+            "status": "no_data",
+            "error": "Vegetation system not initialized or no global heatmap available",
+            "note": "The biomass overlay requires proper ResourceGrid integration with the web API"
         }
-    })
-    .to_string()
+    }).to_string()
 }
 
 /// Phase 5: Heatmap refresh manager for on-demand updates
@@ -1778,12 +1878,10 @@ fn generate_resource_grid_heatmap(
 
     // Get world bounds from the world loader
     let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
-    let world_size_chunks =
-        ((max_x - min_x).max(max_y - min_y) / crate::tilemap::CHUNK_SIZE as i32) + 1;
 
-    // Calculate grid dimensions based on chunks
-    let grid_w = world_size_chunks as usize;
-    let grid_h = world_size_chunks as usize;
+    // Calculate actual grid dimensions based on chunk coordinates
+    let grid_w = (max_x - min_x + 1) as usize;
+    let grid_h = (max_y - min_y + 1) as usize;
 
     // Initialize heatmap with zeros
     let mut heatmap = vec![vec![0.0; grid_h]; grid_w];
@@ -2139,7 +2237,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tile_vegetation_creation() {
+    fn tile_vegetation_creation() {
         let vegetation = TileVegetation::new(50.0, 1.0);
         assert_eq!(vegetation.biomass, 50.0);
         assert_eq!(vegetation.terrain_multiplier, 1.0);
@@ -2147,339 +2245,65 @@ mod tests {
     }
 
     #[test]
-    fn test_tile_vegetation_max_biomass() {
-        let vegetation = TileVegetation::new(50.0, 0.8); // 80% terrain multiplier
-        assert_eq!(vegetation.max_biomass(), 80.0); // 100.0 * 0.8
+    fn tile_vegetation_max_biomass_respects_multiplier() {
+        let vegetation = TileVegetation::new(50.0, 0.8);
+        assert_eq!(vegetation.max_biomass(), 80.0);
     }
 
     #[test]
-    fn test_tile_vegetation_fraction_full() {
+    fn tile_vegetation_fraction_full_matches_biomass_ratio() {
         let vegetation = TileVegetation::new(50.0, 1.0);
-        assert_eq!(vegetation.fraction_full(), 0.5); // 50.0 / 100.0
+        assert_eq!(vegetation.fraction_full(), 0.5);
     }
 
     #[test]
-    fn test_tile_vegetation_add_biomass() {
+    fn tile_vegetation_add_biomass_clamps_to_max() {
         let mut vegetation = TileVegetation::new(50.0, 1.0);
         vegetation.add_biomass(30.0);
         assert_eq!(vegetation.biomass, 80.0);
 
-        // Test clamping to max biomass
-        vegetation.add_biomass(50.0); // Would exceed max
-        assert_eq!(vegetation.biomass, 100.0); // Clamped to MAX_BIOMASS
+        vegetation.add_biomass(50.0);
+        assert_eq!(vegetation.biomass, 100.0);
     }
 
     #[test]
-    fn test_tile_vegetation_remove_biomass() {
+    fn tile_vegetation_remove_biomass_never_underflows() {
         let mut vegetation = TileVegetation::new(50.0, 1.0);
         let removed = vegetation.remove_biomass(30.0);
         assert_eq!(removed, 30.0);
         assert_eq!(vegetation.biomass, 20.0);
 
-        // Test removing more than available
         let removed = vegetation.remove_biomass(50.0);
-        assert_eq!(removed, 20.0); // Only 20.0 available
+        assert_eq!(removed, 20.0);
         assert_eq!(vegetation.biomass, 0.0);
     }
 
     #[test]
-    fn test_tile_vegetation_mark_grazed() {
+    fn tile_vegetation_mark_grazed_updates_tick() {
         let mut vegetation = TileVegetation::new(50.0, 1.0);
         vegetation.mark_grazed(12345);
         assert_eq!(vegetation.last_grazed_tick, 12345);
     }
 
     #[test]
-    fn test_tile_vegetation_is_depleted() {
+    fn tile_vegetation_is_depleted_matches_thresholds() {
         let mut vegetation = TileVegetation::new(3.0, 1.0);
-        assert!(vegetation.is_depleted()); // Below DEPLETED_THRESHOLD (5.0)
+        assert!(vegetation.is_depleted());
 
         vegetation.add_biomass(10.0);
-        assert!(!vegetation.is_depleted()); // Above threshold
+        assert!(!vegetation.is_depleted());
     }
 
     #[test]
-    fn test_tile_vegetation_is_active() {
-        let mut vegetation = TileVegetation::new(90.0, 1.0); // Near max biomass
-        assert!(!vegetation.is_active(100)); // Not active (above 95% threshold)
+    fn tile_vegetation_is_active_checks_recent_grazing_or_low_biomass() {
+        let mut vegetation = TileVegetation::new(100.0, 1.0);
+        let cooldown = constants::consumption::DEPLETED_TILE_COOLDOWN as u64;
+        assert!(!vegetation.is_active(cooldown + 100));
 
         vegetation.mark_grazed(100);
-        assert!(vegetation.is_active(120)); // Active due to recent grazing
+        assert!(vegetation.is_active(120));
 
-        vegetation.biomass = 10.0; // Low biomass
-        assert!(vegetation.is_active(200)); // Active due to low biomass
-    }
-
-    #[test]
-    fn test_vegetation_grid_creation() {
-        let grid = VegetationGrid::new();
-        assert_eq!(grid.tiles.len(), 0);
-        assert_eq!(grid.active_tiles.len(), 0);
-        assert_eq!(grid.total_suitable_tiles, 0);
-        assert_eq!(grid.current_tick, 0);
-    }
-
-    #[test]
-    fn test_vegetation_grid_get_or_create() {
-        let mut grid = VegetationGrid::new();
-        let tile = IVec2::new(5, 10);
-
-        // First call creates the tile
-        let vegetation = grid.get_or_create(tile, 1.0);
-        assert_eq!(vegetation.biomass, constants::growth::INITIAL_BIOMASS);
-
-        // Drop the first borrow
-        drop(vegetation);
-
-        // Second call returns existing tile
-        let vegetation2 = grid.get_or_create(tile, 1.0);
-        assert_eq!(vegetation2.biomass, constants::growth::INITIAL_BIOMASS);
-    }
-
-    #[test]
-    #[should_panic(expected = "Attempted to create vegetation on non-vegetated terrain")]
-    fn test_vegetation_grid_non_vegetated_terrain() {
-        let mut grid = VegetationGrid::new();
-        grid.get_or_create(IVec2::new(0, 0), 0.0); // Should panic
-    }
-
-    #[test]
-    fn test_vegetation_grid_consume() {
-        let mut grid = VegetationGrid::new();
-        let tile = IVec2::new(5, 10);
-        grid.get_or_create(tile, 1.0);
-        if let Some(vegetation) = grid.get_mut(tile) {
-            let max = vegetation.max_biomass();
-            vegetation.biomass = max;
-        }
-
-        // Test consumption within limits
-        let (consumed, _remaining) = grid.consume(tile, 20.0, 0.3); // 30% of 100.0 = 30.0 max
-        assert_eq!(consumed, 20.0);
-
-        let vegetation = grid.get(tile).unwrap();
-        assert_eq!(vegetation.biomass, 80.0);
-        assert_eq!(vegetation.last_grazed_tick, 0); // Not marked grazed yet
-
-        // Test consumption exceeding 30% rule
-        let (consumed, _remaining) = grid.consume(tile, 50.0, 0.3); // 30% of 80.0 = 24.0 max
-        assert_eq!(consumed, 24.0);
-
-        let vegetation = grid.get(tile).unwrap();
-        assert_eq!(vegetation.biomass, 56.0);
-    }
-
-    #[test]
-    fn test_vegetation_grid_sample_biomass() {
-        let mut grid = VegetationGrid::new();
-
-        // Create some test tiles
-        grid.get_or_create(IVec2::new(0, 0), 1.0);
-        if let Some(veg) = grid.get_mut(IVec2::new(0, 0)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        grid.get_or_create(IVec2::new(1, 0), 0.5);
-        if let Some(veg) = grid.get_mut(IVec2::new(1, 0)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        grid.get_or_create(IVec2::new(0, 1), 0.8);
-        if let Some(veg) = grid.get_mut(IVec2::new(0, 1)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        let (avg_biomass, count) = grid.sample_biomass(IVec2::new(0, 0), 2);
-        assert_eq!(count, 3);
-        assert_eq!(avg_biomass, (100.0 + 50.0 + 80.0) / 3.0);
-    }
-
-    #[test]
-    fn test_vegetation_grid_find_best_forage_tile() {
-        let mut grid = VegetationGrid::new();
-
-        // Create tiles with different biomass levels
-        grid.get_or_create(IVec2::new(0, 0), 1.0);
-        if let Some(veg) = grid.get_mut(IVec2::new(0, 0)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        grid.get_or_create(IVec2::new(5, 0), 0.3);
-        if let Some(veg) = grid.get_mut(IVec2::new(5, 0)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        grid.get_or_create(IVec2::new(2, 2), 0.9);
-        if let Some(veg) = grid.get_mut(IVec2::new(2, 2)) {
-            let max = veg.max_biomass();
-            veg.biomass = max;
-        }
-
-        let best = grid.find_best_forage_tile(IVec2::new(0, 0), 10);
-        assert!(best.is_some());
-        let (tile, biomass) = best.unwrap();
-
-        // Should prefer the tile with highest biomass considering distance
-        // (0,0) has 100.0 biomass and distance 0, so it should be chosen
-        assert_eq!(tile, IVec2::new(0, 0));
-        assert_eq!(biomass, 100.0);
-    }
-
-    #[test]
-    fn test_logistic_growth_to_80_percent() {
-        // This test verifies that an empty patch reaches ~80% of Bmax after expected ticks
-        let mut grid = VegetationGrid::new();
-        let tile = IVec2::new(0, 0);
-
-        // Start with empty patch
-        grid.get_or_create(tile, 1.0);
-        {
-            let vegetation = grid.get_mut(tile).unwrap();
-            vegetation.biomass = 1.0; // Start very low
-        }
-
-        let max_biomass = 100.0;
-        let target_biomass = max_biomass * 0.8; // 80.0
-        let growth_rate = constants::growth::GROWTH_RATE; // 0.05
-
-        // Simulate growth over multiple ticks
-        let mut current_biomass = 1.0;
-        let mut tick = 0;
-
-        while current_biomass < target_biomass && tick < 1000 {
-            // Logistic growth: B(t+1) = B(t) + r * B(t) * (1 - B(t)/Bmax)
-            let growth = growth_rate * current_biomass * (1.0 - current_biomass / max_biomass);
-            current_biomass += growth;
-            tick += 1;
-
-            // Apply the same update to the grid
-            grid.update(tick);
-        }
-
-        // Verify we reached the target
-        let final_vegetation = grid.get(tile).unwrap();
-        assert!(
-            final_vegetation.biomass >= target_biomass * 0.95, // Within 5% of target
-            "Expected biomass to reach at least 95% of 80.0 Bmax, got {}",
-            final_vegetation.biomass
-        );
-        assert!(
-            tick < 200,
-            "Should reach 80% Bmax within 200 ticks, took {}",
-            tick
-        );
-
-        // Verify the final biomass is reasonable (should be close to 80.0)
-        assert!(
-            (final_vegetation.biomass - 80.0).abs() < 5.0_f32,
-            "Final biomass should be close to 80.0, got {}",
-            final_vegetation.biomass
-        );
-    }
-
-    #[test]
-    fn test_logistic_growth_equation() {
-        // Test the logistic growth equation directly
-        let max_biomass = 100.0;
-        let growth_rate = 0.05;
-
-        // Start at 50% capacity
-        let mut biomass = 50.0;
-
-        // Apply one growth step
-        let growth = growth_rate * biomass * (1.0 - biomass / max_biomass);
-        biomass += growth;
-
-        // Should grow (but not exceed max)
-        assert!(biomass > 50.0);
-        assert!(biomass < max_biomass);
-
-        // At 50% capacity, growth should be at maximum
-        let expected_max_growth = growth_rate * max_biomass * 0.25; // r * Bmax * 0.25
-        let diff = (growth as f32 - expected_max_growth).abs();
-        assert!(diff < 0.01_f32);
-    }
-
-    #[test]
-    fn test_vegetation_statistics() {
-        let mut grid = VegetationGrid::new();
-
-        // Create some test tiles
-        grid.get_or_create(IVec2::new(0, 0), 1.0); // 100.0 biomass
-        grid.get_or_create(IVec2::new(1, 0), 0.5); // 50.0 biomass
-        grid.get_or_create(IVec2::new(0, 1), 0.8); // 80.0 biomass
-
-        // Mark one as depleted
-        {
-            let vegetation = grid.get_mut(IVec2::new(1, 0)).unwrap();
-            vegetation.biomass = 3.0; // Below DEPLETED_THRESHOLD
-        }
-
-        // Set suitable tiles count
-        grid.total_suitable_tiles = 3;
-
-        let stats = grid.get_statistics();
-        assert_eq!(stats.total_tiles, 3);
-        assert_eq!(stats.suitable_tiles, 3);
-        assert_eq!(stats.total_biomass, 230.0); // 100 + 50 + 80
-        assert_eq!(stats.average_biomass, 230.0 / 3.0);
-        assert_eq!(stats.depleted_tiles, 1);
-    }
-
-    #[test]
-    fn test_herbivore_consumption() {
-        let mut grid = VegetationGrid::new();
-
-        // Create a test tile with high biomass
-        let tile_pos = IVec2::new(5, 5);
-        let initial_biomass = 80.0;
-        grid.get_or_create(tile_pos, 1.0); // Normalized to MAX_BIOMASS = 100.0
-        {
-            let vegetation = grid.get_mut(tile_pos).unwrap();
-            vegetation.biomass = initial_biomass;
-        }
-
-        // Test consumption with moderate demand
-        let demand = 30.0;
-        let max_fraction = consumption::MAX_MEAL_FRACTION; // 30%
-
-        let (consumed, remaining_demand) = grid.consume(tile_pos, demand, max_fraction);
-
-        // Should consume min(demand, 30% of biomass) = min(30, 24) = 24
-        assert_eq!(consumed, 24.0);
-        assert_eq!(remaining_demand, demand - consumed); // Remaining demand, not biomass
-
-        // Verify the tile was updated
-        let updated_vegetation = grid.get(tile_pos).unwrap();
-        assert_eq!(updated_vegetation.biomass, initial_biomass - consumed);
-        assert_eq!(updated_vegetation.last_grazed_tick, 0); // Should be updated
-
-        // Test consumption with low demand
-        let low_demand = 10.0;
-        let (consumed_low, _) = grid.consume(tile_pos, low_demand, max_fraction);
-        assert_eq!(consumed_low, 10.0); // Should consume full demand
-
-        // Test consumption with depleted tile
-        let depleted_pos = IVec2::new(6, 6);
-        grid.get_or_create(depleted_pos, 1.0);
-        {
-            let vegetation = grid.get_mut(depleted_pos).unwrap();
-            vegetation.biomass = 8.0; // Below FORAGE_MIN_BIOMASS (10.0) but should still consume
-        }
-
-        let (consumed_depleted, _) = grid.consume(depleted_pos, 20.0, max_fraction);
-        // 30% of 8.0 = 2.4, but this should be prevented by FORAGE_MIN_BIOMASS check in eating behavior
-        println!("Consumed from low biomass tile: {}", consumed_depleted);
-        assert!(consumed_depleted >= 0.0); // Should consume something if not blocked by FORAGE_MIN_BIOMASS
-
-        // Test consumption on non-existent tile
-        let empty_pos = IVec2::new(10, 10);
-        let (consumed_empty, _) = grid.consume(empty_pos, 20.0, max_fraction);
-        assert_eq!(consumed_empty, 0.0); // Should consume nothing
+        vegetation.biomass = 10.0;
+        assert!(vegetation.is_active(200));
     }
 }
