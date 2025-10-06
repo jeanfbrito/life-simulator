@@ -1713,6 +1713,7 @@ pub struct VegetationPlugin;
 impl Plugin for VegetationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<VegetationGrid>()
+            .init_resource::<crate::vegetation::resource_grid::ResourceGrid>()
             .add_systems(
                 PostStartup,
                 setup_vegetation_system.run_if(resource_exists::<WorldLoader>),
@@ -1720,7 +1721,9 @@ impl Plugin for VegetationPlugin {
             .add_systems(
                 FixedUpdate,
                 vegetation_growth_system.run_if(every_n_ticks(GROWTH_INTERVAL_TICKS)),
-            );
+            )
+            // Phase 3: ResourceGrid event loop with tick budget
+            .add_systems(FixedUpdate, resource_grid_update_system);
     }
 }
 
@@ -1868,6 +1871,51 @@ fn vegetation_growth_system(
     }
 
     end_timing_resource(&mut profiler, "vegetation");
+}
+
+/// Phase 3: ResourceGrid update system with event loop and tick budget
+///
+/// This system processes the event-driven ResourceGrid updates each tick:
+/// - Drains regrowth events from the scheduler (bounded by budget)
+/// - Processes random tick sampling for ambient regrowth
+/// - Ensures consumption events register regrowth with proper delays
+fn resource_grid_update_system(
+    mut resource_grid: ResMut<crate::vegetation::resource_grid::ResourceGrid>,
+    tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
+) {
+    use crate::simulation::profiler::start_timing_resource;
+    use crate::simulation::profiler::end_timing_resource;
+
+    // Start timing the ResourceGrid update
+    start_timing_resource(&mut profiler, "resource_grid");
+
+    // Update the ResourceGrid (processes events, random sampling, etc.)
+    resource_grid.update(tick.0);
+
+    // Get metrics for logging
+    let metrics = resource_grid.get_metrics();
+
+    // Log performance metrics periodically (every 60 seconds)
+    if tick.0 % 600 == 0 {
+        info!(
+            "🌿 ResourceGrid - Cells: {}, Events: {}, Random: {}, Time: {}μs",
+            metrics.active_cells,
+            metrics.events_processed,
+            metrics.random_cells_sampled,
+            metrics.processing_time_us
+        );
+    }
+
+    // Phase 3 validation: Ensure processing time stays under 2ms on idle worlds
+    if metrics.processing_time_us > 2000 {
+        warn!(
+            "⚠️  ResourceGrid processing took {}μs (target: <2000μs). Consider reducing tick budget.",
+            metrics.processing_time_us
+        );
+    }
+
+    end_timing_resource(&mut profiler, "resource_grid");
 }
 
 // Web API functions for viewer overlay
