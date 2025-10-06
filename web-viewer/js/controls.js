@@ -47,6 +47,9 @@ export class Controls {
         document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn());
         document.getElementById('zoom-out').addEventListener('click', () => this.zoomOut());
         document.getElementById('reset-view').addEventListener('click', () => this.resetView());
+
+        // Grass density toggle
+        document.getElementById('toggle-grass-density').addEventListener('click', () => this.toggleGrassDensity());
     }
 
     handleMouseMove(e) {
@@ -119,6 +122,41 @@ export class Controls {
             }
 
             let tooltipText = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
+
+            // Add biomass information if grass density overlay is enabled
+            if (CONFIG.showGrassDensity && this.renderer.biomassData && (terrainType === 'Grass' || terrainType === 'Forest' || terrainType === 'Dirt')) {
+                const biomassLevel = this.getBiomassAtPosition(worldX, worldY);
+                if (biomassLevel !== null) {
+                    const biomassStatus = this.getBiomassStatus(biomassLevel, terrainType);
+                    tooltipText += `<br>🌱 Biomass: ${biomassLevel.toFixed(1)}% ${biomassStatus}`;
+
+                    // Add additional context based on biomass level
+                    if (biomassLevel >= 80) {
+                        tooltipText += `<br><small style="opacity: 0.7;">(Excellent growth conditions)</small>`;
+                    } else if (biomassLevel >= 60) {
+                        tooltipText += `<br><small style="opacity: 0.7;">(Healthy vegetation)</small>`;
+                    } else if (biomassLevel >= 40) {
+                        tooltipText += `<br><small style="opacity: 0.7;">(Moderate growth)</small>`;
+                    } else if (biomassLevel >= 20) {
+                        tooltipText += `<br><small style="opacity: 0.7;">(Low biomass, may need recovery)</small>`;
+                    } else {
+                        tooltipText += `<br><small style="opacity: 0.7;">(Very low, depleted area)</small>`;
+                    }
+
+                    // Add global vegetation context when biomass overlay is enabled
+                    if (this.renderer.biomassData && this.renderer.biomassData.metadata) {
+                        const avgBiomass = this.calculateAverageBiomass();
+                        const maxBiomass = this.renderer.biomassData.max_biomass || 100;
+                        const utilizationRate = (avgBiomass / maxBiomass * 100).toFixed(1);
+                        tooltipText += `<br><hr style="opacity: 0.3;">`;
+                        tooltipText += `<small style="opacity: 0.8;">🌍 Area biomass utilization: ${utilizationRate}%</small>`;
+                    }
+                }
+            } else if (CONFIG.showGrassDensity) {
+                // When overlay is enabled but no biomass data available for this terrain
+                tooltipText += `<br><small style="opacity: 0.7;">🌱 No biomass data available</small>`;
+            }
+
             if (resourceType) {
                 tooltipText += `<br>Resource: ${resourceType} ${RESOURCE_SYMBOLS[resourceType] || ''}`;
             }
@@ -130,6 +168,71 @@ export class Controls {
 
     hideTooltip() {
         document.getElementById('tooltip').style.display = 'none';
+    }
+
+    // Get biomass level at specific world coordinates
+    getBiomassAtPosition(worldX, worldY) {
+        if (!this.renderer.biomassData || !this.renderer.biomassData.heatmap) {
+            return null;
+        }
+
+        const heatmap = this.renderer.biomassData.heatmap;
+        const heatmapSizeX = heatmap.length;
+        const heatmapSizeY = heatmap[0]?.length || 0;
+        const tileSize = this.renderer.biomassData.tile_size || 16;
+
+        // Convert world tile coordinates to chunk coordinates
+        const chunkX = Math.floor(worldX / tileSize);
+        const chunkY = Math.floor(worldY / tileSize);
+
+        const offsetX = Math.floor(heatmapSizeX / 2);
+        const offsetY = Math.floor(heatmapSizeY / 2);
+        const heatmapX = chunkX + offsetX;
+        const heatmapY = chunkY + offsetY;
+
+        // Check if we have biomass data for this position
+        if (heatmapX >= 0 && heatmapX < heatmapSizeX && heatmapY >= 0 && heatmapY < heatmapSizeY) {
+            return heatmap[heatmapX][heatmapY];
+        }
+
+        return null;
+    }
+
+    // Get biomass status emoji based on level and terrain type
+    getBiomassStatus(biomassLevel, terrainType) {
+        if (biomassLevel >= 80) {
+            return '🌿 Dense';
+        } else if (biomassLevel >= 60) {
+            return '🌿 Lush';
+        } else if (biomassLevel >= 40) {
+            return '🌱 Moderate';
+        } else if (biomassLevel >= 20) {
+            return '🌱 Sparse';
+        } else {
+            return '🍂 Scarce';
+        }
+    }
+
+    // Calculate average biomass across the entire heatmap
+    calculateAverageBiomass() {
+        if (!this.renderer.biomassData || !this.renderer.biomassData.heatmap) {
+            return 0;
+        }
+
+        const heatmap = this.renderer.biomassData.heatmap;
+        let totalBiomass = 0;
+        let tileCount = 0;
+
+        for (let i = 0; i < heatmap.length; i++) {
+            for (let j = 0; j < heatmap[i].length; j++) {
+                if (heatmap[i][j] > 0) {
+                    totalBiomass += heatmap[i][j];
+                    tileCount++;
+                }
+            }
+        }
+
+        return tileCount > 0 ? totalBiomass / tileCount : 0;
     }
 
     handleMouseDown(e) {
@@ -265,6 +368,55 @@ export class Controls {
     getDragOffset() {
         return this.dragOffset;
     }
+
+    // Toggle grass density visualization
+    async toggleGrassDensity() {
+        const button = document.getElementById('toggle-grass-density');
+        const status = document.getElementById('grass-density-status');
+
+        // Toggle the config setting
+        CONFIG.showGrassDensity = !CONFIG.showGrassDensity;
+
+        if (CONFIG.showGrassDensity) {
+            // Enable grass density visualization
+            button.style.background = 'rgba(34, 197, 94, 0.4)';
+            button.style.borderColor = 'rgba(34, 197, 94, 0.6)';
+            button.innerHTML = '🌱 Hide Grass Density';
+            status.innerHTML = '<span style="color: #fbbf24;">⏳ Loading biomass data...</span>';
+
+            // Fetch biomass data
+            const biomassData = await this.renderer.fetchBiomassData();
+
+            if (biomassData) {
+                status.innerHTML = '<span style="color: #22c55e;">✅ Grass density overlay active</span>';
+            } else {
+                status.innerHTML = '<span style="color: #f87171;">⚠️ Biomass data unavailable — check that the simulator is running</span>';
+                CONFIG.showGrassDensity = false;
+                button.style.background = 'rgba(34, 197, 94, 0.2)';
+                button.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                button.innerHTML = '🌱 Show Grass Density';
+            }
+
+            // Update rendering
+            if (this.onRender) {
+                this.onRender();
+            }
+        } else {
+            // Disable grass density visualization
+            button.style.background = 'rgba(34, 197, 94, 0.2)';
+            button.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+            button.innerHTML = '🌱 Show Grass Density';
+            status.innerHTML = '<span style="color: #fbbf24;">🔍 Click to show grass growth patterns</span>';
+
+            // Clear biomass data
+            this.renderer.biomassData = null;
+
+            // Update rendering
+            if (this.onRender) {
+                this.onRender();
+            }
+        }
+    }
 }
 
 export class FPSCounter {
@@ -294,4 +446,5 @@ export class FPSCounter {
 
         return false; // Skip frame
     }
-}
+
+  }

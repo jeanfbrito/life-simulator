@@ -8,17 +8,23 @@
 pub mod action;
 pub mod behaviors;
 pub mod consideration;
+pub mod event_driven_planner;
 pub mod herbivore_toolkit;
 pub mod planner;
 pub mod queue;
+pub mod replan_queue;
+pub mod trigger_emitters;
 
 pub use action::{
     create_action, Action, ActionRequest, ActionResult, ActionType, DrinkWaterAction, GrazeAction,
     RestAction,
 };
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
+pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
 pub use queue::{ActionQueue, QueuedAction};
+pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
+pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
 
 use bevy::prelude::*;
 
@@ -30,20 +36,12 @@ impl Plugin for TQUAIPlugin {
         app
             // Resources
             .init_resource::<ActionQueue>()
+            .init_resource::<ReplanQueue>()
+            // Plugins
+            .add_plugins(TriggerEmittersPlugin)
+            .add_plugins(EventDrivenPlannerPlugin)
             // Tick-synced systems (run when should_tick == true)
-            .add_systems(Update, (execute_queued_actions,).run_if(should_tick))
-            // Frame-rate systems (run every frame for responsiveness)
-            // Wait for WorldLoader resource to be available before planning
-            .add_systems(
-                Update,
-                (
-                    crate::entities::types::rabbit::plan_rabbit_actions,
-                    crate::entities::types::deer::plan_deer_actions,
-                    crate::entities::types::raccoon::plan_raccoon_actions,
-                )
-                    .run_if(resource_exists::<crate::world_loader::WorldLoader>)
-                    .run_if(resource_exists::<crate::vegetation::VegetationGrid>),
-            );
+            .add_systems(Update, (execute_queued_actions,).run_if(should_tick));
     }
 }
 
@@ -56,8 +54,20 @@ fn should_tick(state: Res<crate::simulation::SimulationState>) -> bool {
 /// CRITICAL: This runs synchronously with other tick systems
 /// Uses exclusive system to get mutable World access
 fn execute_queued_actions(world: &mut World) {
+    let tick = world.resource::<crate::simulation::SimulationTick>().0;
+
+    // Start profiling before executing queued actions
+    if let Some(mut profiler) = world.get_resource_mut::<crate::simulation::TickProfiler>() {
+        crate::simulation::profiler::start_timing_resource(&mut profiler, "ai_actions");
+    }
+
+    // Execute the AI actions
     world.resource_scope(|world, mut queue: Mut<ActionQueue>| {
-        let tick = world.resource::<crate::simulation::SimulationTick>().0;
         queue.execute_tick(world, tick);
     });
+
+    // End profiling after execution completes
+    if let Some(mut profiler) = world.get_resource_mut::<crate::simulation::TickProfiler>() {
+        crate::simulation::profiler::end_timing_resource(&mut profiler, "ai_actions");
+    }
 }

@@ -114,7 +114,13 @@ pub fn tick_movement_system(
         &mut Path,
     )>,
     mut commands: Commands,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
+    use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
+
+    start_timing_resource(&mut profiler, "movement");
+
     for (entity, mut position, speed, mut state, mut path) in query.iter_mut() {
         // Increment tick counter
         state.ticks_since_move += 1;
@@ -159,6 +165,8 @@ pub fn tick_movement_system(
                 .remove::<MovementState>();
         }
     }
+
+    end_timing_resource(&mut profiler, "movement");
 }
 
 /// System: Initialize movement state when path is assigned

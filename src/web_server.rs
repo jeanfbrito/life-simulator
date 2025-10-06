@@ -4,6 +4,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::net::TcpListener;
+const DEFAULT_WEB_PORT: u16 = 54321;
+
+fn resolve_web_server_port() -> u16 {
+    std::env::var("LIFE_SIM_WEB_PORT")
+        .or_else(|_| std::env::var("LIFE_SIM_PORT"))
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(DEFAULT_WEB_PORT)
+}
 use std::thread;
 
 use crate::tilemap::{Chunk, CHUNK_SIZE};
@@ -28,14 +38,16 @@ impl WebSocketMessage {
     }
 }
 
-pub fn start_simple_web_server() {
-    println!("🌐 WEB_SERVER: Starting web server on port 54321");
+pub fn start_simple_web_server() -> u16 {
+    let port = resolve_web_server_port();
+    let bind_address = format!("127.0.0.1:{}", port);
+    println!("🌐 WEB_SERVER: Starting web server on {}", bind_address);
     thread::spawn(move || {
-        let listener = TcpListener::bind("127.0.0.1:54321").unwrap_or_else(|e| {
-            eprintln!("❌ WEB_SERVER: Failed to bind to port 54321: {}", e);
+        let listener = TcpListener::bind(&bind_address).unwrap_or_else(|e| {
+            eprintln!("❌ WEB_SERVER: Failed to bind to {}: {}", bind_address, e);
             std::process::exit(1);
         });
-        println!("✅ WEB_SERVER: Server listening on http://127.0.0.1:54321");
+        println!("✅ WEB_SERVER: Server listening on http://{}", bind_address);
 
         for stream in listener.incoming() {
             match stream {
@@ -51,6 +63,7 @@ pub fn start_simple_web_server() {
         }
     });
     info!("WEB_SERVER: Web server started in background thread");
+    port
 }
 
 fn handle_http_connection(mut stream: std::net::TcpStream) {

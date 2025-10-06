@@ -4,7 +4,7 @@
 /// Handles multi-tick actions that span across multiple ticks.
 use bevy::prelude::*;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use super::action::{create_action, Action, ActionResult, ActionType};
 use crate::entities::CurrentAction;
@@ -61,6 +61,10 @@ pub struct ActionQueue {
     pending: BinaryHeap<QueuedAction>,
     /// Currently executing multi-tick actions
     active: HashMap<Entity, ActiveAction>,
+    /// Recently completed actions (for trigger system)
+    recently_completed: Vec<(Entity, u64)>, // (entity, completed_tick)
+    /// Entities scheduled for cancellation before next tick execution
+    pending_cancellations: HashSet<Entity>,
     /// Statistics
     pub stats: QueueStats,
 }
@@ -78,6 +82,8 @@ impl Default for ActionQueue {
         Self {
             pending: BinaryHeap::new(),
             active: HashMap::new(),
+            recently_completed: Vec::new(),
+            pending_cancellations: HashSet::new(),
             stats: QueueStats::default(),
         }
     }
@@ -93,15 +99,17 @@ impl ActionQueue {
         priority: i32,
         tick: u64,
     ) {
-        // Don't queue if entity already has an active action
-        if self.active.contains_key(&entity) {
+        let awaiting_cancellation = self.pending_cancellations.contains(&entity);
+
+        // Don't queue if entity already has an active action (unless cancellation scheduled)
+        if !awaiting_cancellation && self.active.contains_key(&entity) {
             return;
         }
 
         // Check if entity already has a pending action - replace if new one is better
         let has_pending = self.pending.iter().any(|qa| qa.entity == entity);
 
-        if has_pending {
+        if has_pending && !awaiting_cancellation {
             // TODO: More sophisticated replacement logic
             // For now, just don't queue duplicate
             return;
@@ -122,6 +130,7 @@ impl ActionQueue {
 
     /// Execute all queued and active actions for this tick
     pub fn execute_tick(&mut self, world: &mut World, tick: u64) {
+        self.process_pending_cancellations(world);
         // First, continue any active multi-tick actions
         self.execute_active_actions(world, tick);
 
@@ -155,6 +164,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Track recently completed action for trigger system
+                    self.recently_completed.push((*entity, tick));
                     to_remove.push(*entity);
                     self.stats.actions_completed += 1;
                 }
@@ -168,6 +179,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Track failed action for trigger system
+                    self.recently_completed.push((*entity, tick));
                     to_remove.push(*entity);
                     self.stats.actions_failed += 1;
                 }
@@ -182,6 +195,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(*entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Trigger follow-up also counts as completion for trigger system
+                    self.recently_completed.push((*entity, tick));
                     to_remove.push(*entity);
                     self.stats.actions_completed += 1;
                 }
@@ -250,6 +265,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Track instant completion for trigger system
+                    self.recently_completed.push((queued.entity, tick));
                     self.stats.actions_completed += 1;
                 }
                 ActionResult::Failed => {
@@ -262,6 +279,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Track failed action for trigger system
+                    self.recently_completed.push((queued.entity, tick));
                     self.stats.actions_failed += 1;
                 }
                 ActionResult::TriggerFollowUp => {
@@ -274,6 +293,8 @@ impl ActionQueue {
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(CurrentAction::none());
                     }
+                    // Track follow-up completion for trigger system
+                    self.recently_completed.push((queued.entity, tick));
                     self.stats.actions_completed += 1;
                 }
                 ActionResult::InProgress => {
@@ -311,5 +332,72 @@ impl ActionQueue {
     /// Check if an entity has any queued or active action
     pub fn has_action(&self, entity: Entity) -> bool {
         self.active.contains_key(&entity) || self.pending.iter().any(|qa| qa.entity == entity)
+    }
+
+    /// Schedule cancellation of an entity's current action (processed at next tick)
+    pub fn schedule_cancellation(&mut self, entity: Entity) {
+        self.pending_cancellations.insert(entity);
+    }
+
+    /// Get entities that recently completed actions since the given tick
+    pub fn get_recently_completed(&mut self, since_tick: u64) -> Vec<Entity> {
+        // Clean up old entries (keep only last 100 ticks worth)
+        self.recently_completed
+            .retain(|(_, tick)| *tick >= since_tick.saturating_sub(100));
+
+        // Get entities that completed since the given tick
+        self.recently_completed
+            .iter()
+            .filter(|(_, tick)| *tick > since_tick)
+            .map(|(entity, _)| *entity)
+            .collect()
+    }
+
+    fn process_pending_cancellations(&mut self, world: &mut World) {
+        let entities: Vec<Entity> = self.pending_cancellations.drain().collect();
+        for entity in entities {
+            self.cancel_action(world, entity);
+        }
+    }
+
+    /// Cancel any active or pending action for the given entity
+    /// Returns true if an action was cancelled
+    pub fn cancel_action(&mut self, world: &mut World, entity: Entity) -> bool {
+        let mut cancelled = false;
+
+        // Check if entity has an active action
+        if let Some(mut active_action) = self.active.remove(&entity) {
+            debug!(
+                "🚫 Cancelling active action '{}' for entity {:?}",
+                active_action.action.name(),
+                entity
+            );
+
+            // Call the action's cancel method for cleanup
+            active_action.action.cancel(world, entity);
+
+            // Clear current action from entity
+            if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+                entity_mut.insert(crate::entities::CurrentAction::none());
+            }
+
+            cancelled = true;
+        }
+
+        // Remove any pending actions for this entity
+        let original_len = self.pending.len();
+        self.pending.retain(|qa| qa.entity != entity);
+        let removed_pending = original_len > self.pending.len();
+
+        if removed_pending {
+            debug!("🚫 Cancelled pending actions for entity {:?}", entity);
+            cancelled = true;
+        }
+
+        if cancelled {
+            self.pending_cancellations.remove(&entity);
+        }
+
+        cancelled
     }
 }

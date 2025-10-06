@@ -1,13 +1,12 @@
+use super::TileVegetation;
+use crate::tilemap::TerrainType;
+use bevy::prelude::IVec2;
 /// Memory optimization module for Phase 4 performance improvements
 ///
 /// This module implements memory usage analysis and optimizations for the
 /// vegetation system, including f32 vs u16 storage evaluation and region-based
 /// grid organization for cache efficiency.
-
 use std::collections::HashMap;
-use crate::tilemap::TerrainType;
-use super::TileVegetation;
-use bevy::prelude::IVec2;
 
 /// Memory usage analysis for vegetation data structures
 #[derive(Debug, Clone)]
@@ -164,11 +163,13 @@ impl StorageComparison {
         active_tiles: usize,
         performance_metrics: &crate::vegetation::PerformanceMetrics,
     ) -> Self {
-        let f32_usage = MemoryAnalysis::analyze_current(tile_count, active_tiles, performance_metrics);
+        let f32_usage =
+            MemoryAnalysis::analyze_current(tile_count, active_tiles, performance_metrics);
         let u16_usage = MemoryAnalysis::analyze_u16_optimized(tile_count, active_tiles);
 
         let savings_percent = ((f32_usage.total_bytes as f32 - u16_usage.total_bytes as f32)
-            / f32_usage.total_bytes as f32) * 100.0;
+            / f32_usage.total_bytes as f32)
+            * 100.0;
 
         // Precision loss: u16 can store ~65536 values, f32 can store much larger
         // But with MAX_BIOMASS = 100.0, u16 (100 * 655.36) gives good precision
@@ -195,7 +196,8 @@ impl StorageComparison {
         }
 
         // Total memory usage recommendation
-        if self.f32_usage.total_bytes > 10 * 1024 * 1024 { // 10MB
+        if self.f32_usage.total_bytes > 10 * 1024 * 1024 {
+            // 10MB
             recommendations.push(format!(
                 "High memory usage: {}MB, consider region-based grid organization",
                 self.f32_usage.total_bytes / (1024 * 1024)
@@ -211,8 +213,8 @@ impl StorageComparison {
         }
 
         // Active tile ratio recommendation
-        let active_ratio = self.f32_usage.breakdown.active_tracking_bytes as f32 /
-                          self.f32_usage.total_bytes as f32;
+        let active_ratio = self.f32_usage.breakdown.active_tracking_bytes as f32
+            / self.f32_usage.total_bytes as f32;
         if active_ratio > 0.3 {
             recommendations.push(format!(
                 "High active tracking overhead: {:.1}% of total memory, review active tile criteria",
@@ -261,13 +263,12 @@ impl RegionalGrid {
     /// Get vegetation from regional grid
     pub fn get_vegetation(&self, tile: IVec2) -> Option<&TileVegetation> {
         let region_coords = self.get_region_coords(tile);
-        self.regions.get(&region_coords)
-            .and_then(|region| {
-                let local_x = (tile.x % self.region_size as i32) as usize;
-                let local_y = (tile.y % self.region_size as i32) as usize;
-                let index = local_y * self.region_size + local_x;
-                region.get(index)
-            })
+        self.regions.get(&region_coords).and_then(|region| {
+            let local_x = (tile.x % self.region_size as i32) as usize;
+            let local_y = (tile.y % self.region_size as i32) as usize;
+            let index = local_y * self.region_size + local_x;
+            region.get(index)
+        })
     }
 
     /// Update cache statistics
@@ -326,19 +327,21 @@ impl MemoryOptimizer {
         active_tiles: usize,
         performance_metrics: &crate::vegetation::PerformanceMetrics,
     ) -> (StorageComparison, Vec<String>) {
-        let comparison = StorageComparison::compare_storage(tile_count, active_tiles, performance_metrics);
+        let comparison =
+            StorageComparison::compare_storage(tile_count, active_tiles, performance_metrics);
         let recommendations = comparison.generate_recommendations();
 
         // Add additional recommendations based on performance metrics
         let mut all_recommendations = recommendations;
 
         if performance_metrics.tiles_processed > 0 {
-            let tiles_per_us = performance_metrics.tiles_processed as f32 /
-                              performance_metrics.total_time_us.max(1) as f32;
+            let tiles_per_us = performance_metrics.tiles_processed as f32
+                / performance_metrics.total_time_us.max(1) as f32;
 
             if tiles_per_us < 0.5 {
                 all_recommendations.push(
-                    "Low processing efficiency detected, consider reducing tile count per batch".to_string()
+                    "Low processing efficiency detected, consider reducing tile count per batch"
+                        .to_string(),
                 );
             } else if tiles_per_us > 5.0 {
                 all_recommendations.push(
@@ -362,9 +365,13 @@ impl MemoryOptimizer {
             u16_optimized_bytes: u16_optimized,
             regional_grid_bytes: regional_grid,
             combined_optimization_bytes: combined,
-            u16_savings_percent: ((current_bytes - u16_optimized) as f32 / current_bytes as f32) * 100.0,
-            regional_savings_percent: ((current_bytes - regional_grid) as f32 / current_bytes as f32) * 100.0,
-            combined_savings_percent: ((current_bytes - combined) as f32 / current_bytes as f32) * 100.0,
+            u16_savings_percent: ((current_bytes - u16_optimized) as f32 / current_bytes as f32)
+                * 100.0,
+            regional_savings_percent: ((current_bytes - regional_grid) as f32
+                / current_bytes as f32)
+                * 100.0,
+            combined_savings_percent: ((current_bytes - combined) as f32 / current_bytes as f32)
+                * 100.0,
         }
     }
 }

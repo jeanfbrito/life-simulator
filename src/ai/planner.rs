@@ -40,6 +40,7 @@ pub fn plan_species_actions<M: Component>(
             Option<&MatingIntent>,
             Option<&ReproductionConfig>,
             Option<&crate::entities::FearState>,
+            Option<&crate::ai::event_driven_planner::NeedsReplanning>,
         ),
         With<M>,
     >,
@@ -64,6 +65,9 @@ pub fn plan_species_actions<M: Component>(
         .map(|(entity, pos)| (entity, pos.tile))
         .collect();
 
+    // Emit planner diagnostics at most once every 10 ticks to avoid frame-time logging cost
+    let should_log = tick % 10 == 0;
+
     for (
         entity,
         position,
@@ -76,14 +80,24 @@ pub fn plan_species_actions<M: Component>(
         mating_intent,
         repro_cfg,
         fear_state,
+        needs_replan,
     ) in query.iter()
     {
-        if queue.has_action(entity) {
+        let needs_replanning = needs_replan.is_some();
+
+        if !needs_replanning && queue.has_action(entity) {
             continue;
         }
 
-        let mut actions =
-            evaluate_actions(entity, position, thirst, hunger, energy, behavior_config, fear_state);
+        let mut actions = evaluate_actions(
+            entity,
+            position,
+            thirst,
+            hunger,
+            energy,
+            behavior_config,
+            fear_state,
+        );
 
         if let Some(params) = mate_params {
             let mate_added = maybe_add_mate_action(
@@ -129,7 +143,7 @@ pub fn plan_species_actions<M: Component>(
             }
         }
 
-        if !actions.is_empty() {
+        if should_log && !actions.is_empty() {
             info!(
                 "🧠{} {} {:?} at {:?} - Thirst: {:.1}% - Evaluated {} actions",
                 emoji,
@@ -154,10 +168,12 @@ pub fn plan_species_actions<M: Component>(
             .filter(|a| a.utility >= UTILITY_THRESHOLD)
             .max_by(|a, b| a.utility.partial_cmp(&b.utility).unwrap())
         {
-            info!(
-                "✅{} {} {:?} queuing action {:?} with utility {:.2}",
-                emoji, label, entity, best_action.action_type, best_action.utility
-            );
+            if should_log {
+                info!(
+                    "✅{} {} {:?} queuing action {:?} with utility {:.2}",
+                    emoji, label, entity, best_action.action_type, best_action.utility
+                );
+            }
 
             queue.queue_action(
                 entity,
@@ -166,7 +182,7 @@ pub fn plan_species_actions<M: Component>(
                 best_action.priority,
                 tick,
             );
-        } else if has_actions {
+        } else if should_log && has_actions {
             warn!(
                 "❌{} {} {:?} - No actions above threshold {:.2}",
                 emoji, label, entity, UTILITY_THRESHOLD

@@ -3,12 +3,17 @@
 use bevy::prelude::*;
 use std::time::Duration;
 
+pub mod profiler;
 pub mod tick;
 
 // Re-exports
 pub use tick::{
     every_n_ticks, increment_tick_counter, log_tick_metrics, SimulationSpeed, SimulationState,
     SimulationTick, TickAccumulator, TickMetrics,
+};
+
+pub use profiler::{
+    end_timing_resource, start_timing_resource, ScopedTimer, TickProfiler, TickProfilerPlugin,
 };
 
 /// Base tick rate: 10 ticks per second (100ms per tick)
@@ -40,6 +45,7 @@ impl Plugin for SimulationPlugin {
                     handle_speed_controls,
                 ),
             )
+            .add_plugins(TickProfilerPlugin)
             .add_systems(
                 Update,
                 log_tick_metrics
@@ -97,6 +103,7 @@ fn run_simulation_ticks(
     mut tick: ResMut<SimulationTick>,
     mut metrics: ResMut<TickMetrics>,
     mut accumulator: ResMut<TickAccumulator>,
+    mut profiler: ResMut<TickProfiler>,
     state: Res<SimulationState>,
 ) {
     let ticks_to_run = accumulator.pending_ticks;
@@ -113,6 +120,9 @@ fn run_simulation_ticks(
         // Start new tick timing
         metrics.start_tick();
 
+        // Start profiler frame
+        profiler.start_frame();
+
         // Increment counter
         tick.increment();
 
@@ -125,6 +135,17 @@ fn run_simulation_ticks(
                 metrics.average_duration()
             );
         }
+
+        // Check if profiler should report this tick
+        if profiler.should_report(tick.get()) {
+            let report = profiler.generate_report(tick.get());
+            info!("{}", report);
+            profiler.reset_period();
+            profiler.last_report_tick = tick.get();
+        }
+
+        // End profiler frame
+        profiler.end_frame();
     }
 
     // Clear pending ticks

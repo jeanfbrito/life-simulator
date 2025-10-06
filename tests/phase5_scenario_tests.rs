@@ -3,12 +3,12 @@
 //! This module implements scenario tests to validate ecological feedbacks and
 //! guard against future regressions as specified in Phase 5 requirements.
 
-use life_simulator::vegetation::constants::*;
-use life_simulator::entities::{spawn_rabbits, spawn_wolves, spawn_humans};
-use life_simulator::entities::types::{RabbitBehavior, HumanBehavior};
 use bevy::prelude::*;
-use std::time::Duration;
+use life_simulator::entities::types::{HumanBehavior, RabbitBehavior};
+use life_simulator::entities::{spawn_humans, spawn_rabbits, spawn_wolves};
+use life_simulator::vegetation::constants::*;
 use std::thread;
+use std::time::Duration;
 
 /// Test configuration for scenario simulations
 #[derive(Debug, Clone)]
@@ -158,14 +158,18 @@ impl ScenarioRunner {
             if config.has_predators {
                 // With predators - less grazing pressure due to fear effects
                 let base_biomass = 75.0;
-                let grazing_effect = 15.0 * (1.0 + 0.3 * (tick as f32 / config.duration_ticks as f32).sin());
+                let grazing_effect =
+                    15.0 * (1.0 + 0.3 * (tick as f32 / config.duration_ticks as f32).sin());
                 base_biomass - grazing_effect
             } else {
                 // Without predators - more grazing pressure
                 let base_biomass = 45.0;
-                let grazing_effect = 20.0 * (1.0 + 0.5 * (tick as f32 / config.duration_ticks as f32).sin());
+                let grazing_effect =
+                    20.0 * (1.0 + 0.5 * (tick as f32 / config.duration_ticks as f32).sin());
                 base_biomass - grazing_effect
-            }.max(5.0).min(95.0)
+            }
+            .max(5.0)
+            .min(95.0)
         }
     }
 
@@ -193,7 +197,8 @@ impl ScenarioRunner {
         let mut passed = true;
 
         // Validate final biomass
-        let biomass_diff = (results.final_avg_biomass_pct - results.config.expected_final_biomass_pct).abs();
+        let biomass_diff =
+            (results.final_avg_biomass_pct - results.config.expected_final_biomass_pct).abs();
         if biomass_diff <= results.config.biomass_tolerance {
             validation_details.push(format!(
                 "✅ Final biomass: {:.1}% (expected: {:.1}%, difference: {:.1}%)",
@@ -213,18 +218,18 @@ impl ScenarioRunner {
 
         // Validate depleted tiles count if specified
         if let Some(expected_depleted) = results.config.expected_depleted_tiles {
-            let depleted_diff = (results.final_depleted_tiles as isize - expected_depleted as isize).abs();
-            if depleted_diff <= (expected_depleted as isize / 10) { // 10% tolerance
+            let depleted_diff =
+                (results.final_depleted_tiles as isize - expected_depleted as isize).abs();
+            if depleted_diff <= (expected_depleted as isize / 10) {
+                // 10% tolerance
                 validation_details.push(format!(
                     "✅ Depleted tiles: {} (expected: ~{})",
-                    results.final_depleted_tiles,
-                    expected_depleted
+                    results.final_depleted_tiles, expected_depleted
                 ));
             } else {
                 validation_details.push(format!(
                     "❌ Depleted tiles: {} (expected: ~{})",
-                    results.final_depleted_tiles,
-                    expected_depleted
+                    results.final_depleted_tiles, expected_depleted
                 ));
                 passed = false;
             }
@@ -286,12 +291,16 @@ impl ScenarioRunner {
 
         println!("Final State:");
         println!("   Average biomass: {:.1}%", results.final_avg_biomass_pct);
-        println!("   Depleted tiles: {} ({:.1}%)",
-                results.final_depleted_tiles,
-                (results.final_depleted_tiles as f32 / results.total_suitable_tiles as f32) * 100.0);
-        println!("   Active tiles: {} ({:.1}%)",
-                results.final_active_tiles,
-                (results.final_active_tiles as f32 / results.total_suitable_tiles as f32) * 100.0);
+        println!(
+            "   Depleted tiles: {} ({:.1}%)",
+            results.final_depleted_tiles,
+            (results.final_depleted_tiles as f32 / results.total_suitable_tiles as f32) * 100.0
+        );
+        println!(
+            "   Active tiles: {} ({:.1}%)",
+            results.final_active_tiles,
+            (results.final_active_tiles as f32 / results.total_suitable_tiles as f32) * 100.0
+        );
         println!("   Total suitable tiles: {}", results.total_suitable_tiles);
         println!();
 
@@ -309,7 +318,11 @@ impl ScenarioRunner {
         }
         println!();
 
-        let status = if results.passed_validation { "✅ PASS" } else { "❌ FAIL" };
+        let status = if results.passed_validation {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        };
         println!("Overall Status: {}", status);
         println!();
     }
@@ -317,10 +330,10 @@ impl ScenarioRunner {
     /// Run the ungrazed regrowth scenario
     pub fn run_ungrazed_regrowth(&self) -> ScenarioResults {
         let config = ScenarioConfig {
-            duration_ticks: 300,      // 30 seconds at 10 TPS
-            sample_interval_ticks: 30,  // Sample every 3 seconds
+            duration_ticks: 300,       // 30 seconds at 10 TPS
+            sample_interval_ticks: 30, // Sample every 3 seconds
             target_tps: 10.0,
-            expected_final_biomass_pct: 90.0,  // Should approach Bmax
+            expected_final_biomass_pct: 90.0, // Should approach Bmax
             biomass_tolerance: 5.0,           // ±5% tolerance
             has_herbivores: false,
             has_predators: false,
@@ -337,10 +350,10 @@ impl ScenarioRunner {
     /// Run the rabbit-only scenario
     pub fn run_rabbit_only(&self) -> ScenarioResults {
         let config = ScenarioConfig {
-            duration_ticks: 300,      // 30 seconds at 10 TPS
-            sample_interval_ticks: 30,  // Sample every 3 seconds
+            duration_ticks: 300,       // 30 seconds at 10 TPS
+            sample_interval_ticks: 30, // Sample every 3 seconds
             target_tps: 10.0,
-            expected_final_biomass_pct: 45.0,  // Steady state with grazing
+            expected_final_biomass_pct: 45.0, // Steady state with grazing
             biomass_tolerance: 8.0,           // ±8% tolerance
             has_herbivores: true,
             has_predators: false,
@@ -357,10 +370,10 @@ impl ScenarioRunner {
     /// Run the rabbit+fox scenario
     pub fn run_rabbit_fox_scenario(&self) -> ScenarioResults {
         let config = ScenarioConfig {
-            duration_ticks: 300,      // 30 seconds at 10 TPS
-            sample_interval_ticks: 30,  // Sample every 3 seconds
+            duration_ticks: 300,       // 30 seconds at 10 TPS
+            sample_interval_ticks: 30, // Sample every 3 seconds
             target_tps: 10.0,
-            expected_final_biomass_pct: 65.0,  // Higher biomass due to predator fear effects
+            expected_final_biomass_pct: 65.0, // Higher biomass due to predator fear effects
             biomass_tolerance: 8.0,           // ±8% tolerance
             has_herbivores: true,
             has_predators: true,
@@ -408,13 +421,23 @@ impl ScenarioRunner {
         let total_count = results.len();
 
         for (i, result) in results.iter().enumerate() {
-            let scenario_name = if i == 0 { "Ungrazed Regrowth" }
-                            else if i == 1 { "Rabbit-Only" }
-                            else { "Rabbit+Fox" };
+            let scenario_name = if i == 0 {
+                "Ungrazed Regrowth"
+            } else if i == 1 {
+                "Rabbit-Only"
+            } else {
+                "Rabbit+Fox"
+            };
 
-            let status = if result.passed_validation { "✅ PASS" } else { "❌ FAIL" };
-            println!("   {}: {} (final biomass: {:.1}%)",
-                    scenario_name, status, result.final_avg_biomass_pct);
+            let status = if result.passed_validation {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            };
+            println!(
+                "   {}: {} (final biomass: {:.1}%)",
+                scenario_name, status, result.final_avg_biomass_pct
+            );
 
             if result.passed_validation {
                 passed_count += 1;
@@ -539,7 +562,8 @@ mod tests {
             expected_depleted_tiles: None,
         };
 
-        let (herb_depleted, herb_active, herb_total) = runner.calculate_tile_counts(&herbivore_config);
+        let (herb_depleted, herb_active, herb_total) =
+            runner.calculate_tile_counts(&herbivore_config);
         assert!(herb_depleted > depleted); // More depleted with herbivores
         assert!(herb_active > 0);
         assert!(herb_total > 0);
@@ -562,7 +586,7 @@ mod tests {
             },
             actual_ticks: 100,
             final_avg_biomass_pct: 92.0, // Within tolerance
-            final_depleted_tiles: 12,      // Within tolerance
+            final_depleted_tiles: 12,    // Within tolerance
             final_active_tiles: 15,
             total_suitable_tiles: 100,
             biomass_progression: vec![(0, 10.0), (100, 92.0)],

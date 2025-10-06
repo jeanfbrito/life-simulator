@@ -223,7 +223,12 @@ pub fn tick_stats_system(
         Option<&mut Health>,
     )>,
     tick: Res<crate::simulation::SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
+    use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
+
+    start_timing_resource(&mut profiler, "stats");
     for (entity, hunger, thirst, energy, health) in query.iter_mut() {
         // Update each stat if present
         if let Some(mut h) = hunger {
@@ -275,6 +280,8 @@ pub fn tick_stats_system(
             }
         }
     }
+
+    end_timing_resource(&mut profiler, "stats");
 }
 
 /// Handle death when health reaches zero

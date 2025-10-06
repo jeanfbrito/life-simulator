@@ -40,6 +40,10 @@ class LifeSimulatorApp {
         };
         this.centerCoord = { x: 0, y: 0 };
 
+        // Biomass data refresh tracking
+        this.lastBiomassRefresh = 0;
+        this.biomassRefreshInterval = 5000; // Refresh every 5 seconds
+
         // Setup component connections
         this.setupComponentConnections();
 
@@ -202,6 +206,12 @@ class LifeSimulatorApp {
         const animate = (currentTime) => {
             // Always update controls (for smoothing/inertia)
             this.controls.update();
+
+            // Refresh biomass data periodically if grass density is enabled
+            if (CONFIG.showGrassDensity && (currentTime - this.lastBiomassRefresh) > this.biomassRefreshInterval) {
+                this.renderer.fetchBiomassData();
+                this.lastBiomassRefresh = currentTime;
+            }
 
             // Check if we should render this frame (FPS limiting)
             if (this.fpsCounter.update(currentTime)) {

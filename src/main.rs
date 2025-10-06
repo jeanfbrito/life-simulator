@@ -1,6 +1,5 @@
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
-use bevy::time::TimePlugin;
 use std::time::Duration;
 
 mod ai;
@@ -41,7 +40,12 @@ fn main() {
         // TilemapPlugin removed - we're loading a world, not generating one
         // WorldSerializationPlugin removed - not needed for running simulation
         .add_plugins(CachedWorldPlugin)
-        .add_plugins((SimulationPlugin, EntitiesPlugin, TQUAIPlugin, VegetationPlugin)) // Core plugins
+        .add_plugins((
+            SimulationPlugin,
+            EntitiesPlugin,
+            TQUAIPlugin,
+            VegetationPlugin,
+        )) // Core plugins
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
@@ -147,8 +151,11 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
 
     // Start the web server
     println!("🌐 LIFE_SIMULATOR: Starting web server...");
-    web_server_simple::start_simple_web_server();
-    println!("✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:54321");
+    let web_server_port = web_server_simple::start_simple_web_server();
+    println!(
+        "✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:{}",
+        web_server_port
+    );
 
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);

@@ -28,7 +28,7 @@ pub use stats::{
     utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
 };
 
-pub use fear::{FearState, FearPlugin, predator_proximity_system, fear_speed_system};
+pub use fear::{fear_speed_system, predator_proximity_system, FearPlugin, FearState};
 
 pub use entity_types::{
     count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,

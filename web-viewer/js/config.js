@@ -2,6 +2,15 @@
  * Configuration and constants for the Life Simulator Viewer
  */
 
+const DEFAULT_API_PORT = 54321;
+
+function determineApiBaseUrl() {
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+        return window.location.origin;
+    }
+    return `http://localhost:${DEFAULT_API_PORT}`;
+}
+
 // Display configuration
 export const CONFIG = {
     TILE_SIZE: 8, // Dynamic tile size for zoom functionality
@@ -29,8 +38,11 @@ export const CONFIG = {
     maxZoom: 4.0,
     zoomFactor: 1.25,
 
+    // Grass density visualization
+    showGrassDensity: false, // Toggle for grass density overlay
+
     // Network settings
-    apiBaseUrl: 'http://localhost:54321',
+    apiBaseUrl: determineApiBaseUrl(),
     connectionTimeout: 5000,
 };
 

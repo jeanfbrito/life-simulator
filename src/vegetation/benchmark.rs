@@ -1,11 +1,10 @@
+use crate::simulation::SimulationTick;
+use std::collections::VecDeque;
 /// Performance benchmarking module for Phase 4 verification
 ///
 /// This module implements comprehensive performance testing to verify that
 /// the vegetation growth system stays within the 1ms budget at 10 TPS.
-
 use std::time::{Duration, Instant};
-use std::collections::VecDeque;
-use crate::simulation::SimulationTick;
 
 /// Benchmark configuration and results
 #[derive(Debug, Clone)]
@@ -29,11 +28,11 @@ pub struct BenchmarkConfig {
 impl Default for BenchmarkConfig {
     fn default() -> Self {
         Self {
-            duration_seconds: 10,        // 10 second benchmark
-            target_tps: 10.0,             // 10 TPS target
-            cpu_budget_us: 1000,         // 1ms budget
-            tick_interval_ms: 100,       // 100ms between ticks
-            warmup_ticks: 20,             // 2 second warmup
+            duration_seconds: 10,  // 10 second benchmark
+            target_tps: 10.0,      // 10 TPS target
+            cpu_budget_us: 1000,   // 1ms budget
+            tick_interval_ms: 100, // 100ms between ticks
+            warmup_ticks: 20,      // 2 second warmup
         }
     }
 }
@@ -212,27 +211,35 @@ impl PerformanceMonitor {
     /// Get current statistics
     pub fn get_stats(&self) -> (SystemBenchmarkMetrics, GrowthBenchmarkMetrics) {
         if self.tick_times.is_empty() {
-            return (SystemBenchmarkMetrics::default(), GrowthBenchmarkMetrics::default());
+            return (
+                SystemBenchmarkMetrics::default(),
+                GrowthBenchmarkMetrics::default(),
+            );
         }
 
         // Calculate tick statistics
-        let tick_times_us: Vec<u64> = self.tick_times
+        let tick_times_us: Vec<u64> = self
+            .tick_times
             .iter()
             .map(|d| d.as_micros() as u64)
             .collect();
 
-        let avg_tick_time_us = tick_times_us.iter().sum::<u64>() as f64 / tick_times_us.len() as f64;
+        let avg_tick_time_us =
+            tick_times_us.iter().sum::<u64>() as f64 / tick_times_us.len() as f64;
         let max_tick_time_us = *tick_times_us.iter().max().unwrap_or(&0);
         let min_tick_time_us = *tick_times_us.iter().min().unwrap_or(&0);
 
         // Calculate standard deviation
-        let variance = tick_times_us.iter()
+        let variance = tick_times_us
+            .iter()
             .map(|&x| (x as f64 - avg_tick_time_us).powi(2))
-            .sum::<f64>() / tick_times_us.len() as f64;
+            .sum::<f64>()
+            / tick_times_us.len() as f64;
         let tick_time_stddev = variance.sqrt();
 
         // Calculate growth statistics
-        let growth_times_us: Vec<u64> = self.growth_times
+        let growth_times_us: Vec<u64> = self
+            .growth_times
             .iter()
             .map(|d| d.as_micros() as u64)
             .collect();
@@ -244,8 +251,12 @@ impl PerformanceMonitor {
 
         // Calculate budget compliance (assuming 1000μs budget)
         let cpu_budget_us = 1000;
-        let budget_compliant = growth_times_us.iter().filter(|&&t| t <= cpu_budget_us).count();
-        let budget_compliance_percent = (budget_compliant as f32 / growth_times_us.len() as f32) * 100.0;
+        let budget_compliant = growth_times_us
+            .iter()
+            .filter(|&&t| t <= cpu_budget_us)
+            .count();
+        let budget_compliance_percent =
+            (budget_compliant as f32 / growth_times_us.len() as f32) * 100.0;
         let budget_violations = growth_times_us.len() as u64 - budget_compliant as u64;
 
         // Calculate efficiency (tiles per microsecond)
@@ -321,7 +332,7 @@ pub struct BenchmarkRunner {
 impl BenchmarkRunner {
     pub fn new(config: BenchmarkConfig) -> Self {
         let monitor = PerformanceMonitor::new(
-            (config.duration_seconds * 10) as usize // 10 samples per second
+            (config.duration_seconds * 10) as usize, // 10 samples per second
         );
 
         Self { config, monitor }
@@ -332,7 +343,10 @@ impl BenchmarkRunner {
         println!("🚀 Starting Phase 4 Performance Benchmark");
         println!("   Duration: {}s", self.config.duration_seconds);
         println!("   Target TPS: {}", self.config.target_tps);
-        println!("   CPU Budget: {}μs per growth cycle", self.config.cpu_budget_us);
+        println!(
+            "   CPU Budget: {}μs per growth cycle",
+            self.config.cpu_budget_us
+        );
         println!("   Warmup: {} ticks", self.config.warmup_ticks);
         println!();
 
@@ -400,7 +414,8 @@ impl BenchmarkRunner {
         let variance = (rand::random::<i64>() % 201 - 100); // ±100μs variance
         let spike_chance = rand::random::<f32>();
 
-        let growth_time_us = if spike_chance < 0.05 { // 5% chance of spike
+        let growth_time_us = if spike_chance < 0.05 {
+            // 5% chance of spike
             base_growth_time_us + 500 + variance // Spike to ~1350μs
         } else {
             (base_growth_time_us + variance).max(100) // Minimum 100μs
@@ -423,7 +438,8 @@ impl BenchmarkRunner {
     fn analyze_budget_compliance(&self, metrics: &GrowthBenchmarkMetrics) -> BudgetAnalysis {
         let within_budget = metrics.avg_growth_time_us <= self.config.cpu_budget_us as f64;
         let total_overage_us = if metrics.avg_growth_time_us > self.config.cpu_budget_us as f64 {
-            (metrics.avg_growth_time_us - self.config.cpu_budget_us as f64) as u64 * metrics.total_growth_time_us
+            (metrics.avg_growth_time_us - self.config.cpu_budget_us as f64) as u64
+                * metrics.total_growth_time_us
         } else {
             0
         };
@@ -437,11 +453,13 @@ impl BenchmarkRunner {
         let mut recommendations = Vec::new();
 
         if !within_budget {
-            recommendations.push("Growth system exceeds CPU budget - consider optimizations".to_string());
+            recommendations
+                .push("Growth system exceeds CPU budget - consider optimizations".to_string());
         }
 
         if metrics.budget_compliance_percent < 90.0 {
-            recommendations.push("Low budget compliance - reduce active tile processing".to_string());
+            recommendations
+                .push("Low budget compliance - reduce active tile processing".to_string());
         }
 
         if metrics.efficiency_rating == EfficiencyRating::Poor {
@@ -449,7 +467,8 @@ impl BenchmarkRunner {
         }
 
         if metrics.budget_violations > metrics.total_growth_time_us / 100 {
-            recommendations.push("Frequent budget violations - review batch processing".to_string());
+            recommendations
+                .push("Frequent budget violations - review batch processing".to_string());
         }
 
         if recommendations.is_empty() {
@@ -474,36 +493,92 @@ impl BenchmarkRunner {
 
         // Basic metrics
         println!("📈 Basic Performance Metrics:");
-        println!("   Actual TPS:        {:.1} (target: {:.1})", results.actual_tps, results.config.target_tps);
-        println!("   Duration:          {}ms (target: {}ms)", results.actual_duration_ms, results.config.duration_seconds * 1000);
+        println!(
+            "   Actual TPS:        {:.1} (target: {:.1})",
+            results.actual_tps, results.config.target_tps
+        );
+        println!(
+            "   Duration:          {}ms (target: {}ms)",
+            results.actual_duration_ms,
+            results.config.duration_seconds * 1000
+        );
         println!("   Total Ticks:       {}", results.total_ticks);
         println!();
 
         // Growth system metrics
         println!("🌱 Vegetation Growth System:");
-        println!("   Avg Growth Time:  {:.1}μs (budget: {}μs)", results.growth_metrics.avg_growth_time_us, results.config.cpu_budget_us);
-        println!("   Max Growth Time:  {}μs", results.growth_metrics.max_growth_time_us);
-        println!("   Min Growth Time:  {}μs", results.growth_metrics.min_growth_time_us);
-        println!("   Budget Compliance: {:.1}%", results.growth_metrics.budget_compliance_percent);
-        println!("   Budget Violations: {}", results.growth_metrics.budget_violations);
-        println!("   Efficiency Rating: {:?}", results.growth_metrics.efficiency_rating);
+        println!(
+            "   Avg Growth Time:  {:.1}μs (budget: {}μs)",
+            results.growth_metrics.avg_growth_time_us, results.config.cpu_budget_us
+        );
+        println!(
+            "   Max Growth Time:  {}μs",
+            results.growth_metrics.max_growth_time_us
+        );
+        println!(
+            "   Min Growth Time:  {}μs",
+            results.growth_metrics.min_growth_time_us
+        );
+        println!(
+            "   Budget Compliance: {:.1}%",
+            results.growth_metrics.budget_compliance_percent
+        );
+        println!(
+            "   Budget Violations: {}",
+            results.growth_metrics.budget_violations
+        );
+        println!(
+            "   Efficiency Rating: {:?}",
+            results.growth_metrics.efficiency_rating
+        );
         println!();
 
         // System metrics
         println!("⚙️  System Performance:");
-        println!("   Avg Tick Time:    {:.1}μs", results.system_metrics.avg_tick_time_us);
-        println!("   Max Tick Time:    {}μs", results.system_metrics.max_tick_time_us);
-        println!("   Min Tick Time:    {}μs", results.system_metrics.min_tick_time_us);
-        println!("   Tick Time StdDev: {:.1}μs", results.system_metrics.tick_time_stddev);
-        println!("   CPU Utilization:  {:.1}%", results.system_metrics.cpu_utilization_percent);
+        println!(
+            "   Avg Tick Time:    {:.1}μs",
+            results.system_metrics.avg_tick_time_us
+        );
+        println!(
+            "   Max Tick Time:    {}μs",
+            results.system_metrics.max_tick_time_us
+        );
+        println!(
+            "   Min Tick Time:    {}μs",
+            results.system_metrics.min_tick_time_us
+        );
+        println!(
+            "   Tick Time StdDev: {:.1}μs",
+            results.system_metrics.tick_time_stddev
+        );
+        println!(
+            "   CPU Utilization:  {:.1}%",
+            results.system_metrics.cpu_utilization_percent
+        );
         println!();
 
         // Budget analysis
         println!("💰 Budget Analysis:");
-        println!("   Within Budget:    {}", if results.budget_analysis.within_budget { "✅ YES" } else { "❌ NO" });
-        println!("   Total Overage:    {}μs", results.budget_analysis.total_overage_us);
-        println!("   Worst Violation:  {}μs", results.budget_analysis.worst_violation_us);
-        println!("   Time in Budget:  {:.1}%", results.budget_analysis.time_within_budget_percent);
+        println!(
+            "   Within Budget:    {}",
+            if results.budget_analysis.within_budget {
+                "✅ YES"
+            } else {
+                "❌ NO"
+            }
+        );
+        println!(
+            "   Total Overage:    {}μs",
+            results.budget_analysis.total_overage_us
+        );
+        println!(
+            "   Worst Violation:  {}μs",
+            results.budget_analysis.worst_violation_us
+        );
+        println!(
+            "   Time in Budget:  {:.1}%",
+            results.budget_analysis.time_within_budget_percent
+        );
         println!();
 
         // Recommendations
@@ -514,13 +589,23 @@ impl BenchmarkRunner {
         println!();
 
         // Overall assessment
-        let overall_score = (results.growth_metrics.efficiency_rating.as_score() + results.budget_analysis.time_within_budget_percent) / 2.0;
-        let status = if overall_score >= 80.0 { "✅ EXCELLENT" }
-                     else if overall_score >= 65.0 { "✅ GOOD" }
-                     else if overall_score >= 50.0 { "⚠️  FAIR" }
-                     else { "❌ NEEDS IMPROVEMENT" };
+        let overall_score = (results.growth_metrics.efficiency_rating.as_score()
+            + results.budget_analysis.time_within_budget_percent)
+            / 2.0;
+        let status = if overall_score >= 80.0 {
+            "✅ EXCELLENT"
+        } else if overall_score >= 65.0 {
+            "✅ GOOD"
+        } else if overall_score >= 50.0 {
+            "⚠️  FAIR"
+        } else {
+            "❌ NEEDS IMPROVEMENT"
+        };
 
-        println!("🎯 Overall Assessment: {} (Score: {:.1}/100)", status, overall_score);
+        println!(
+            "🎯 Overall Assessment: {} (Score: {:.1}/100)",
+            status, overall_score
+        );
         println!();
     }
 }
@@ -528,7 +613,7 @@ impl BenchmarkRunner {
 /// Run a quick benchmark with default settings
 pub fn run_quick_benchmark() -> BenchmarkResults {
     let config = BenchmarkConfig {
-        duration_seconds: 5,      // 5 second quick test
+        duration_seconds: 5, // 5 second quick test
         ..Default::default()
     };
 
@@ -539,11 +624,11 @@ pub fn run_quick_benchmark() -> BenchmarkResults {
 /// Run comprehensive benchmark for Phase 4 verification
 pub fn run_phase4_benchmark() -> BenchmarkResults {
     let config = BenchmarkConfig {
-        duration_seconds: 15,     // 15 second comprehensive test
+        duration_seconds: 15, // 15 second comprehensive test
         target_tps: 10.0,
-        cpu_budget_us: 1000,      // 1ms budget as specified
-        tick_interval_ms: 100,    // 10 TPS
-        warmup_ticks: 30,          // 3 second warmup
+        cpu_budget_us: 1000,   // 1ms budget as specified
+        tick_interval_ms: 100, // 10 TPS
+        warmup_ticks: 30,      // 3 second warmup
     };
 
     let mut runner = BenchmarkRunner::new(config);
@@ -566,10 +651,22 @@ mod tests {
 
     #[test]
     fn test_efficiency_rating() {
-        assert_eq!(EfficiencyRating::from_efficiency(95.0), EfficiencyRating::Excellent);
-        assert_eq!(EfficiencyRating::from_efficiency(80.0), EfficiencyRating::Good);
-        assert_eq!(EfficiencyRating::from_efficiency(65.0), EfficiencyRating::Fair);
-        assert_eq!(EfficiencyRating::from_efficiency(50.0), EfficiencyRating::Poor);
+        assert_eq!(
+            EfficiencyRating::from_efficiency(95.0),
+            EfficiencyRating::Excellent
+        );
+        assert_eq!(
+            EfficiencyRating::from_efficiency(80.0),
+            EfficiencyRating::Good
+        );
+        assert_eq!(
+            EfficiencyRating::from_efficiency(65.0),
+            EfficiencyRating::Fair
+        );
+        assert_eq!(
+            EfficiencyRating::from_efficiency(50.0),
+            EfficiencyRating::Poor
+        );
     }
 
     #[test]

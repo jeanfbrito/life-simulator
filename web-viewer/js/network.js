@@ -4,6 +4,15 @@
 
 import { CONFIG } from './config.js';
 
+function determineWebSocketUrl() {
+    if (typeof window !== 'undefined' && window.location) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${window.location.host}/ws`;
+    }
+    const defaultHost = CONFIG.apiBaseUrl.replace(/^https?:\/\//, '');
+    return `ws://${defaultHost}/ws`;
+}
+
 export class NetworkManager {
     constructor() {
         this.ws = null;
@@ -17,7 +26,7 @@ export class NetworkManager {
 
     connect() {
         try {
-            this.ws = new WebSocket('ws://localhost:54321/ws');
+            this.ws = new WebSocket(determineWebSocketUrl());
 
             this.ws.onopen = () => {
                 console.log('WebSocket connected');

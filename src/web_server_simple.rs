@@ -5,6 +5,17 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, RwLock};
 use std::thread;
 
+const DEFAULT_WEB_PORT: u16 = 54321;
+
+fn resolve_web_server_port() -> u16 {
+    std::env::var("LIFE_SIM_WEB_PORT")
+        .or_else(|_| std::env::var("LIFE_SIM_PORT"))
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(DEFAULT_WEB_PORT)
+}
+
 fn parse_chunk_key(chunk_key: &str) -> Result<(i32, i32), Box<dyn std::error::Error>> {
     // Parse chunk key format "x,y" into tuple (x, y)
     let parts: Vec<&str> = chunk_key.split(',').collect();
@@ -17,8 +28,142 @@ fn parse_chunk_key(chunk_key: &str) -> Result<(i32, i32), Box<dyn std::error::Er
     Ok((x, y))
 }
 
-pub fn start_simple_web_server() {
-    println!("🌐 WEB_SERVER: Starting web server on port 54321");
+/// Kill any existing process using the specified port
+fn kill_process_on_port(port: u16) {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        // Find processes using the port
+        let output = Command::new("lsof")
+            .args(&["-ti", &format!(":{}", port)])
+            .output();
+
+        match output {
+            Ok(result) if !result.stdout.is_empty() => {
+                let pids = String::from_utf8_lossy(&result.stdout);
+                for pid in pids.lines() {
+                    if let Ok(pid_num) = pid.trim().parse::<u32>() {
+                        println!(
+                            "🔧 WEB_SERVER: Killing existing process {} using port {}",
+                            pid_num, port
+                        );
+                        if let Err(e) = Command::new("kill").arg("-9").arg(pid).output() {
+                            eprintln!("⚠️  WEB_SERVER: Failed to kill process {}: {}", pid_num, e);
+                        }
+                    }
+                }
+                // Give processes time to terminate
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Ok(_) => {
+                // No processes using the port
+            }
+            Err(e) => {
+                eprintln!(
+                    "⚠️  WEB_SERVER: Could not check for processes on port {}: {}",
+                    port, e
+                );
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+
+        // Find processes using the port
+        let output = Command::new("lsof")
+            .args(&["-ti", &format!(":{}", port)])
+            .output();
+
+        match output {
+            Ok(result) if !result.stdout.is_empty() => {
+                let pids = String::from_utf8_lossy(&result.stdout);
+                for pid in pids.lines() {
+                    if let Ok(pid_num) = pid.trim().parse::<u32>() {
+                        println!(
+                            "🔧 WEB_SERVER: Killing existing process {} using port {}",
+                            pid_num, port
+                        );
+                        if let Err(e) = Command::new("kill").arg("-9").arg(pid).output() {
+                            eprintln!("⚠️  WEB_SERVER: Failed to kill process {}: {}", pid_num, e);
+                        }
+                    }
+                }
+                // Give processes time to terminate
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Ok(_) => {
+                // No processes using the port
+            }
+            Err(e) => {
+                eprintln!(
+                    "⚠️  WEB_SERVER: Could not check for processes on port {}: {}",
+                    port, e
+                );
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+
+        // Find processes using the port (Windows version)
+        let output = Command::new("netstat")
+            .args(&["-ano", "-p", "tcp"])
+            .output();
+
+        match output {
+            Ok(result) => {
+                let output_str = String::from_utf8_lossy(&result.stdout);
+                for line in output_str.lines() {
+                    if line.contains(&format!(":{}", port)) {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 5 {
+                            if let Ok(pid_num) = parts[4].parse::<u32>() {
+                                println!(
+                                    "🔧 WEB_SERVER: Killing existing process {} using port {}",
+                                    pid_num, port
+                                );
+                                if let Err(e) =
+                                    Command::new("taskkill").args(&["/F", "/PID", pid]).output()
+                                {
+                                    eprintln!(
+                                        "⚠️  WEB_SERVER: Failed to kill process {}: {}",
+                                        pid_num, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                // Give processes time to terminate
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            Err(e) => {
+                eprintln!(
+                    "⚠️  WEB_SERVER: Could not check for processes on port {}: {}",
+                    port, e
+                );
+            }
+        }
+    }
+}
+
+pub fn start_simple_web_server() -> u16 {
+    let port = resolve_web_server_port();
+    let bind_address = format!("127.0.0.1:{}", port);
+
+    // Kill any existing process using this port
+    println!(
+        "🔧 WEB_SERVER: Checking for existing processes on port {}...",
+        port
+    );
+    kill_process_on_port(port);
+
+    println!("🌐 WEB_SERVER: Starting web server on {}", bind_address);
 
     // Load the default world for the web server
     let world_loader = match WorldLoader::load_default() {
@@ -71,18 +216,25 @@ pub fn start_simple_web_server() {
         }
     };
 
-    let _world_loader_clone = Arc::clone(&world_loader);
+    let world_loader_for_thread = Arc::clone(&world_loader);
+    let thread_bind_address = bind_address.clone();
     thread::spawn(move || {
-        let listener = TcpListener::bind("127.0.0.1:54321").unwrap_or_else(|e| {
-            eprintln!("❌ WEB_SERVER: Failed to bind to port 54321: {}", e);
+        let listener = TcpListener::bind(&thread_bind_address).unwrap_or_else(|e| {
+            eprintln!(
+                "❌ WEB_SERVER: Failed to bind to {}: {}",
+                thread_bind_address, e
+            );
             std::process::exit(1);
         });
-        println!("✅ WEB_SERVER: Server listening on http://127.0.0.1:54321");
+        println!(
+            "✅ WEB_SERVER: Server listening on http://{}",
+            thread_bind_address
+        );
 
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let world_loader = Arc::clone(&world_loader);
+                    let world_loader = Arc::clone(&world_loader_for_thread);
                     thread::spawn(move || {
                         handle_connection(stream, world_loader);
                     });
@@ -93,7 +245,7 @@ pub fn start_simple_web_server() {
             }
         }
     });
-    println!("✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:54321");
+    port
 }
 
 fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader>>) {

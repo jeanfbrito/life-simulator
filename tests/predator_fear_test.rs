@@ -3,10 +3,10 @@
 //! Tests that predator proximity detection and fear-based behavior modification
 //! work correctly as part of Phase 3 implementation.
 
-use life_simulator::entities::{FearState, FearPlugin};
-use life_simulator::entities::entity_types::{spawn_rabbit, spawn_wolf};
-use life_simulator::entities::{TilePosition, MovementSpeed};
 use bevy::prelude::*;
+use life_simulator::entities::entity_types::{spawn_rabbit, spawn_wolf};
+use life_simulator::entities::{FearPlugin, FearState};
+use life_simulator::entities::{MovementSpeed, TilePosition};
 use life_simulator::vegetation::constants::predator_effects::*;
 
 #[test]
@@ -151,8 +151,12 @@ fn test_predator_proximity_detection() {
     assert!(!far_fear.is_fearful());
 
     // Verify distance calculations
-    let near_distance = IVec2::new(10, 10).as_vec2().distance(IVec2::new(0, 0).as_vec2());
-    let far_distance = IVec2::new(50, 50).as_vec2().distance(IVec2::new(0, 0).as_vec2());
+    let near_distance = IVec2::new(10, 10)
+        .as_vec2()
+        .distance(IVec2::new(0, 0).as_vec2());
+    let far_distance = IVec2::new(50, 50)
+        .as_vec2()
+        .distance(IVec2::new(0, 0).as_vec2());
 
     assert!(near_distance <= FEAR_RADIUS as f32);
     assert!(far_distance > FEAR_RADIUS as f32);

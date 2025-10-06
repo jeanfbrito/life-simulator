@@ -6,33 +6,81 @@
 //! 3. Feeding duration based on biomass
 //! 4. Predator fear mechanics
 
-use life_simulator::vegetation::constants::*;
-use life_simulator::entities::types::ForagingStrategy;
-use life_simulator::entities::{FearState, spawn_rabbit};
-use life_simulator::entities::TilePosition;
 use bevy::prelude::*;
+use life_simulator::entities::types::ForagingStrategy;
+use life_simulator::entities::TilePosition;
+use life_simulator::entities::{spawn_rabbit, FearState};
+use life_simulator::vegetation::constants::*;
 
 #[test]
 fn test_phase3_constants_verification() {
     // Test predator fear constants match plan specifications
-    assert_eq!(predator_effects::FEAR_FEEDING_REDUCTION, 0.3, "Feeding reduction should be 30%");
-    assert_eq!(predator_effects::FEAR_RADIUS, 20, "Fear radius should be 20 tiles");
-    assert_eq!(predator_effects::FEAR_BIOMASS_TOLERANCE, 0.2, "Biomass tolerance should be 20%");
-    assert_eq!(predator_effects::FEAR_SPEED_BOOST, 1.5, "Speed boost should be 1.5x");
+    assert_eq!(
+        predator_effects::FEAR_FEEDING_REDUCTION,
+        0.3,
+        "Feeding reduction should be 30%"
+    );
+    assert_eq!(
+        predator_effects::FEAR_RADIUS,
+        20,
+        "Fear radius should be 20 tiles"
+    );
+    assert_eq!(
+        predator_effects::FEAR_BIOMASS_TOLERANCE,
+        0.2,
+        "Biomass tolerance should be 20%"
+    );
+    assert_eq!(
+        predator_effects::FEAR_SPEED_BOOST,
+        1.5,
+        "Speed boost should be 1.5x"
+    );
 
     // Test giving-up constants
-    assert_eq!(consumption::GIVING_UP_THRESHOLD, 20.0, "Absolute giving-up threshold should be 20.0");
-    assert_eq!(consumption::GIVING_UP_THRESHOLD_RATIO, 0.25, "Giving-up ratio should be 25%");
+    assert_eq!(
+        consumption::GIVING_UP_THRESHOLD,
+        20.0,
+        "Absolute giving-up threshold should be 20.0"
+    );
+    assert_eq!(
+        consumption::GIVING_UP_THRESHOLD_RATIO,
+        0.25,
+        "Giving-up ratio should be 25%"
+    );
 
     // Test consumption constants
-    assert_eq!(consumption::MAX_MEAL_FRACTION, 0.3, "Max meal fraction should be 30%");
-    assert_eq!(consumption::FORAGE_MIN_BIOMASS, 10.0, "Minimum forage biomass should be 10.0");
+    assert_eq!(
+        consumption::MAX_MEAL_FRACTION,
+        0.3,
+        "Max meal fraction should be 30%"
+    );
+    assert_eq!(
+        consumption::FORAGE_MIN_BIOMASS,
+        10.0,
+        "Minimum forage biomass should be 10.0"
+    );
 
     // Test species-specific constants
-    assert_eq!(species::rabbit::SEARCH_RADIUS, 15, "Rabbit search radius should be 15");
-    assert_eq!(species::rabbit::SAMPLE_SIZE, 8, "Rabbit sample size should be 8");
-    assert_eq!(species::deer::SEARCH_RADIUS, 25, "Deer search radius should be 25");
-    assert_eq!(species::deer::SAMPLE_SIZE, 12, "Deer sample size should be 12");
+    assert_eq!(
+        species::rabbit::SEARCH_RADIUS,
+        15,
+        "Rabbit search radius should be 15"
+    );
+    assert_eq!(
+        species::rabbit::SAMPLE_SIZE,
+        8,
+        "Rabbit sample size should be 8"
+    );
+    assert_eq!(
+        species::deer::SEARCH_RADIUS,
+        25,
+        "Deer search radius should be 25"
+    );
+    assert_eq!(
+        species::deer::SAMPLE_SIZE,
+        12,
+        "Deer sample size should be 12"
+    );
 
     println!("✅ All Phase 3 constants verified against plan specifications");
 }
@@ -48,8 +96,10 @@ fn test_foraging_strategies() {
     assert!(matches!(default_strategy, ForagingStrategy::Exhaustive));
 
     // Test conversion
-    let from_exhaustive: ForagingStrategy = life_simulator::entities::types::ForagingStrategy::Exhaustive.into();
-    let from_sampled: ForagingStrategy = life_simulator::entities::types::ForagingStrategy::Sampled { sample_size: 5 }.into();
+    let from_exhaustive: ForagingStrategy =
+        life_simulator::entities::types::ForagingStrategy::Exhaustive.into();
+    let from_sampled: ForagingStrategy =
+        life_simulator::entities::types::ForagingStrategy::Sampled { sample_size: 5 }.into();
 
     assert!(matches!(from_exhaustive, ForagingStrategy::Exhaustive));
     if let ForagingStrategy::Sampled { sample_size } = from_sampled {
@@ -113,14 +163,17 @@ fn test_eating_behavior_integration() {
 
     // Create test components (mock)
     let position = TilePosition::from_tile(IVec2::new(0, 0));
-    let hunger = life_simulator::entities::stats::Hunger(life_simulator::entities::stats::Stat::new(50.0, 0.0, 100.0, 0.1));
+    let hunger = life_simulator::entities::stats::Hunger(
+        life_simulator::entities::stats::Stat::new(50.0, 0.0, 100.0, 0.1),
+    );
 
     // Mock world loader and vegetation grid would be needed for full integration
     // This test mainly verifies the function signature and basic logic
 
     // Test different foraging strategies
     let exhaustive_strategy = life_simulator::entities::types::ForagingStrategy::Exhaustive;
-    let sampled_strategy = life_simulator::entities::types::ForagingStrategy::Sampled { sample_size: 8 };
+    let sampled_strategy =
+        life_simulator::entities::types::ForagingStrategy::Sampled { sample_size: 8 };
 
     // These would normally require actual world data
     // For now, we verify the strategies are different
@@ -150,20 +203,32 @@ fn test_phase3_feature_integration() {
     assert!(utility_modifier < 1.0, "Fear should reduce utility");
     assert!(speed_modifier > 1.0, "Fear should increase speed");
     assert!(feeding_reduction > 0.0, "Fear should reduce feeding");
-    assert!(biomass_tolerance > 0.0, "Fear should increase biomass tolerance");
+    assert!(
+        biomass_tolerance > 0.0,
+        "Fear should increase biomass tolerance"
+    );
 
     // 5. Test giving-up thresholds are reasonable
     let absolute_threshold = consumption::GIVING_UP_THRESHOLD;
     let ratio_threshold = consumption::GIVING_UP_THRESHOLD_RATIO;
 
-    assert!(absolute_threshold > 0.0, "Absolute giving-up threshold should be positive");
-    assert!(ratio_threshold > 0.0 && ratio_threshold <= 1.0, "Ratio threshold should be between 0 and 1");
+    assert!(
+        absolute_threshold > 0.0,
+        "Absolute giving-up threshold should be positive"
+    );
+    assert!(
+        ratio_threshold > 0.0 && ratio_threshold <= 1.0,
+        "Ratio threshold should be between 0 and 1"
+    );
 
     // 6. Test foraging strategies exist
     let exhaustive = ForagingStrategy::Exhaustive;
     let sampled = ForagingStrategy::Sampled { sample_size: 10 };
 
-    assert_ne!(exhaustive, sampled, "Different foraging strategies should be distinct");
+    assert_ne!(
+        exhaustive, sampled,
+        "Different foraging strategies should be distinct"
+    );
 
     println!("✅ Phase 3 feature integration test passed");
     println!("   - Fear state: ✅");
@@ -171,7 +236,10 @@ fn test_phase3_feature_integration() {
     println!("   - Speed modifier: {:.2}", speed_modifier);
     println!("   - Feeding reduction: {:.2}", feeding_reduction);
     println!("   - Biomass tolerance: {:.2}", biomass_tolerance);
-    println!("   - Giving-up thresholds: {} (absolute), {:.2} (ratio)", absolute_threshold, ratio_threshold);
+    println!(
+        "   - Giving-up thresholds: {} (absolute), {:.2} (ratio)",
+        absolute_threshold, ratio_threshold
+    );
     println!("   - Foraging strategies: ✅");
 }
 
@@ -182,18 +250,38 @@ fn test_phase3_constants_match_plan() {
     // From docs/PLANT_SYSTEM_PLAN.md and docs/PLANT_SYSTEM_PARAMS.md
 
     // Predator fear effects (from plan)
-    assert_eq!(predator_effects::FEAR_FEEDING_REDUCTION, 0.3, "30% shorter feeding");
-    assert_eq!(predator_effects::FEAR_RADIUS, 20, "20 tiles detection radius");
-    assert_eq!(predator_effects::FEAR_BIOMASS_TOLERANCE, 0.2, "20% lower biomass threshold");
+    assert_eq!(
+        predator_effects::FEAR_FEEDING_REDUCTION,
+        0.3,
+        "30% shorter feeding"
+    );
+    assert_eq!(
+        predator_effects::FEAR_RADIUS,
+        20,
+        "20 tiles detection radius"
+    );
+    assert_eq!(
+        predator_effects::FEAR_BIOMASS_TOLERANCE,
+        0.2,
+        "20% lower biomass threshold"
+    );
     assert_eq!(predator_effects::FEAR_SPEED_BOOST, 1.5, "1.5x speed boost");
 
     // Giving-up density (from plan)
-    assert_eq!(consumption::GIVING_UP_THRESHOLD_RATIO, 0.25, "25% of optimal biomass");
+    assert_eq!(
+        consumption::GIVING_UP_THRESHOLD_RATIO,
+        0.25,
+        "25% of optimal biomass"
+    );
     assert_eq!(consumption::GIVING_UP_THRESHOLD, 20.0, "Absolute threshold");
 
     // Consumption rules (from plan)
     assert_eq!(consumption::MAX_MEAL_FRACTION, 0.3, "30% rule");
-    assert_eq!(consumption::FORAGE_MIN_BIOMASS, 10.0, "Minimum biomass for foraging");
+    assert_eq!(
+        consumption::FORAGE_MIN_BIOMASS,
+        10.0,
+        "Minimum biomass for foraging"
+    );
 
     // Species-specific parameters (from plan)
     assert_eq!(species::rabbit::SEARCH_RADIUS, 15, "Rabbit search radius");

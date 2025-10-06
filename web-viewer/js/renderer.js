@@ -9,6 +9,7 @@ export class Renderer {
         this.canvas = canvas;
         this.ctx = ctx;
         this.setupCanvas();
+        this.biomassWarningShown = false;
     }
 
     setupCanvas() {
@@ -129,7 +130,13 @@ export class Renderer {
                 }
 
                 // Draw tile
-                const color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS[DEFAULTS.terrainType];
+                let color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS[DEFAULTS.terrainType];
+
+                // Apply grass density overlay if enabled and terrain supports grass
+                if (CONFIG.showGrassDensity && this.biomassData && (terrainType === 'Grass' || terrainType === 'Forest' || terrainType === 'Dirt')) {
+                    color = this.applyGrassDensityOverlay(color, chunkX, chunkY, localX, localY, terrainType);
+                }
+
                 this.ctx.fillStyle = color;
                 this.ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
 
@@ -383,5 +390,106 @@ export class Renderer {
                 Math.round((stats.forestTiles / stats.totalTiles) * 100) + '%';
             document.getElementById('resource-count').textContent = stats.resourceCount;
         }
+    }
+
+    // Fetch biomass data for grass density visualization
+    async fetchBiomassData() {
+        const url = `${CONFIG.apiBaseUrl}/api/vegetation/biomass`;
+
+        try {
+            const response = await fetch(url, {
+                mode: 'cors',
+                credentials: 'omit'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!Array.isArray(data.heatmap) || data.heatmap.length === 0) {
+                if (!this.biomassWarningShown) {
+                    console.warn('Biomass data response did not include a usable heatmap.');
+                    this.biomassWarningShown = true;
+                }
+                this.biomassData = null;
+                return null;
+            }
+
+            this.biomassData = data;
+            this.biomassWarningShown = false;
+            return data;
+        } catch (error) {
+            if (!this.biomassWarningShown) {
+                console.warn('Failed to fetch biomass data:', error);
+                this.biomassWarningShown = true;
+            }
+            this.biomassData = null;
+            return null;
+        }
+    }
+
+    // Apply grass density overlay to terrain colors
+    applyGrassDensityOverlay(baseColor, chunkX, chunkY, localX, localY, terrainType) {
+        if (!this.biomassData || !this.biomassData.heatmap) {
+            return baseColor;
+        }
+
+        // Calculate position in the biomass heatmap
+        const heatmapWidth = this.biomassData.heatmap.length;
+        const heatmapHeight = this.biomassData.heatmap[0]?.length || 0;
+        const offsetX = Math.floor(heatmapWidth / 2);
+        const offsetY = Math.floor(heatmapHeight / 2);
+        const heatmapChunkX = chunkX + offsetX;
+        const heatmapChunkY = chunkY + offsetY;
+
+        if (heatmapChunkX >= 0 && heatmapChunkX < heatmapWidth &&
+            heatmapChunkY >= 0 && heatmapChunkY < heatmapHeight) {
+
+            const biomassLevel = this.biomassData.heatmap[heatmapChunkX][heatmapChunkY];
+            return this.darkenColorByBiomass(baseColor, biomassLevel, terrainType);
+        }
+
+        return baseColor;
+    }
+
+    // Darken color based on biomass density
+    darkenColorByBiomass(color, biomassLevel, terrainType) {
+        // Parse hex color to RGB
+        const hex = color.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+
+        // Calculate darkness factor based on biomass (0-100)
+        // Higher biomass = darker shade
+        let darknessFactor = 0;
+
+        if (terrainType === 'Grass') {
+            // Grass: 0% biomass = 0% darkening, 100% biomass = 40% darkening
+            darknessFactor = (biomassLevel / 100) * 0.4;
+        } else if (terrainType === 'Forest') {
+            // Forest: already dark, so less dramatic effect
+            // 0% biomass = 0% darkening, 100% biomass = 20% darkening
+            darknessFactor = (biomassLevel / 100) * 0.2;
+        } else if (terrainType === 'Dirt') {
+            // Dirt: can show sparse vegetation
+            // 0% biomass = 0% darkening, 100% biomass = 25% darkening
+            darknessFactor = (biomassLevel / 100) * 0.25;
+        }
+
+        // Apply darkening
+        const newR = Math.floor(r * (1 - darknessFactor));
+        const newG = Math.floor(g * (1 - darknessFactor));
+        const newB = Math.floor(b * (1 - darknessFactor));
+
+        // Convert back to hex
+        const toHex = (n) => {
+            const hex = n.toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+        };
+
+        return `#${toHex(newR)}${toHex(newG)}${toHex(newB)}`;
     }
 }

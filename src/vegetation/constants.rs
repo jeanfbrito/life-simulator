@@ -10,6 +10,10 @@ pub mod growth {
     /// Higher values = faster regrowth, but can lead to instability
     pub const GROWTH_RATE: f32 = 0.05; // 5% per tick at optimal conditions
 
+    /// Initial biomass assigned to newly generated vegetation tiles
+    /// Represents sparse ground cover that must regrow before becoming forageable
+    pub const INITIAL_BIOMASS: f32 = 5.0;
+
     /// Maximum sustainable biomass per tile (Bmax)
     /// Represents the carrying capacity of vegetation on a single tile
     /// Measured in biomass units (arbitrary but consistent across the system)
@@ -26,7 +30,7 @@ pub mod growth {
 
     /// Biomass recovery threshold for active tile tracking
     /// Tiles below this threshold are marked as "active" for faster updates
-    pub const ACTIVE_TILE_THRESHOLD: f32 = 95.0; // 95% of Bmax
+    pub const ACTIVE_TILE_THRESHOLD: f32 = 0.95; // 95% of Bmax
 }
 
 /// Herbivore consumption parameters
@@ -128,14 +132,14 @@ pub mod terrain_modifiers {
     /// Some terrains support more vegetation than others
     pub fn max_biomass_multiplier(terrain: &str) -> f32 {
         match terrain {
-            "Grass" => 1.0, // Baseline
-            "Forest" => 1.2, // Understory vegetation
-            "Dirt" => 0.7, // Poor soil
-            "Swamp" => 0.8, // Water-logged but productive
-            "Sand" | "Desert" => 0.2, // Sparse vegetation
+            "Grass" => 1.0,              // Baseline
+            "Forest" => 1.2,             // Understory vegetation
+            "Dirt" => 0.7,               // Poor soil
+            "Swamp" => 0.8,              // Water-logged but productive
+            "Sand" | "Desert" => 0.2,    // Sparse vegetation
             "Stone" | "Mountain" => 0.1, // Lichens, mosses only
-            "Snow" => 0.3, // Limited alpine vegetation
-            _ => 0.0, // No vegetation on water, deep water
+            "Snow" => 0.3,               // Limited alpine vegetation
+            _ => 0.0,                    // No vegetation on water, deep water
         }
     }
 
@@ -143,14 +147,14 @@ pub mod terrain_modifiers {
     /// Some terrains promote faster or slower vegetation growth
     pub fn growth_rate_modifier(terrain: &str) -> f32 {
         match terrain {
-            "Grass" => 1.0, // Baseline growth rate
-            "Forest" => 1.1, // Protected environment, slightly faster
-            "Dirt" => 0.8, // Poorer nutrients, slower growth
-            "Swamp" => 1.2, // High moisture, faster growth
-            "Sand" | "Desert" => 0.4, // Water-limited, slow growth
+            "Grass" => 1.0,              // Baseline growth rate
+            "Forest" => 1.1,             // Protected environment, slightly faster
+            "Dirt" => 0.8,               // Poorer nutrients, slower growth
+            "Swamp" => 1.2,              // High moisture, faster growth
+            "Sand" | "Desert" => 0.4,    // Water-limited, slow growth
             "Stone" | "Mountain" => 0.3, // Harsh conditions, very slow
-            "Snow" => 0.5, // Cold-limited, slow growth
-            _ => 0.0, // No growth on water
+            "Snow" => 0.5,               // Cold-limited, slow growth
+            _ => 0.0,                    // No growth on water
         }
     }
 }
@@ -159,7 +163,16 @@ pub mod terrain_modifiers {
 pub mod performance {
     /// Maximum number of active tiles to process per growth cycle
     /// Limits CPU usage for vegetation updates on large maps
-    pub const MAX_ACTIVE_TILES_PER_UPDATE: usize = 1000;
+    pub const MAX_ACTIVE_TILES_PER_UPDATE: usize = 2000;
+
+    /// Default number of vegetation chunks processed per update pass
+    pub const DEFAULT_CHUNKS_PER_PASS: usize = 8;
+
+    /// Minimum number of chunks processed when throttling for performance
+    pub const MIN_CHUNKS_PER_PASS: usize = 1;
+
+    /// Maximum number of chunks processed when ramping up throughput
+    pub const MAX_CHUNKS_PER_PASS: usize = 128;
 
     /// Random sample size of inactive tiles to update per cycle
     /// Ensures inactive tiles still get occasional updates
@@ -178,9 +191,21 @@ pub mod performance {
     /// Vegetation updates should stay within this budget at 1 Hz
     pub const CPU_BUDGET_US: u64 = 1000; // 1ms per growth cycle
 
+    /// Time budget for chunk processing (spread over main loop)
+    pub const CHUNK_PROCESS_BUDGET_US: u64 = 2000; // 2ms per frame
+
+    /// Base growth intervals per chunk tier (ticks)
+    pub const CHUNK_INTERVAL_HOT_TICKS: u64 = 50; // active grazing areas (~5s at 10 TPS)
+    pub const CHUNK_INTERVAL_WARM_TICKS: u64 = 150; // moderately active (~15s)
+    pub const CHUNK_INTERVAL_COLD_TICKS: u64 = 300; // idle regions (~30s)
+
+    /// Adaptive rate adjustments for chunk budget (scale up/down)
+    pub const CHUNK_RATE_ADJUST_UP: f32 = 1.25;
+    pub const CHUNK_RATE_ADJUST_DOWN: f32 = 0.7;
+
     /// Maximum tiles to process in a single batch
     /// Prevents large spikes in CPU usage by breaking updates into chunks
-    pub const BATCH_SIZE: usize = 250; // Process 250 tiles per batch
+    pub const BATCH_SIZE: usize = 64; // Process up to 64 tiles per chunk pass
 
     /// Maximum time per batch before yielding (in microseconds)
     /// Ensures the system doesn't exceed time budget per batch
@@ -200,6 +225,9 @@ pub mod performance {
 
     /// When average biomass is below this, increase update frequency
     pub const LOW_BIOMASS_THRESHOLD: f32 = 20.0; // 20% of maximum
+
+    /// How often to refresh the vegetation heatmap snapshot for the web viewer
+    pub const HEATMAP_UPDATE_INTERVAL_TICKS: u64 = 120; // every 12s at 10 TPS
 }
 
 /// Memory optimization parameters for Phase 4

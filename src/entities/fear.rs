@@ -1,12 +1,11 @@
+use crate::entities::entity_types::{Rabbit, Wolf};
+use crate::entities::TilePosition;
+use crate::vegetation::constants::predator_effects::*;
 /// Predator fear system for herbivore behavior modification
 ///
 /// This module implements predator proximity detection and fear-based behavior
 /// modification as outlined in Phase 3 of the plant system plan.
-
 use bevy::prelude::*;
-use crate::vegetation::constants::predator_effects::*;
-use crate::entities::entity_types::{Rabbit, Wolf};
-use crate::entities::TilePosition;
 
 /// Component representing fear state in herbivores
 #[derive(Component, Debug, Clone)]
@@ -122,9 +121,7 @@ pub fn predator_proximity_system(
     predator_query: Query<&TilePosition, With<Wolf>>,
 ) {
     // Collect predator positions
-    let predator_positions: Vec<IVec2> = predator_query.iter()
-        .map(|pos| pos.tile)
-        .collect();
+    let predator_positions: Vec<IVec2> = predator_query.iter().map(|pos| pos.tile).collect();
 
     // Update fear states for all prey
     for (entity, prey_pos, mut fear_state) in prey_query.iter_mut() {
@@ -187,10 +184,7 @@ impl Plugin for FearPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
-            (
-                predator_proximity_system,
-                fear_speed_system,
-            ).chain()
+            (predator_proximity_system, fear_speed_system).chain(),
         );
 
         // Initialize fear states for all existing herbivores
@@ -227,7 +221,10 @@ mod tests {
             fear_state.decay_fear();
         }
 
-        assert!(fear_state.fear_level < 0.1, "Fear should decay significantly");
+        assert!(
+            fear_state.fear_level < 0.1,
+            "Fear should decay significantly"
+        );
     }
 
     #[test]

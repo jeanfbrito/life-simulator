@@ -3030,6 +3030,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-tungstenite",
+ "tracing-subscriber",
 ]
 
 [[package]]
