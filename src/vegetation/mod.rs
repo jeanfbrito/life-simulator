@@ -21,9 +21,13 @@ pub mod benchmark;
 /// 2. **Terrain System**: Growth rates vary by terrain type
 /// 3. **World Loader**: Vegetation initializes based on map data
 /// 4. **Web Viewer**: Optional biomass overlay for debugging
+pub mod chunk_lod;
 pub mod constants;
 pub mod memory_optimization;
 pub mod resource_grid;
+
+// Public exports
+pub use resource_grid::ResourceGrid;
 
 use bevy::prelude::*;
 use serde_json::json;
@@ -1714,6 +1718,8 @@ impl Plugin for VegetationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<VegetationGrid>()
             .init_resource::<crate::vegetation::resource_grid::ResourceGrid>()
+            // Phase 4: Chunk Level-of-Detail system
+            .init_resource::<crate::vegetation::chunk_lod::ChunkLODManager>()
             .add_systems(
                 PostStartup,
                 setup_vegetation_system.run_if(resource_exists::<WorldLoader>),
@@ -1723,7 +1729,10 @@ impl Plugin for VegetationPlugin {
                 vegetation_growth_system.run_if(every_n_ticks(GROWTH_INTERVAL_TICKS)),
             )
             // Phase 3: ResourceGrid event loop with tick budget
-            .add_systems(FixedUpdate, resource_grid_update_system);
+            .add_systems(FixedUpdate, resource_grid_update_system)
+            // Phase 4: Chunk LOD systems
+            .add_systems(FixedUpdate, chunk_lod_update_system)
+            .add_systems(FixedUpdate, chunk_lod_aggregation_system.run_if(every_n_ticks(20))); // Every 2 seconds
     }
 }
 
@@ -1916,6 +1925,103 @@ fn resource_grid_update_system(
     }
 
     end_timing_resource(&mut profiler, "resource_grid");
+}
+
+/// Phase 4: Chunk LOD update system
+///
+/// This system manages Level-of-Detail for chunks based on agent proximity:
+/// - Tracks agent positions and updates chunk temperatures (hot/warm/cold)
+/// - Performs lazy activation when agents enter new areas
+/// - Updates active chunks with appropriate detail levels
+fn chunk_lod_update_system(
+    mut lod_manager: ResMut<crate::vegetation::chunk_lod::ChunkLODManager>,
+    mut resource_grid: ResMut<crate::vegetation::resource_grid::ResourceGrid>,
+    entity_positions: Query<&crate::entities::TilePosition>,
+    tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
+) {
+    use crate::simulation::profiler::start_timing_resource;
+    use crate::simulation::profiler::end_timing_resource;
+
+    start_timing_resource(&mut profiler, "chunk_lod");
+
+    // Collect agent positions
+    let agent_positions: Vec<IVec2> = entity_positions.iter().map(|pos| pos.tile).collect();
+
+    // Update LOD manager with new agent positions
+    lod_manager.update_agent_positions(agent_positions);
+
+    // Perform lazy activation for chunks that need it
+    let active_chunks = lod_manager.get_active_chunks().clone();
+    let current_tick = tick.0;
+
+    for chunk_coord in active_chunks {
+        // Check if chunk needs lazy activation
+        if let Some(chunk_metadata) = lod_manager.get_chunk(&chunk_coord) {
+            if chunk_metadata.needs_update(current_tick, 50) {
+                // This is a simplified check - in a real system, we'd be more sophisticated
+                lod_manager.lazy_activate_chunk(chunk_coord,
+                    &mut resource_grid,
+                    current_tick);
+            }
+        }
+    }
+
+    // Clean up distant chunks periodically
+    if current_tick % 600 == 0 { // Every minute
+        lod_manager.cleanup_distant_chunks(500); // Clean up chunks beyond 500 tiles
+    }
+
+    // Log metrics periodically
+    if current_tick % 1200 == 0 { // Every 2 minutes
+        let metrics = lod_manager.get_metrics();
+        info!(
+            "🌍 Chunk LOD - Total: {}, Hot: {}, Warm: {}, Cold: {}, Active: {}",
+            metrics.total_chunks,
+            metrics.hot_chunks,
+            metrics.warm_chunks,
+            metrics.cold_chunks,
+            lod_manager.get_active_chunks().len()
+        );
+    }
+
+    end_timing_resource(&mut profiler, "chunk_lod");
+}
+
+/// Phase 4: Chunk aggregation system
+///
+/// This system aggregates ResourceGrid data into chunk metadata:
+/// - Updates aggregate biomass for active chunks
+/// - Generates impostor data for cold chunks
+/// - Maintains chunk metadata for efficient queries
+fn chunk_lod_aggregation_system(
+    mut lod_manager: ResMut<crate::vegetation::chunk_lod::ChunkLODManager>,
+    resource_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
+    tick: Res<SimulationTick>,
+    mut profiler: ResMut<crate::simulation::TickProfiler>,
+) {
+    use crate::simulation::profiler::start_timing_resource;
+    use crate::simulation::profiler::end_timing_resource;
+
+    start_timing_resource(&mut profiler, "chunk_aggregation");
+
+    let current_tick = tick.0;
+
+    // Get all active chunks
+    let active_chunks: Vec<crate::tilemap::ChunkCoordinate> =
+        lod_manager.get_active_chunks().iter().cloned().collect();
+
+    // Update metadata for active chunks
+    for chunk_coord in active_chunks {
+        lod_manager.update_chunk_from_grid(chunk_coord, &resource_grid, current_tick);
+    }
+
+    // Reset metrics periodically
+    if current_tick % 1200 == 0 { // Every 2 minutes
+        lod_manager.reset_metrics();
+    }
+
+    end_timing_resource(&mut profiler, "chunk_aggregation");
 }
 
 // Web API functions for viewer overlay
