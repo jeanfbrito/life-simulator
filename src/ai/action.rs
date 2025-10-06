@@ -1,6 +1,6 @@
 use crate::entities::stats::{Energy, Hunger, Thirst};
 use crate::entities::{MoveOrder, TilePosition};
-use crate::pathfinding::{Path, PathfindingFailed};
+use crate::pathfinding::{Path, PathRequest, PathfindingFailed};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 /// Action system for TQUAI
@@ -126,6 +126,16 @@ fn find_adjacent_walkable_tile(water_pos: IVec2, world_loader: &WorldLoader) -> 
     None
 }
 
+/// Remove movement-related components so a cancelled action stops any in-flight navigation
+fn clear_navigation_state(world: &mut World, entity: Entity) {
+    if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+        entity_mut.remove::<MoveOrder>();
+        entity_mut.remove::<PathRequest>();
+        entity_mut.remove::<Path>();
+        entity_mut.remove::<PathfindingFailed>();
+    }
+}
+
 // =============================================================================
 // DRINK WATER ACTION
 // =============================================================================
@@ -140,6 +150,7 @@ fn find_adjacent_walkable_tile(water_pos: IVec2, world_loader: &WorldLoader) -> 
 pub struct DrinkWaterAction {
     pub target_tile: IVec2,
     pub started: bool,
+    pub move_target: Option<IVec2>,
 }
 
 impl DrinkWaterAction {
@@ -147,6 +158,7 @@ impl DrinkWaterAction {
         Self {
             target_tile,
             started: false,
+            move_target: None,
         }
     }
 }
@@ -236,42 +248,71 @@ impl Action for DrinkWaterAction {
         }
 
         // We need to move closer to the water
-        if !self.started {
-            // Issue move order on first execution
-            // Find a walkable tile adjacent to the water
+        let mut needs_new_target = self.move_target.is_none();
+
+        if let Some(target) = self.move_target {
+            // Ensure the cached move target is still valid
             if let Some(world_loader) = world.get_resource::<WorldLoader>() {
-                if let Some(adjacent_pos) =
-                    find_adjacent_walkable_tile(self.target_tile, world_loader)
-                {
-                    info!(
-                        "🐇 Entity {:?} starting journey to water at {:?} (will stop at adjacent tile {:?})",
-                        entity,
-                        self.target_tile,
-                        adjacent_pos
-                    );
+                let still_walkable = world_loader
+                    .get_terrain_at(target.x, target.y)
+                    .and_then(|terrain_str| TerrainType::from_str(&terrain_str))
+                    .map(|terrain| terrain.is_walkable())
+                    .unwrap_or(false);
 
-                    if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
-                        entity_mut.insert(MoveOrder {
-                            destination: adjacent_pos,
-                            allow_diagonal: true, // Enable diagonal pathfinding
-                        });
-                    }
-
-                    self.started = true;
-                } else {
-                    warn!(
-                        "No adjacent walkable tile found for water at {:?}",
-                        self.target_tile
-                    );
-                    return ActionResult::Failed;
+                if !still_walkable {
+                    needs_new_target = true;
                 }
             } else {
                 return ActionResult::Failed;
             }
         }
 
+        if needs_new_target {
+            if let Some(world_loader) = world.get_resource::<WorldLoader>() {
+                self.move_target = find_adjacent_walkable_tile(self.target_tile, world_loader)
+                    .or_else(|| {
+                        // Fallback: allow standing in the shallow water tile itself
+                        Some(self.target_tile)
+                    });
+            } else {
+                return ActionResult::Failed;
+            }
+
+            if let Some(target) = self.move_target {
+                info!(
+                    "🐇 Entity {:?} heading to water at {:?} (move target {:?})",
+                    entity, self.target_tile, target
+                );
+
+                if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                    entity_mut.insert(MoveOrder {
+                        destination: target,
+                        allow_diagonal: true,
+                    });
+                }
+
+                self.started = true;
+            } else {
+                warn!(
+                    "No adjacent or fallback tile found for water at {:?}",
+                    self.target_tile
+                );
+                return ActionResult::Failed;
+            }
+        }
+
         // Still traveling
         ActionResult::InProgress
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        clear_navigation_state(world, entity);
+        self.started = false;
+        self.move_target = None;
+        debug!(
+            "🚫 DrinkWater action cancelled for entity {:?}, clearing navigation state",
+            entity
+        );
     }
 
     fn name(&self) -> &'static str {
@@ -422,8 +463,7 @@ impl Action for GrazeAction {
                         if let Some(resource_grid) =
                             world.get_resource::<crate::vegetation::resource_grid::ResourceGrid>()
                         {
-                            if let Some(current_cell) = resource_grid.get_cell(self.target_tile)
-                            {
+                            if let Some(current_cell) = resource_grid.get_cell(self.target_tile) {
                                 // Giving up thresholds from old system
                                 const GIVING_UP_THRESHOLD: f32 = 5.0;
                                 const GIVING_UP_THRESHOLD_RATIO: f32 = 0.2;
@@ -456,11 +496,8 @@ impl Action for GrazeAction {
                     {
                         // MAX_MEAL_FRACTION from old system
                         const MAX_MEAL_FRACTION: f32 = 0.3;
-                        let consumed = resource_grid.consume_at(
-                            self.target_tile,
-                            demand,
-                            MAX_MEAL_FRACTION,
-                        );
+                        let consumed =
+                            resource_grid.consume_at(self.target_tile, demand, MAX_MEAL_FRACTION);
 
                         if consumed > 0.0 && !should_give_up {
                             // Successfully consumed, reduce hunger
@@ -468,7 +505,7 @@ impl Action for GrazeAction {
                                 if let Some(mut hunger) =
                                     entity_mut.get_mut::<crate::entities::stats::Hunger>()
                                 {
-                                    hunger.0.change(consumed);
+                                    hunger.0.change(-consumed);
                                 }
                             }
 
@@ -530,6 +567,19 @@ impl Action for GrazeAction {
 
     fn name(&self) -> &'static str {
         "Graze"
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        clear_navigation_state(world, entity);
+        self.started = false;
+        self.initial_biomass = None;
+        self.feeding_attempts = 0;
+        self.duration_ticks = 0;
+        self.ticks_elapsed = 0;
+        debug!(
+            "🚫 Graze action cancelled for entity {:?}, clearing grazing state",
+            entity
+        );
     }
 }
 
@@ -697,6 +747,15 @@ impl Action for FollowAction {
         ActionResult::InProgress
     }
 
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        clear_navigation_state(world, entity);
+        self.started = false;
+        debug!(
+            "🚫 Follow action cancelled for entity {:?}, stopping movement",
+            entity
+        );
+    }
+
     fn name(&self) -> &'static str {
         "Follow"
     }
@@ -715,6 +774,8 @@ pub struct MateAction {
     pub duration_ticks: u32,
     pub started: bool,
     pub waited: u32,
+    pub total_wait: u32,
+    pub max_wait_ticks: u32,
 }
 
 impl MateAction {
@@ -725,6 +786,8 @@ impl MateAction {
             duration_ticks,
             started: false,
             waited: 0,
+            total_wait: 0,
+            max_wait_ticks: duration_ticks.saturating_mul(5).max(duration_ticks + 25),
         }
     }
 }
@@ -787,13 +850,28 @@ impl Action for MateAction {
             return ActionResult::InProgress;
         }
 
+        // We are on the meeting tile, ensure we're not still trying to path somewhere else
+        clear_navigation_state(world, entity);
+        self.started = true;
+
+        // Track total waiting time once we've reached the rendezvous point
+        self.total_wait = self.total_wait.saturating_add(1);
+        if self.total_wait > self.max_wait_ticks {
+            debug!(
+                "⚠️ MateAction: entity {:?} waited {} ticks for partner {:?} without success",
+                entity,
+                self.total_wait,
+                self.partner
+            );
+            return ActionResult::TriggerFollowUp;
+        }
+
         // At meeting tile: ensure partner arrives on same or adjacent tile
         let diff = (self.meeting_tile - partner_pos.tile).abs();
-        let on_spot = diff.x == 0 && diff.y == 0;
-        let adjacent = diff.x.max(diff.y) <= 1;
+        let partner_adjacent = diff.x.max(diff.y) <= 1;
 
-        if !adjacent {
-            // Friend is still approaching
+        if !partner_adjacent {
+            // Partner is still approaching; keep encouraging movement and reset wait timer
             if world.get::<Path>(self.partner).is_none() {
                 if let Some(mut partner_mut) = world.get_entity_mut(self.partner).ok() {
                     partner_mut.insert(MoveOrder {
@@ -802,24 +880,31 @@ impl Action for MateAction {
                     });
                 }
             }
-            self.waited = self.waited.saturating_sub(self.waited.min(1));
+            self.waited = self.waited.saturating_sub(1);
+
+            // Debug logging for partner not adjacent
+            debug!(
+                "💕 MateAction: Entity {:?} waiting for partner {:?} - not adjacent. Me: {:?}, Partner: {:?}, Meeting: {:?}",
+                entity, self.partner, me_pos.tile, partner_pos.tile, self.meeting_tile
+            );
+
             return ActionResult::InProgress;
         }
 
-        if !on_spot {
-            if world.get::<Path>(self.partner).is_none() {
-                if let Some(mut partner_mut) = world.get_entity_mut(self.partner).ok() {
-                    partner_mut.insert(MoveOrder {
-                        destination: self.meeting_tile,
-                        allow_diagonal: true,
-                    });
-                }
-            }
-            return ActionResult::InProgress;
-        }
+        // Partner is adjacent—stop them from wandering off while waiting
+        clear_navigation_state(world, self.partner);
 
-        // Both are adjacent: perform mating over duration
+        // Both are within touching distance: perform mating over duration
         self.waited = self.waited.saturating_add(1);
+
+        // Debug logging for mating progress
+        if self.waited <= 1 || self.waited % 10 == 0 || self.waited >= self.duration_ticks {
+            info!(
+                "💕 MateAction: Entity {:?} mating progress: {}/{} ticks, partner {:?} at meeting tile {:?}",
+                entity, self.waited, self.duration_ticks, self.partner, self.meeting_tile
+            );
+        }
+
         if self.waited < self.duration_ticks {
             return ActionResult::InProgress;
         }
@@ -848,7 +933,7 @@ impl Action for MateAction {
                         remaining_ticks: cfg.postpartum_cooldown_ticks,
                     });
                     info!(
-                        "🐇❤️ Pregnancy started for {:?} with father {:?} (litter {})",
+                        "❤️ Pregnancy started for entity {:?} with father {:?} (litter size: {})",
                         entity, self.partner, litter
                     );
                 }
@@ -890,6 +975,10 @@ impl Action for MateAction {
             p.remove::<MatingIntent>();
         }
 
+        // Ensure neither retains stale movement orders
+        clear_navigation_state(world, entity);
+        clear_navigation_state(world, self.partner);
+
         ActionResult::Success
     }
 
@@ -913,6 +1002,9 @@ impl Action for MateAction {
                 entity
             );
         }
+
+        clear_navigation_state(world, entity);
+        clear_navigation_state(world, self.partner);
     }
 
     fn name(&self) -> &'static str {

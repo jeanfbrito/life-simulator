@@ -86,9 +86,13 @@ impl IdleTracker {
     }
 
     pub fn is_long_idle(&self, config: &BehaviorConfig) -> bool {
-        // Consider long idle as 10x the wander radius in ticks
-        let idle_threshold = (config.wander_radius * 10) as u32;
-        self.ticks_since_action >= idle_threshold
+        // Reduced idle threshold for more responsive AI
+        // Consider long idle as 3x the wander radius in ticks (down from 10x)
+        let idle_threshold = (config.wander_radius * 3) as u32;
+        // Minimum threshold of 20 ticks (2 seconds) to prevent excessive replanning
+        let min_threshold = 20u32;
+        let final_threshold = idle_threshold.max(min_threshold);
+        self.ticks_since_action >= final_threshold
     }
 }
 
@@ -286,6 +290,40 @@ pub fn long_idle_system(
     }
 }
 
+/// Additional fallback system for more aggressive replanning of idle entities
+///
+/// This system ensures that idle entities get replanned frequently even if
+/// action completion detection fails, providing a safety net for the AI system.
+pub fn aggressive_idle_fallback_system(
+    mut replan_queue: ResMut<ReplanQueue>,
+    mut query: Query<(Entity, &mut IdleTracker)>,
+    tick: Res<SimulationTick>,
+    mut profiler: ResMut<TickProfiler>,
+) {
+    let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_aggressive_idle");
+
+    // Only run every 30 ticks (3 seconds) to avoid excessive overhead
+    if tick.0 % 30 != 0 {
+        return;
+    }
+
+    for (entity, mut idle_tracker) in query.iter_mut() {
+        // If entity has been idle for more than 30 ticks (3 seconds), trigger replanning
+        if idle_tracker.ticks_since_action >= 30 {
+            let reason = format!(
+                "Aggressive fallback: {} ticks since last action",
+                idle_tracker.ticks_since_action
+            );
+
+            debug!("🔄 Entity {:?} aggressive fallback trigger: {}", entity, reason);
+            replan_queue.push(entity, ReplanPriority::Normal, reason, tick.0);
+
+            // Reset the timer to avoid spam
+            idle_tracker.mark_action_completed(tick.0);
+        }
+    }
+}
+
 /// Cleanup system to remove stale entries from the ReplanQueue
 ///
 /// This system periodically cleans up the replan queue to remove entries
@@ -309,7 +347,7 @@ pub struct TriggerEmittersPlugin;
 impl Plugin for TriggerEmittersPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
                 // High priority systems (run first)
                 fear_trigger_system,
@@ -317,6 +355,7 @@ impl Plugin for TriggerEmittersPlugin {
                 stat_threshold_system,
                 action_completion_system,
                 long_idle_system,
+                aggressive_idle_fallback_system,
                 // Cleanup system (run last)
                 replan_queue_cleanup_system,
             )

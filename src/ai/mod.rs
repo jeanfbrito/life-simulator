@@ -40,8 +40,8 @@ impl Plugin for TQUAIPlugin {
             // Plugins
             .add_plugins(TriggerEmittersPlugin)
             .add_plugins(EventDrivenPlannerPlugin)
-            // Tick-synced systems (run when should_tick == true)
-            .add_systems(Update, (execute_queued_actions,).run_if(should_tick));
+            // Tick-synced systems (run on simulation ticks)
+            .add_systems(FixedUpdate, (execute_queued_actions,).run_if(should_tick));
     }
 }
 

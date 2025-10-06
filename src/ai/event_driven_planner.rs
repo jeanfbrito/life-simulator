@@ -130,7 +130,7 @@ pub struct EventDrivenPlannerPlugin;
 impl Plugin for EventDrivenPlannerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
                 event_driven_planner_system,
                 crate::entities::types::rabbit::plan_rabbit_actions,
@@ -169,16 +169,14 @@ mod tests {
     #[test]
     fn test_replan_queue_drain() {
         let mut queue = ReplanQueue::new();
+        let mut world = World::new();
+        let entity_high = world.spawn_empty().id();
+        let entity_normal = world.spawn_empty().id();
 
-        // Add some requests
+        // Add some requests with distinct entities so dedupe doesn't collapse them
+        queue.push(entity_high, ReplanPriority::High, "test1".to_string(), 1);
         queue.push(
-            Entity::PLACEHOLDER,
-            ReplanPriority::High,
-            "test1".to_string(),
-            1,
-        );
-        queue.push(
-            Entity::PLACEHOLDER,
+            entity_normal,
             ReplanPriority::Normal,
             "test2".to_string(),
             1,
