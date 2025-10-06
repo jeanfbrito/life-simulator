@@ -1,4 +1,11 @@
-# Plant System Implementation Plan
+# Plant System Implementation Plan ⚠️ **SUPERSEDED**
+
+**⚠️ This document has been superseded by the vegetation system rewrite.**
+See: [Vegetation System Rewrite Plan](VEGETATION_REWRITE_PLAN.md) ✅ **COMPLETED**
+
+The new system uses a sparse, event-driven ResourceGrid architecture instead of the dense tile-by-tile approach described in this document.
+
+---
 
 This plan breaks the proposed vegetation layer into incremental milestones. Each section lists the goal, concrete tasks, reference files, and verification steps so we can ship a performant plant loop without seasons or day/night cycles.
 

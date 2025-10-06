@@ -231,9 +231,6 @@ pub struct ActiveTileMetrics {
     pub chunk_budget: usize,
 }
 
-
-
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GrowthTier {
     Hot,
@@ -357,8 +354,6 @@ struct ChunkProcessOutcome {
     active_tiles: usize,
     saturated: bool,
 }
-
-
 
 #[derive(Debug, Clone, Default)]
 pub struct PerformanceMetrics {
@@ -1343,7 +1338,8 @@ impl VegetationGrid {
 
         heatmap
     }
-} */ // End of Phase 6: Legacy VegetationGrid implementation
+} */
+// End of Phase 6: Legacy VegetationGrid implementation
 
 /// Vegetation system statistics for monitoring
 #[derive(Debug, Clone)]
@@ -1383,7 +1379,10 @@ impl Plugin for VegetationPlugin {
             .add_systems(FixedUpdate, resource_grid_update_system)
             // Phase 4: Chunk LOD systems
             .add_systems(FixedUpdate, chunk_lod_update_system)
-            .add_systems(FixedUpdate, chunk_lod_aggregation_system.run_if(every_n_ticks(20))) // Every 2 seconds
+            .add_systems(
+                FixedUpdate,
+                chunk_lod_aggregation_system.run_if(every_n_ticks(20)),
+            ) // Every 2 seconds
             // Phase 5: Heatmap refresh management
             .add_systems(FixedUpdate, heatmap_refresh_management_system);
     }
@@ -1434,11 +1433,9 @@ fn setup_vegetation_system(
                             constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
                         if terrain_multiplier > 0.0 {
                             chunk_has_vegetation = true;
+                            // Phase 6: SPARSE initialization - only track suitable terrain, don't pre-populate biomass
+                            // Vegetation cells will be created on-demand when animals actually graze
                             initialized_cells += 1;
-
-                            let tile = IVec2::new(world_x, world_y);
-                            // Phase 6: Initialize ResourceGrid cell instead of TileVegetation
-                            resource_grid.get_or_create_cell(tile, 100.0, terrain_multiplier);
                         }
                     }
                 }
@@ -1454,9 +1451,11 @@ fn setup_vegetation_system(
 
     info!("✅ Phase 6: Vegetation system initialized successfully");
     info!("   ResourceGrid cells: {}", initialized_cells);
-    info!("   ChunkLODManager chunks: {}", lod_manager.get_metrics().total_chunks);
+    info!(
+        "   ChunkLODManager chunks: {}",
+        lod_manager.get_metrics().total_chunks
+    );
 }
-
 
 /// Phase 3: ResourceGrid update system with event loop and tick budget
 ///
@@ -1469,8 +1468,8 @@ fn resource_grid_update_system(
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    use crate::simulation::profiler::start_timing_resource;
     use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
 
     // Start timing the ResourceGrid update
     start_timing_resource(&mut profiler, "resource_grid");
@@ -1516,8 +1515,8 @@ fn chunk_lod_update_system(
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    use crate::simulation::profiler::start_timing_resource;
     use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
 
     start_timing_resource(&mut profiler, "chunk_lod");
 
@@ -1536,20 +1535,20 @@ fn chunk_lod_update_system(
         if let Some(chunk_metadata) = lod_manager.get_chunk(&chunk_coord) {
             if chunk_metadata.needs_update(current_tick, 50) {
                 // This is a simplified check - in a real system, we'd be more sophisticated
-                lod_manager.lazy_activate_chunk(chunk_coord,
-                    &mut resource_grid,
-                    current_tick);
+                lod_manager.lazy_activate_chunk(chunk_coord, &mut resource_grid, current_tick);
             }
         }
     }
 
     // Clean up distant chunks periodically
-    if current_tick % 600 == 0 { // Every minute
+    if current_tick % 600 == 0 {
+        // Every minute
         lod_manager.cleanup_distant_chunks(500); // Clean up chunks beyond 500 tiles
     }
 
     // Log metrics periodically
-    if current_tick % 1200 == 0 { // Every 2 minutes
+    if current_tick % 1200 == 0 {
+        // Every 2 minutes
         let metrics = lod_manager.get_metrics();
         info!(
             "🌍 Chunk LOD - Total: {}, Hot: {}, Warm: {}, Cold: {}, Active: {}",
@@ -1576,8 +1575,8 @@ fn chunk_lod_aggregation_system(
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    use crate::simulation::profiler::start_timing_resource;
     use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
 
     start_timing_resource(&mut profiler, "chunk_aggregation");
 
@@ -1593,7 +1592,8 @@ fn chunk_lod_aggregation_system(
     }
 
     // Reset metrics periodically
-    if current_tick % 1200 == 0 { // Every 2 minutes
+    if current_tick % 1200 == 0 {
+        // Every 2 minutes
         lod_manager.reset_metrics();
     }
 
@@ -1613,8 +1613,8 @@ fn heatmap_refresh_management_system(
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    use crate::simulation::profiler::start_timing_resource;
     use crate::simulation::profiler::end_timing_resource;
+    use crate::simulation::profiler::start_timing_resource;
 
     start_timing_resource(&mut profiler, "heatmap_refresh_management");
 
@@ -1625,15 +1625,16 @@ fn heatmap_refresh_management_system(
     let lod_metrics = lod_manager.get_metrics();
 
     // Mark heatmap as dirty if there have been significant vegetation changes
-    let significant_activity = resource_metrics.events_processed > 0 ||
-                             lod_metrics.lazy_activations > 0;
+    let significant_activity =
+        resource_metrics.events_processed > 0 || lod_metrics.lazy_activations > 0;
 
     if significant_activity {
         refresh_manager.mark_dirty();
     }
 
     // Log refresh statistics periodically
-    if current_tick % 600 == 0 { // Every minute
+    if current_tick % 600 == 0 {
+        // Every minute
         info!(
             "🌡️ Phase 5: Heatmap refresh stats - dirty: {}, last_refresh: {}, count: {}, avg_time: {}ms",
             refresh_manager.dirty,
@@ -1668,7 +1669,6 @@ fn init_heatmap_storage(world_size_chunks: i32, tile_size: usize) {
         VEGETATION_HEATMAP = Some(Arc::new(RwLock::new(snapshot)));
     }
 }
-
 
 /// Phase 5: Get biomass heatmap data as JSON for web viewer from ResourceGrid
 /// Uses on-demand refresh with dirty flag for performance optimization
@@ -1778,7 +1778,8 @@ fn generate_resource_grid_heatmap(
 
     // Get world bounds from the world loader
     let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
-    let world_size_chunks = ((max_x - min_x).max(max_y - min_y) / crate::tilemap::CHUNK_SIZE as i32) + 1;
+    let world_size_chunks =
+        ((max_x - min_x).max(max_y - min_y) / crate::tilemap::CHUNK_SIZE as i32) + 1;
 
     // Calculate grid dimensions based on chunks
     let grid_w = world_size_chunks as usize;
@@ -1930,7 +1931,8 @@ pub fn get_performance_metrics_json() -> String {
             },
             "system_status": "excellent"
         }
-    }).to_string()
+    })
+    .to_string()
 }
 
 /// Get memory usage analysis as JSON
@@ -2007,7 +2009,8 @@ pub fn get_metrics_dashboard_json() -> String {
             "generation_time_ms": 1,
             "data_source": "phase6_resource_grid"
         }
-    }).to_string()
+    })
+    .to_string()
 }
 
 /// Get Phase 4 performance benchmark results
@@ -2479,5 +2482,4 @@ mod tests {
         let (consumed_empty, _) = grid.consume(empty_pos, 20.0, max_fraction);
         assert_eq!(consumed_empty, 0.0); // Should consume nothing
     }
-
-  }
+}

@@ -3,11 +3,10 @@
 /// This module implements Phase 1 of the vegetation rewrite plan, replacing the
 /// dense tile-by-tile updates with a sparse hash grid that only stores cells
 /// with biomass and processes them through events.
-
 use bevy::prelude::*;
-use std::collections::{BinaryHeap, HashMap};
-use std::cmp::Reverse;
 use rand;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 
 /// Current simulation tick for event timing
 pub type CurrentTick = u64;
@@ -87,7 +86,8 @@ impl GrazingCell {
 
         // Logistic growth: B(t+1) = B(t) + r * B(t) * (1 - B(t)/Bmax)
         let base_growth_rate = 0.05 * self.growth_rate_modifier; // GROWTH_RATE from old system
-        let growth = base_growth_rate * self.total_biomass * (1.0 - self.total_biomass / self.max_biomass);
+        let growth =
+            base_growth_rate * self.total_biomass * (1.0 - self.total_biomass / self.max_biomass);
         let actual_growth = (growth * time_factor).min(self.max_biomass - self.total_biomass);
 
         self.total_biomass += actual_growth;
@@ -140,18 +140,38 @@ pub enum GrowthEvent {
 impl PartialEq for GrowthEvent {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (GrowthEvent::Consume { location: l1, amount_consumed: a1, scheduled_tick: s1 },
-             GrowthEvent::Consume { location: l2, amount_consumed: a2, scheduled_tick: s2 }) => {
-                l1 == l2 && (a1 - a2).abs() < f32::EPSILON && s1 == s2
-            }
-            (GrowthEvent::Regrow { location: l1, scheduled_tick: s1 },
-             GrowthEvent::Regrow { location: l2, scheduled_tick: s2 }) => {
-                l1 == l2 && s1 == s2
-            }
-            (GrowthEvent::RandomSample { locations: l1, scheduled_tick: s1 },
-             GrowthEvent::RandomSample { locations: l2, scheduled_tick: s2 }) => {
-                l1 == l2 && s1 == s2
-            }
+            (
+                GrowthEvent::Consume {
+                    location: l1,
+                    amount_consumed: a1,
+                    scheduled_tick: s1,
+                },
+                GrowthEvent::Consume {
+                    location: l2,
+                    amount_consumed: a2,
+                    scheduled_tick: s2,
+                },
+            ) => l1 == l2 && (a1 - a2).abs() < f32::EPSILON && s1 == s2,
+            (
+                GrowthEvent::Regrow {
+                    location: l1,
+                    scheduled_tick: s1,
+                },
+                GrowthEvent::Regrow {
+                    location: l2,
+                    scheduled_tick: s2,
+                },
+            ) => l1 == l2 && s1 == s2,
+            (
+                GrowthEvent::RandomSample {
+                    locations: l1,
+                    scheduled_tick: s1,
+                },
+                GrowthEvent::RandomSample {
+                    locations: l2,
+                    scheduled_tick: s2,
+                },
+            ) => l1 == l2 && s1 == s2,
             _ => false,
         }
     }
@@ -199,8 +219,15 @@ struct ScheduledEvent {
 impl Ord for ScheduledEvent {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Reverse ordering for min-heap behavior (earliest ticks first)
-        other.scheduled_tick.cmp(&self.scheduled_tick)
-            .then_with(|| self.event.locations().len().cmp(&other.event.locations().len()))
+        other
+            .scheduled_tick
+            .cmp(&self.scheduled_tick)
+            .then_with(|| {
+                self.event
+                    .locations()
+                    .len()
+                    .cmp(&other.event.locations().len())
+            })
     }
 }
 
@@ -319,7 +346,12 @@ impl ResourceGrid {
     }
 
     /// Get or create a cell at the given position
-    pub fn get_or_create_cell(&mut self, pos: IVec2, max_biomass: f32, growth_modifier: f32) -> &mut GrazingCell {
+    pub fn get_or_create_cell(
+        &mut self,
+        pos: IVec2,
+        max_biomass: f32,
+        growth_modifier: f32,
+    ) -> &mut GrazingCell {
         if !self.cells.contains_key(&pos) {
             let initial_biomass = 5.0_f32.min(max_biomass); // INITIAL_BIOMASS from old system
             let cell = GrazingCell::new(initial_biomass, max_biomass, growth_modifier);
@@ -368,7 +400,12 @@ impl ResourceGrid {
         let current_tick = self.current_tick;
         let (last_update_tick, total_biomass, max_biomass, growth_rate_modifier) =
             if let Some(cell) = self.get_cell(pos) {
-                (cell.last_update_tick, cell.total_biomass, cell.max_biomass, cell.growth_rate_modifier)
+                (
+                    cell.last_update_tick,
+                    cell.total_biomass,
+                    cell.max_biomass,
+                    cell.growth_rate_modifier,
+                )
             } else {
                 return 0.0;
             };
@@ -418,7 +455,8 @@ impl ResourceGrid {
             for dy in -radius..=radius {
                 let pos = center + IVec2::new(dx, dy);
                 if let Some(cell) = self.get_cell(pos) {
-                    if cell.total_biomass >= 10.0 && !cell.is_depleted() { // FORAGE_MIN_BIOMASS
+                    if cell.total_biomass >= 10.0 && !cell.is_depleted() {
+                        // FORAGE_MIN_BIOMASS
                         let distance = center.as_vec2().distance(pos.as_vec2());
                         let utility = cell.total_biomass / (1.0 + distance * 0.1);
 
@@ -442,7 +480,7 @@ impl ResourceGrid {
         let start_time = std::time::Instant::now();
         self.current_tick = current_tick;
 
-        // Process due events
+        // Process due events ONLY - no per-tick loops
         let due_events = self.event_scheduler.pop_due_events(current_tick);
         self.metrics.events_processed = due_events.len();
 
@@ -464,13 +502,8 @@ impl ResourceGrid {
             }
         }
 
-        // Random tick sampling for ambient regrowth
-        if self.cells.len() > 0 {
-            self.process_random_tick_sample();
-        }
-
-        // Decay consumption pressure
-        self.decay_all_pressure();
+        // NO per-tick processing - only event-driven updates
+        // Removed: process_random_tick_sample() and decay_all_pressure()
 
         // Update processing time metric
         let elapsed = start_time.elapsed().as_micros() as u64;
@@ -479,18 +512,23 @@ impl ResourceGrid {
 
     /// Process a random sample of cells for ambient regrowth
     fn process_random_tick_sample(&mut self) {
-        use rand::seq::SliceRandom;
+        use rand::seq::IteratorRandom;
         use rand::thread_rng;
 
-        let sample_size = self.event_scheduler.random_tick_budget().min(self.cells.len());
+        let sample_size = self
+            .event_scheduler
+            .random_tick_budget()
+            .min(self.cells.len());
         if sample_size == 0 {
             return;
         }
 
-        let mut cell_positions: Vec<IVec2> = self.cells.keys().copied().collect();
-        cell_positions.shuffle(&mut thread_rng());
-
-        let sample_positions: Vec<IVec2> = cell_positions.into_iter().take(sample_size).collect();
+        // Efficient random sampling without allocating all keys
+        let mut rng = thread_rng();
+        let sample_positions: Vec<IVec2> = self.cells
+            .keys()
+            .copied()
+            .choose_multiple(&mut rng, sample_size);
 
         if !sample_positions.is_empty() {
             self.event_scheduler.schedule(GrowthEvent::RandomSample {
@@ -533,7 +571,7 @@ fn calculate_regrowth_interval(biomass_fraction: f32) -> u64 {
     // Lower biomass = faster regrowth (more frequent updates)
     let urgency = 1.0 - biomass_fraction;
     let base_interval = 100; // 10 seconds at 10 TPS
-    let min_interval = 20;   // 2 seconds minimum
+    let min_interval = 20; // 2 seconds minimum
     let calculated = base_interval - (urgency * 80.0) as u64;
     calculated.max(min_interval)
 }
@@ -578,10 +616,7 @@ pub mod grid_helpers {
 
     /// Get chunk coordinates for a cell (16x16 chunks)
     pub fn cell_to_chunk(cell_pos: IVec2) -> IVec2 {
-        IVec2::new(
-            cell_pos.x.div_euclid(16),
-            cell_pos.y.div_euclid(16),
-        )
+        IVec2::new(cell_pos.x.div_euclid(16), cell_pos.y.div_euclid(16))
     }
 
     /// Get all cells in a chunk
@@ -603,8 +638,8 @@ pub mod grid_helpers {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::grid_helpers::*;
+    use super::*;
 
     #[test]
     fn test_grazing_cell_creation() {
@@ -880,8 +915,8 @@ mod tests {
         let delay2 = calculate_regrowth_delay(50.0, 100.0); // 50% consumed
 
         assert!(delay2 > delay1); // More consumption = longer delay
-        assert!(delay1 >= 50);    // Base delay
-        assert!(delay2 <= 250);   // Base + max variable
+        assert!(delay1 >= 50); // Base delay
+        assert!(delay2 <= 250); // Base + max variable
     }
 
     #[test]
