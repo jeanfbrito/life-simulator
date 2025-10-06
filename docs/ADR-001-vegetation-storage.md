@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted - ⚠️ **SUPERSEDED**
+
+**Note:** This ADR describes the original dense tile-by-tile approach. The system has been completely rewritten to use a sparse, event-driven ResourceGrid architecture. See [Vegetation System Rewrite Plan](VEGETATION_REWRITE_PLAN.md) for the current implementation.
 
 ## Context
 

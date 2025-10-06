@@ -1,13 +1,27 @@
-# Plant System Parameters Documentation
+# Plant System Parameters Documentation ⚠️ **SUPERSEDED**
 
-This document defines all constants and parameters for the vegetation system implementation, serving as the authoritative reference for tuning and validation.
+**⚠️ This document has been superseded by the completed vegetation system rewrite.**
+**See: [Vegetation System Rewrite Plan](VEGETATION_REWRITE_PLAN.md) ✅ **FULLY IMPLEMENTED & VALIDATED****
 
 ## Overview
 
-The plant system implements a logistic growth model for vegetation biomass with herbivore consumption dynamics. The system is designed to be:
+**HISTORICAL NOTE:** This document described parameters for the original dense tile-by-tile vegetation system. The current implementation uses a completely different sparse, event-driven ResourceGrid architecture with significantly different parameters and performance characteristics.
 
-- **Ecologically realistic**: Based on simplified but credible ecological models
-- **Performant**: Sparse storage with active tile tracking for large maps
+**🔧 Current System:**
+- **Sparse Event-Driven ResourceGrid**: Only stores cells with active biomass
+- **Level-of-Detail Management**: Proximity-based optimization
+- **On-Demand Heatmaps**: Refresh only when data changes
+- **Real-World Performance**: 10.0 TPS achieved with 0.0ms processing time
+
+For the current system parameters, see the constants and implementation in the source code and [Vegetation System Rewrite Plan](VEGETATION_REWRITE_PLAN.md).
+
+---
+
+## Legacy Documentation (For Historical Reference)
+
+The following describes the original dense tile-by-tile approach that has been **replaced**:
+
+The plant system implemented a logistic growth model for vegetation biomass with herbivore consumption dynamics, designed to be ecologically realistic and performant.
 - **Configurable**: All parameters centralized for easy tuning
 - **Extensible**: Modular design supports multiple species and terrain types
 
