@@ -1,10 +1,13 @@
+pub mod bear;
 pub mod deer;
+pub mod fox;
 /// Entity behavior configuration system
 ///
 /// This module provides modular behavior configuration for different entity types.
 /// Each entity can have a BehaviorConfig component attached that defines its AI parameters.
 pub mod rabbit;
 pub mod raccoon;
+pub mod wolf;
 
 use bevy::prelude::*;
 

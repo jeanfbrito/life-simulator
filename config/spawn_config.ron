@@ -66,6 +66,66 @@
                 completion_message: "🦝 Raccoon pair active near campsite ({count} spawned)",
             )),
         ),
+        (
+            species: "Bear",
+            count: 1,
+            names: [
+                "Kodiak",
+            ],
+            spawn_area: (
+                center: (-25, 18),
+                search_radius: 8,
+                max_attempts: 80,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐻 Introducing a solitary bear near the berry thicket...",
+                success_template: "   🐻 Bear {name} settled at {pos}",
+                completion_message: "🐻 Bear roaming the ridge ({count} spawned)",
+            )),
+        ),
+        (
+            species: "Fox",
+            count: 2,
+            names: [
+                "Saffron",
+                "Russet",
+            ],
+            spawn_area: (
+                center: (5, -12),
+                search_radius: 6,
+                max_attempts: 60,
+            ),
+            sex_sequence: Some([
+                male,
+                female,
+            ]),
+            messages: Some((
+                start_message: "🦊 Releasing fox pair near rabbit glen...",
+                success_template: "   🦊 Fox {name} ({sex}) now prowling at {pos}",
+                completion_message: "🦊 Fox pair established ({count} spawned)",
+            )),
+        ),
+        (
+            species: "Wolf",
+            count: 3,
+            names: [
+                "Luna",
+                "Ash",
+                "Bran",
+            ],
+            spawn_area: (
+                center: (-20, 20),
+                search_radius: 12,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐺 Summoning a small wolf pack near the northern forest...",
+                success_template: "   🐺 Wolf {name} staged at {pos}",
+                completion_message: "🐺 Wolf pack assembled ({count} spawned)",
+            )),
+        ),
     ],
     settings: (
         verbose_logging: true,

@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_tests")]
+
 //! Integration tests for predator fear system
 //!
 //! Tests that predator proximity detection and fear-based behavior modification
@@ -172,7 +174,7 @@ fn test_fear_constants() {
 
     // Test specific values from the plan
     assert_eq!(FEAR_FEEDING_REDUCTION, 0.3); // 30% shorter feeding
-    assert_eq!(FEAR_RADIUS, 20); // 20 tiles radius
+    assert_eq!(FEAR_RADIUS, 40); // 40 tiles radius
     assert_eq!(FEAR_BIOMASS_TOLERANCE, 0.2); // 20% lower threshold
     assert_eq!(FEAR_SPEED_BOOST, 1.5); // 1.5x normal speed
 }

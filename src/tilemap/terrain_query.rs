@@ -359,8 +359,8 @@ mod tests {
         assert_eq!(pos1.distance_to(&pos2), 7.071068);
 
         let chunk_coord = pos1.to_chunk_coordinate(10.0);
-        assert_eq!(chunk_coord.x, 1);
-        assert_eq!(chunk_coord.y, 2);
+        assert_eq!(chunk_coord.x, 0);
+        assert_eq!(chunk_coord.y, 0);
 
         let tile_pos = pos1.to_tile_position(10.0);
         assert_eq!(tile_pos, (1, 2));

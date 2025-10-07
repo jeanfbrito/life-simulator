@@ -6,10 +6,10 @@
 //! - Implements lazy activation between detail levels
 //! - Provides far-range impostor data for web overlay
 
+use crate::tilemap::{ChunkCoordinate, CHUNK_SIZE};
+use crate::vegetation::resource_grid::{GrazingCell, ResourceGrid};
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
-use crate::tilemap::{ChunkCoordinate, CHUNK_SIZE};
-use crate::vegetation::resource_grid::{ResourceGrid, GrazingCell};
 
 /// Extension trait for IVec2 to get max element
 trait IVec2Ext {
@@ -125,7 +125,11 @@ impl ChunkMetadata {
         self.avg_growth_rate = if cells.is_empty() {
             1.0
         } else {
-            cells.iter().map(|(_, cell)| cell.growth_rate_modifier).sum::<f32>() / cells.len() as f32
+            cells
+                .iter()
+                .map(|(_, cell)| cell.growth_rate_modifier)
+                .sum::<f32>()
+                / cells.len() as f32
         };
         self.last_update_tick = current_tick;
 
@@ -300,7 +304,10 @@ impl ChunkLODManager {
                 metadata.temperature = new_temperature;
 
                 // Track active chunks (hot or warm)
-                if matches!(new_temperature, ChunkTemperature::Hot | ChunkTemperature::Warm) {
+                if matches!(
+                    new_temperature,
+                    ChunkTemperature::Hot | ChunkTemperature::Warm
+                ) {
                     self.active_chunks.insert(coord);
                 }
 
@@ -329,7 +336,8 @@ impl ChunkLODManager {
         let chunk_pos = IVec2::new(chunk_center_x, chunk_center_y);
 
         // Find minimum distance to any agent
-        let min_distance = self.agent_positions
+        let min_distance = self
+            .agent_positions
             .iter()
             .map(|&agent_pos| (agent_pos - chunk_pos).abs().max_element())
             .min()
@@ -377,7 +385,12 @@ impl ChunkLODManager {
     }
 
     /// Update chunk metadata from ResourceGrid data
-    pub fn update_chunk_from_grid(&mut self, coordinate: ChunkCoordinate, grid: &ResourceGrid, current_tick: u64) {
+    pub fn update_chunk_from_grid(
+        &mut self,
+        coordinate: ChunkCoordinate,
+        grid: &ResourceGrid,
+        current_tick: u64,
+    ) {
         if let Some(metadata) = self.chunks.get_mut(&coordinate) {
             // Collect cells in this chunk
             let chunk_start = IVec2::new(
@@ -401,9 +414,16 @@ impl ChunkLODManager {
     }
 
     /// Perform lazy activation for a chunk (convert from aggregate to fine detail)
-    pub fn lazy_activate_chunk(&mut self, coordinate: ChunkCoordinate, grid: &mut ResourceGrid, current_tick: u64) {
+    pub fn lazy_activate_chunk(
+        &mut self,
+        coordinate: ChunkCoordinate,
+        grid: &mut ResourceGrid,
+        current_tick: u64,
+    ) {
         if let Some(metadata) = self.chunks.get(&coordinate) {
-            if metadata.temperature == ChunkTemperature::Warm || metadata.temperature == ChunkTemperature::Hot {
+            if metadata.temperature == ChunkTemperature::Warm
+                || metadata.temperature == ChunkTemperature::Hot
+            {
                 // Ensure all cells in this chunk exist in the ResourceGrid
                 let chunk_start = IVec2::new(
                     coordinate.x * CHUNK_SIZE as i32,
@@ -459,7 +479,8 @@ impl ChunkLODManager {
 
     /// Clean up chunks that are too far from any agent
     pub fn cleanup_distant_chunks(&mut self, max_distance: i32) {
-        let chunks_to_remove: Vec<ChunkCoordinate> = self.chunks
+        let chunks_to_remove: Vec<ChunkCoordinate> = self
+            .chunks
             .iter()
             .filter(|(_, metadata)| {
                 // Find distance to nearest agent
@@ -468,7 +489,8 @@ impl ChunkLODManager {
                     metadata.coordinate.y * CHUNK_SIZE as i32 + CHUNK_SIZE as i32 / 2,
                 );
 
-                let min_distance = self.agent_positions
+                let min_distance = self
+                    .agent_positions
                     .iter()
                     .map(|&agent_pos| (agent_pos - chunk_center).abs().max_element())
                     .min()

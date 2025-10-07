@@ -177,12 +177,9 @@ fn test_animal_foraging_integration() {
 
     // Get rabbit entity
     let rabbit_entity = {
-        let rabbit_query = app.world().query::<(Entity, &Rabbit)>();
-        rabbit_query
-            .iter(app.world())
-            .next()
-            .map(|(e, _)| e)
-            .unwrap()
+        let mut world = app.world_mut();
+        let mut rabbit_query = world.query::<(Entity, &Rabbit)>();
+        rabbit_query.iter(&world).next().map(|(e, _)| e).unwrap()
     };
 
     // Check rabbit can find food

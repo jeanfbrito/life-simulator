@@ -135,6 +135,135 @@ All timings below assume the current simulation rate of **10 ticks per second**.
 
 ---
 
+## Bears 🐻
+
+**Identity & Viewer**
+- Emoji / label: `🐻`
+- Movement speed: **12** ticks-per-tile
+- Wander radius: **80** tiles (wide roaming range)
+- Juvenile name prefix: **Cub**
+- Viewer scale & colour: **1.2×**, `#3b2f2f`
+
+**Reproduction**
+- Adult at **18 000 ticks** (~30 min)
+- Gestation: **6 000 ticks** (~10 min)
+- Male cooldown: **8 000 ticks**; Female postpartum: **12 000 ticks**
+- Litter size: **1–3 cubs**
+- Mating search radius: **90** tiles; matcher runs every **420** ticks (~42 s)
+- Mating duration: **60 ticks** (~6 s)
+- Eligibility gates:
+  - Energy ≥ **0.55**
+  - Health ≥ **0.55**
+  - Well-fed streak ≥ **900 ticks** while hunger/thirst ≤ **0.45**
+
+**Behaviour thresholds**
+- Drink when ≥ **40 %** thirsty
+- Eat when ≥ **40 %** hungry
+- Rest when energy ≤ **30 %**
+- Forage range: **6–18** tiles (berry patches and shrubs)
+- Search radius for food & water: **150** tiles each
+
+**Stats & Needs**
+- Hunger pool: max **350**; drains **0.05**/tick; eats **120** per meal
+- Thirst pool: max **250**; drains **0.03**/tick; drinks **150** per visit
+- Energy drain **0.05**/tick; Health regen **+0.01**/tick
+
+**AI Planner Hooks**
+- *Scavenge*: priority **400**, utility scales with hunger and carcass proximity (150-tile scan)
+- *Hunt fawn*: priority **320**, seeks deer fawns within 20 tiles when hunger ≥ 0.6
+- Herbivore toolkit still provides baseline drink/rest/forage actions
+
+**Demo spawn defaults**
+- Default config spawns **1** adult ("Kodiak") near `(-25,18)`.
+- Bears do not follow the auto-graze system; they rely on scavenging and omnivore foraging.
+
+---
+
+## Foxes 🦊
+
+**Identity & Viewer**
+- Emoji / label: `🦊`
+- Movement speed: **16** ticks-per-tile
+- Wander radius: **40** tiles
+- Juvenile name prefix: **Kit**
+- Viewer scale & colour: **0.6×**, `#c1440e`
+
+**Reproduction**
+- Adult at **10 500 ticks** (~17.5 min)
+- Gestation: **4 500 ticks** (~7.5 min)
+- Male cooldown: **4 000 ticks**; Female postpartum: **6 000 ticks**
+- Litter size: **3–5 kits**
+- Mating search radius: **120** tiles; matcher runs every **360** ticks (~36 s)
+- Mating duration: **50 ticks** (~5 s)
+- Eligibility gates:
+  - Energy ≥ **0.50**
+  - Health ≥ **0.60**
+  - Well-fed streak ≥ **600 ticks** while hunger/thirst ≤ **0.50**
+
+**Behaviour thresholds**
+- Drink when ≥ **50 %** thirsty
+- Hunt/forage when ≥ **50 %** hungry
+- Rest when energy ≤ **30 %**
+- Search radius for food: **160** tiles (targets rabbits first)
+
+**Stats & Needs**
+- Hunger pool: max **180**; drains **0.08**/tick; eats **60** per meal
+- Thirst pool: max **150**; drains **0.04**/tick; drinks **90** per visit
+- Energy drain **0.06**/tick; Health regen **+0.01**/tick
+
+**AI Planner Hooks**
+- *Hunt rabbit*: priority **360**, hunts closest rabbit within ~60 tiles when hungry
+- *Scavenge*: priority **320**, opportunistic carrion cleanup with 150 tile scan
+- Baseline planner contributions (drink/rest) sourced from herbivore toolkit without grazing
+
+**Demo spawn defaults**
+- Config spawns a fox pair ("Saffron" & "Russet") near `(5,-12)` with mixed sexes.
+
+---
+
+## Wolves 🐺
+
+**Identity & Viewer**
+- Emoji / label: `🐺`
+- Movement speed: **12** ticks-per-tile
+- Wander radius: **200** tiles (territorial patrols)
+- Juvenile name prefix: **Pup**
+- Viewer scale & colour: **0.9×**, `#666666`
+
+**Reproduction**
+- Adult at **14 000 ticks** (~23.3 min)
+- Gestation: **4 500 ticks** (~7.5 min)
+- Male cooldown: **7 000 ticks**; Female postpartum: **10 000 ticks**
+- Litter size: **2–4 pups**
+- Mating search radius: **160** tiles; matcher runs every **480** ticks (~48 s)
+- Mating duration: **60 ticks** (~6 s)
+- Eligibility gates:
+  - Energy ≥ **0.60**
+  - Health ≥ **0.60**
+  - Well-fed streak ≥ **900 ticks** while hunger/thirst ≤ **0.55**
+
+**Behaviour thresholds**
+- Drink when ≥ **55 %** thirsty
+- Hunt when ≥ **45 %** hungry
+- Rest when energy ≤ **25 %**
+- Food search radius: **220** tiles (pack hunts target deer)
+
+**Stats & Needs**
+- Hunger pool: max **260**; drains **0.07**/tick; eats **100** per meal
+- Thirst pool: max **200**; drains **0.04**/tick; drinks **120** per visit
+- Energy drain **0.06**/tick; Health regen **+0.01**/tick
+
+**AI Planner Hooks**
+- *Pack hunt deer*: priority **420**, hunts nearest adult deer within ~200 tiles
+- *Scavenge*: priority **300**, claims carcasses when hunger ≥ 0.35
+- Wolves share the drink/rest logic from the herbivore toolkit but skip grazing
+
+**Demo spawn defaults**
+- Default config spawns a **pack of three** (Luna, Ash, Bran) near `(-60,-40)`.
+- Pack hunts create carcasses that bears/foxes can scavenge, tightening energy loops.
+
+---
+
 ## Biomass Consumption Mapping (Phase 5 Metrics)
 
 The following sections detail how each species interacts with the vegetation system for the Phase 5 metrics dashboard. All consumption values are per feeding action and impact the vegetation biomass tracking system.

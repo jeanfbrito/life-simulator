@@ -150,12 +150,17 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
     );
 
     // Start the web server
-    println!("🌐 LIFE_SIMULATOR: Starting web server...");
-    let web_server_port = web_server_simple::start_simple_web_server();
-    println!(
-        "✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:{}",
-        web_server_port
-    );
+    let disable_web = std::env::var("DISABLE_WEB_SERVER").ok() == Some("1".to_string());
+    if disable_web {
+        println!("🌐 LIFE_SIMULATOR: Web server disabled via DISABLE_WEB_SERVER=1");
+    } else {
+        println!("🌐 LIFE_SIMULATOR: Starting web server...");
+        let web_server_port = web_server_simple::start_simple_web_server();
+        println!(
+            "✅ LIFE_SIMULATOR: Web server started at http://127.0.0.1:{}",
+            web_server_port
+        );
+    }
 
     // Insert world loader as a resource for systems to use
     commands.insert_resource(world_loader);

@@ -300,7 +300,8 @@ pub fn aggressive_idle_fallback_system(
     tick: Res<SimulationTick>,
     mut profiler: ResMut<TickProfiler>,
 ) {
-    let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_aggressive_idle");
+    let _timer =
+        crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_aggressive_idle");
 
     // Only run every 30 ticks (3 seconds) to avoid excessive overhead
     if tick.0 % 30 != 0 {
@@ -315,7 +316,10 @@ pub fn aggressive_idle_fallback_system(
                 idle_tracker.ticks_since_action
             );
 
-            debug!("🔄 Entity {:?} aggressive fallback trigger: {}", entity, reason);
+            debug!(
+                "🔄 Entity {:?} aggressive fallback trigger: {}",
+                entity, reason
+            );
             replan_queue.push(entity, ReplanPriority::Normal, reason, tick.0);
 
             // Reset the timer to avoid spam

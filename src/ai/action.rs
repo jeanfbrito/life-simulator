@@ -1,5 +1,5 @@
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{MoveOrder, TilePosition};
+use crate::entities::{Carcass, Creature, MoveOrder, SpeciesNeeds, TilePosition};
 use crate::pathfinding::{Path, PathRequest, PathfindingFailed};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
@@ -9,6 +9,9 @@ use crate::world_loader::WorldLoader;
 /// They can be instant (complete in one tick) or multi-tick (span multiple ticks).
 use bevy::prelude::*;
 use rand::Rng;
+
+const DEFAULT_CARCASS_DECAY: u32 = 6_000;
+const MIN_CARCASS_NUTRITION: f32 = 5.0;
 
 /// Result of executing an action
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -44,6 +47,12 @@ pub enum ActionType {
     }, // Move to grass tile (eating happens via auto-eat system)
     Rest {
         duration_ticks: u32,
+    },
+    Scavenge {
+        carcass: Entity,
+    },
+    Hunt {
+        prey: Entity,
     },
     Follow {
         target: Entity,
@@ -675,6 +684,200 @@ impl Action for RestAction {
 }
 
 // =============================================================================
+// SCAVENGE ACTION
+// =============================================================================
+
+/// Action: Move to a carcass and consume available nutrition.
+#[derive(Debug, Clone)]
+pub struct ScavengeAction {
+    pub carcass: Entity,
+    pub started: bool,
+}
+
+impl ScavengeAction {
+    pub fn new(carcass: Entity) -> Self {
+        Self {
+            carcass,
+            started: false,
+        }
+    }
+}
+
+impl Action for ScavengeAction {
+    fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
+        world.get::<Hunger>(entity).is_some() && world.get::<Carcass>(self.carcass).is_some()
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, _tick: u64) -> ActionResult {
+        let Some(position) = world.get::<TilePosition>(entity).copied() else {
+            return ActionResult::Failed;
+        };
+
+        let Some(carcass_pos) = world.get::<TilePosition>(self.carcass).copied() else {
+            debug!("🦴 Scavenge target vanished before arrival");
+            return ActionResult::Failed;
+        };
+
+        if position.tile != carcass_pos.tile {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: carcass_pos.tile,
+                    allow_diagonal: true,
+                });
+            }
+            self.started = true;
+            return ActionResult::InProgress;
+        }
+
+        clear_navigation_state(world, entity);
+
+        let bite_size = world
+            .get::<SpeciesNeeds>(entity)
+            .map(|n| n.eat_amount)
+            .unwrap_or(50.0);
+
+        let (consumed, spent) = if let Some(mut carcass) = world.get_mut::<Carcass>(self.carcass) {
+            let consumed = carcass.consume(bite_size);
+            let spent = carcass.is_spent();
+            (consumed, spent)
+        } else {
+            return ActionResult::Failed;
+        };
+
+        if consumed <= 0.0 {
+            return ActionResult::Failed;
+        }
+
+        if let Some(mut hunger) = world.get_mut::<Hunger>(entity) {
+            hunger.0.change(-consumed);
+        }
+
+        if spent {
+            if let Ok(mut carcass_entity) = world.get_entity_mut(self.carcass) {
+                carcass_entity.despawn();
+            }
+        }
+
+        info!(
+            "🦴 Entity {:?} scavenged {:.1} nutrition from carcass {:?}",
+            entity, consumed, self.carcass
+        );
+
+        self.started = false;
+        ActionResult::Success
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        clear_navigation_state(world, entity);
+        self.started = false;
+    }
+
+    fn name(&self) -> &'static str {
+        "Scavenge"
+    }
+}
+
+// =============================================================================
+// HUNT ACTION
+// =============================================================================
+
+/// Action: Pursue prey and attempt a kill.
+#[derive(Debug, Clone)]
+pub struct HuntAction {
+    pub prey: Entity,
+}
+
+impl HuntAction {
+    pub fn new(prey: Entity) -> Self {
+        Self { prey }
+    }
+}
+
+impl Action for HuntAction {
+    fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
+        world.get::<Hunger>(entity).is_some() && world.get::<TilePosition>(self.prey).is_some()
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, _tick: u64) -> ActionResult {
+        let Some(predator_pos) = world.get::<TilePosition>(entity).copied() else {
+            return ActionResult::Failed;
+        };
+
+        let Some(prey_pos) = world.get::<TilePosition>(self.prey).copied() else {
+            debug!("🎯 Prey {:?} lost before hunt completed", self.prey);
+            return ActionResult::Failed;
+        };
+
+        let diff = predator_pos.tile - prey_pos.tile;
+        let distance = diff.x.abs().max(diff.y.abs()) as f32;
+
+        if distance > 1.5 {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: prey_pos.tile,
+                    allow_diagonal: true,
+                });
+            }
+            return ActionResult::InProgress;
+        }
+
+        clear_navigation_state(world, entity);
+
+        let bite_size = world
+            .get::<SpeciesNeeds>(entity)
+            .map(|n| n.eat_amount)
+            .unwrap_or(60.0);
+        let available_meat = world
+            .get::<SpeciesNeeds>(self.prey)
+            .map(|n| n.eat_amount * 3.0)
+            .unwrap_or(80.0);
+
+        // Allow predators to fully consume small prey (e.g., rabbits) while
+        // still leaving carcasses for large kills.
+        let consumed = if available_meat <= bite_size * 2.0 {
+            available_meat
+        } else {
+            bite_size
+        };
+        if let Some(mut hunger) = world.get_mut::<Hunger>(entity) {
+            hunger.0.change(-consumed);
+        }
+
+        let leftover = (available_meat - consumed).max(0.0);
+        let species_label = world
+            .get::<Creature>(self.prey)
+            .map(|c| c.species.clone())
+            .unwrap_or_else(|| "Prey".to_string());
+
+        if let Ok(prey_entity) = world.get_entity_mut(self.prey) {
+            prey_entity.despawn();
+        }
+
+        if leftover > MIN_CARCASS_NUTRITION {
+            world.spawn((
+                Carcass::new(species_label, leftover, DEFAULT_CARCASS_DECAY),
+                TilePosition::from_tile(prey_pos.tile),
+            ));
+        }
+
+        info!(
+            "🐺 Entity {:?} hunted prey {:?}, consumed {:.1} nutrition",
+            entity, self.prey, consumed
+        );
+
+        ActionResult::Success
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        clear_navigation_state(world, entity);
+    }
+
+    fn name(&self) -> &'static str {
+        "Hunt"
+    }
+}
+
+// =============================================================================
 // FOLLOW ACTION
 // =============================================================================
 
@@ -859,9 +1062,7 @@ impl Action for MateAction {
         if self.total_wait > self.max_wait_ticks {
             debug!(
                 "⚠️ MateAction: entity {:?} waited {} ticks for partner {:?} without success",
-                entity,
-                self.total_wait,
-                self.partner
+                entity, self.total_wait, self.partner
             );
             return ActionResult::TriggerFollowUp;
         }
@@ -1022,6 +1223,8 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
         ActionType::DrinkWater { target_tile } => Box::new(DrinkWaterAction::new(target_tile)),
         ActionType::Graze { target_tile } => Box::new(GrazeAction::new(target_tile)),
         ActionType::Rest { duration_ticks } => Box::new(RestAction::new(duration_ticks)),
+        ActionType::Scavenge { carcass } => Box::new(ScavengeAction::new(carcass)),
+        ActionType::Hunt { prey } => Box::new(HuntAction::new(prey)),
         ActionType::Follow {
             target,
             stop_distance,

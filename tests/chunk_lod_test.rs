@@ -7,12 +7,12 @@
 //! 4. Impostor data generation and quality levels
 
 use bevy::prelude::IVec2;
+use life_simulator::tilemap::{ChunkCoordinate, CHUNK_SIZE};
 use life_simulator::vegetation::chunk_lod::{
-    ChunkLODManager, ChunkMetadata, ChunkTemperature, ChunkImpostor, ImpostorQuality,
-    ChunkLODConfig
+    ChunkImpostor, ChunkLODConfig, ChunkLODManager, ChunkMetadata, ChunkTemperature,
+    ImpostorQuality,
 };
 use life_simulator::vegetation::resource_grid::ResourceGrid;
-use life_simulator::tilemap::{ChunkCoordinate, CHUNK_SIZE};
 
 #[test]
 fn test_chunk_temperature_calculation() {
@@ -100,8 +100,10 @@ fn test_chunk_metadata_aggregation() {
     assert_eq!(metadata.last_update_tick, 100);
 
     println!("✅ Chunk metadata aggregation test passed");
-    println!("   Active cells: {}, Aggregate biomass: {}, Max biomass: {}",
-             metadata.active_cells, metadata.aggregate_biomass, metadata.max_biomass);
+    println!(
+        "   Active cells: {}, Aggregate biomass: {}, Max biomass: {}",
+        metadata.active_cells, metadata.aggregate_biomass, metadata.max_biomass
+    );
 }
 
 #[test]
@@ -135,7 +137,10 @@ fn test_lazy_activation_conserves_biomass() {
     assert!(final_metadata.active_cells >= 5);
 
     println!("✅ Lazy activation biomass conservation test passed");
-    println!("   Initial: 100.0, Final: {:.1}", final_metadata.aggregate_biomass);
+    println!(
+        "   Initial: 100.0, Final: {:.1}",
+        final_metadata.aggregate_biomass
+    );
 }
 
 #[test]
@@ -159,8 +164,10 @@ fn test_impostor_data_generation() {
     assert!(low_impostor.density < 0.2);
 
     println!("✅ Impostor data generation test passed");
-    println!("   High density: {:.2}, Medium: {:.2}, Low: {:.2}",
-             impostor.density, medium_impostor.density, low_impostor.density);
+    println!(
+        "   High density: {:.2}, Medium: {:.2}, Low: {:.2}",
+        impostor.density, medium_impostor.density, low_impostor.density
+    );
 }
 
 #[test]
@@ -215,7 +222,10 @@ fn test_chunk_cleanup_distant_chunks() {
     assert_eq!(lod_manager.chunks.len(), 1);
 
     println!("✅ Chunk cleanup test passed");
-    println!("   Before: 2 chunks, After: {} chunks", lod_manager.chunks.len());
+    println!(
+        "   Before: 2 chunks, After: {} chunks",
+        lod_manager.chunks.len()
+    );
 }
 
 #[test]
@@ -247,8 +257,10 @@ fn test_chunk_lod_metrics() {
     assert_eq!(metrics.cold_chunks, 1);
 
     println!("✅ Chunk LOD metrics test passed");
-    println!("   Total: {}, Hot: {}, Warm: {}, Cold: {}",
-             metrics.total_chunks, metrics.hot_chunks, metrics.warm_chunks, metrics.cold_chunks);
+    println!(
+        "   Total: {}, Hot: {}, Warm: {}, Cold: {}",
+        metrics.total_chunks, metrics.hot_chunks, metrics.warm_chunks, metrics.cold_chunks
+    );
 }
 
 #[test]
@@ -267,17 +279,20 @@ fn test_multiple_agent_proximity_tracking() {
 
     // Test chunks around each agent
     let chunks_to_test = vec![
-        (ChunkCoordinate::new(0, 0), ChunkTemperature::Hot),   // Near (0,0)
-        (ChunkCoordinate::new(3, 3), ChunkTemperature::Hot),   // Near (0,0)
-        (ChunkCoordinate::new(9, 9), ChunkTemperature::Warm),  // Medium distance
+        (ChunkCoordinate::new(0, 0), ChunkTemperature::Hot), // Near (0,0)
+        (ChunkCoordinate::new(3, 3), ChunkTemperature::Hot), // Near (0,0)
+        (ChunkCoordinate::new(9, 9), ChunkTemperature::Warm), // Medium distance
         (ChunkCoordinate::new(12, 6), ChunkTemperature::Warm), // Medium distance
         (ChunkCoordinate::new(15, 15), ChunkTemperature::Cold), // Far from all
     ];
 
     for (chunk_coord, expected_temp) in chunks_to_test {
         let metadata = lod_manager.get_or_create_chunk(chunk_coord);
-        assert_eq!(metadata.temperature, expected_temp,
-                   "Chunk {:?} should be {:?}", chunk_coord, expected_temp);
+        assert_eq!(
+            metadata.temperature, expected_temp,
+            "Chunk {:?} should be {:?}",
+            chunk_coord, expected_temp
+        );
     }
 
     println!("✅ Multiple agent proximity tracking test passed");
@@ -309,13 +324,23 @@ fn test_chunk_lod_performance() {
     let recalc_time = start_time.elapsed();
 
     // Performance should be good
-    assert!(creation_time.as_millis() < 10, "Chunk creation should be fast");
-    assert!(recalc_time.as_millis() < 5, "Temperature recalculation should be fast");
+    assert!(
+        creation_time.as_millis() < 10,
+        "Chunk creation should be fast"
+    );
+    assert!(
+        recalc_time.as_millis() < 5,
+        "Temperature recalculation should be fast"
+    );
 
     let metrics = lod_manager.get_metrics();
     assert_eq!(metrics.total_chunks, 100);
 
     println!("✅ Chunk LOD performance test passed");
-    println!("   Creation: {}ms, Recalculation: {}ms, Total chunks: {}",
-             creation_time.as_millis(), recalc_time.as_millis(), metrics.total_chunks);
+    println!(
+        "   Creation: {}ms, Recalculation: {}ms, Total chunks: {}",
+        creation_time.as_millis(),
+        recalc_time.as_millis(),
+        metrics.total_chunks
+    );
 }

@@ -19,7 +19,9 @@ fn test_simple_grazing() {
 
     // Create vegetation cell at (5,5) with high biomass
     let tile = IVec2::new(5, 5);
-    resource_grid.get_or_create_cell(tile, 100.0, 1.0).total_biomass = 80.0;
+    resource_grid
+        .get_or_create_cell(tile, 100.0, 1.0)
+        .total_biomass = 80.0;
 
     // Insert resources
     world.insert_resource(resource_grid);

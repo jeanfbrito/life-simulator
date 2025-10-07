@@ -113,7 +113,7 @@ pub mod predator_effects {
 
     /// Radius at which predator presence affects herbivore behavior
     /// Distance in tiles at which herbivores become cautious
-    pub const FEAR_RADIUS: i32 = 20; // tiles
+    pub const FEAR_RADIUS: i32 = 40; // tiles
 
     /// Biomass threshold increase under fear (less selective when scared)
     /// Desperate herbivores accept lower quality food when threatened

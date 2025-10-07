@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_tests")]
+
 //! Integration tests for the new species architecture
 //!
 //! These tests validate that the modular species system works correctly

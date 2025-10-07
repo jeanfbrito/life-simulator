@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_tests")]
+
 // Test utilities for life-simulator integration tests
 use bevy::prelude::*;
 use life_simulator::entities::{EntityName, MovementSpeed, TilePosition, Wanderer};

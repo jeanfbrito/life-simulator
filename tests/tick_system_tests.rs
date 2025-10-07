@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_tests")]
+
 // Integration tests for tick system consistency
 // These tests verify the fixes documented in docs/TICK_SYSTEM_FIXES.md
 

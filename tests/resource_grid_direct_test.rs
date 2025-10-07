@@ -13,7 +13,9 @@ fn test_direct_resource_grid_consumption() {
     let initial_biomass = 80.0;
 
     // Create a cell with biomass
-    resource_grid.get_or_create_cell(tile, 100.0, 1.0).total_biomass = initial_biomass;
+    resource_grid
+        .get_or_create_cell(tile, 100.0, 1.0)
+        .total_biomass = initial_biomass;
 
     // Verify initial state
     assert_eq!(resource_grid.cell_count(), 1);
@@ -37,7 +39,10 @@ fn test_direct_resource_grid_consumption() {
 
     // Verify biomass was reduced
     let final_biomass = resource_grid.get_cell(tile).unwrap().total_biomass;
-    assert!(final_biomass < initial_biomass, "Biomass should have been reduced");
+    assert!(
+        final_biomass < initial_biomass,
+        "Biomass should have been reduced"
+    );
     assert!(
         (final_biomass - (initial_biomass - consumed)).abs() < 0.1,
         "Final biomass {:.1} should be initial {:.1} minus consumed {:.1}",
@@ -47,13 +52,19 @@ fn test_direct_resource_grid_consumption() {
     );
 
     // Verify regrowth event was scheduled
-    assert!(resource_grid.pending_events() > 0, "Regrowth event should be scheduled");
+    assert!(
+        resource_grid.pending_events() > 0,
+        "Regrowth event should be scheduled"
+    );
 
     println!("✅ Direct ResourceGrid consumption test passed");
     println!("   Initial biomass: {}", initial_biomass);
     println!("   Consumed: {}", consumed);
     println!("   Final biomass: {}", final_biomass);
-    println!("   Pending regrowth events: {}", resource_grid.pending_events());
+    println!(
+        "   Pending regrowth events: {}",
+        resource_grid.pending_events()
+    );
 }
 
 #[test]
@@ -64,7 +75,11 @@ fn test_resource_grid_empty_consumption() {
     // Try to consume from empty grid
     let consumed = resource_grid.consume_at(tile, 100.0, 0.3);
     assert_eq!(consumed, 0.0, "Should not consume from empty grid");
-    assert_eq!(resource_grid.pending_events(), 0, "Should not schedule regrowth for empty grid");
+    assert_eq!(
+        resource_grid.pending_events(),
+        0,
+        "Should not schedule regrowth for empty grid"
+    );
 
     println!("✅ Empty grid consumption test passed");
 }
@@ -76,7 +91,9 @@ fn test_resource_grid_multiple_consumptions() {
     let initial_biomass = 80.0;
 
     // Create a cell with biomass
-    resource_grid.get_or_create_cell(tile, 100.0, 1.0).total_biomass = initial_biomass;
+    resource_grid
+        .get_or_create_cell(tile, 100.0, 1.0)
+        .total_biomass = initial_biomass;
 
     let total_consumed = 0.0;
     let num_consumptions = 3;
@@ -87,14 +104,32 @@ fn test_resource_grid_multiple_consumptions() {
         let consumed = resource_grid.consume_at(tile, 100.0, 0.3);
         let after = resource_grid.get_cell(tile).unwrap().total_biomass;
 
-        println!("   Consumption {}: {:.1} -> {:.1} (consumed {:.1})", i + 1, before, after, consumed);
+        println!(
+            "   Consumption {}: {:.1} -> {:.1} (consumed {:.1})",
+            i + 1,
+            before,
+            after,
+            consumed
+        );
 
-        assert!(consumed > 0.0, "Should consume biomass on iteration {}", i + 1);
-        assert!(after < before, "Biomass should decrease on iteration {}", i + 1);
+        assert!(
+            consumed > 0.0,
+            "Should consume biomass on iteration {}",
+            i + 1
+        );
+        assert!(
+            after < before,
+            "Biomass should decrease on iteration {}",
+            i + 1
+        );
     }
 
     // Verify multiple regrowth events scheduled
-    assert_eq!(resource_grid.pending_events(), num_consumptions, "Should have scheduled regrowth for each consumption");
+    assert_eq!(
+        resource_grid.pending_events(),
+        num_consumptions,
+        "Should have scheduled regrowth for each consumption"
+    );
 
     println!("✅ Multiple consumptions test passed");
 }

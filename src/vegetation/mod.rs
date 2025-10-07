@@ -1386,7 +1386,10 @@ impl Plugin for VegetationPlugin {
             // Phase 5: Heatmap refresh management
             .add_systems(FixedUpdate, heatmap_refresh_management_system)
             // Phase 6: Global heatmap snapshot updates for web API
-            .add_systems(FixedUpdate, update_global_heatmap_snapshot_system.run_if(every_n_ticks(100))); // Every 10 seconds
+            .add_systems(
+                FixedUpdate,
+                update_global_heatmap_snapshot_system.run_if(every_n_ticks(100)),
+            ); // Every 10 seconds
     }
 }
 
@@ -1443,7 +1446,12 @@ fn setup_vegetation_system(
                             let distance_from_origin = tile.as_vec2().length();
                             if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
                                 let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
-                                resource_grid.get_or_create_cell(tile, 100.0 * terrain_multiplier, terrain_multiplier)
+                                resource_grid
+                                    .get_or_create_cell(
+                                        tile,
+                                        100.0 * terrain_multiplier,
+                                        terrain_multiplier,
+                                    )
                                     .total_biomass = initial_biomass;
                                 initialized_cells += 1;
                             }
@@ -1687,20 +1695,24 @@ fn update_global_heatmap_snapshot_system(
     }
 
     // Generate heatmap data from the actual ResourceGrid and LOD manager
-    let heatmap_json = generate_resource_grid_heatmap(&resource_grid, &lod_manager, &world_loader, current_tick);
+    let heatmap_json =
+        generate_resource_grid_heatmap(&resource_grid, &lod_manager, &world_loader, current_tick);
 
     // Parse the JSON to extract the heatmap data
     if let Ok(data) = serde_json::from_str::<serde_json::Value>(&heatmap_json) {
-        if let (Some(heatmap), Some(max_biomass)) = (
-            data["heatmap"].as_array(),
-            data["max_biomass"].as_f64()
-        ) {
+        if let (Some(heatmap), Some(max_biomass)) =
+            (data["heatmap"].as_array(), data["max_biomass"].as_f64())
+        {
             // Convert the heatmap to Vec<Vec<f32>>
             let heatmap_2d: Vec<Vec<f32>> = heatmap
                 .iter()
-                .filter_map(|row| row.as_array().map(|arr| {
-                    arr.iter().filter_map(|val| val.as_f64().map(|v| v as f32)).collect()
-                }))
+                .filter_map(|row| {
+                    row.as_array().map(|arr| {
+                        arr.iter()
+                            .filter_map(|val| val.as_f64().map(|v| v as f32))
+                            .collect()
+                    })
+                })
                 .collect();
 
             // Get world bounds from the world loader
@@ -1735,7 +1747,10 @@ fn update_global_heatmap_snapshot_system(
 
             // Log update periodically
             if current_tick % 600 == 0 {
-                info!("🌡️ Biomass heatmap snapshot updated for web API (tick {})", current_tick);
+                info!(
+                    "🌡️ Biomass heatmap snapshot updated for web API (tick {})",
+                    current_tick
+                );
             }
         }
     }
@@ -1804,7 +1819,8 @@ pub fn get_biomass_heatmap_json() -> String {
             "error": "Vegetation system not initialized or no global heatmap available",
             "note": "The biomass overlay requires proper ResourceGrid integration with the web API"
         }
-    }).to_string()
+    })
+    .to_string()
 }
 
 /// Phase 5: Heatmap refresh manager for on-demand updates

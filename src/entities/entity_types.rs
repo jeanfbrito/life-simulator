@@ -1,6 +1,9 @@
+use super::types::bear::BearBehavior;
 use super::types::deer::DeerBehavior;
+use super::types::fox::FoxBehavior;
 use super::types::rabbit::RabbitBehavior;
 use super::types::raccoon::RaccoonBehavior;
+use super::types::wolf::WolfBehavior;
 use super::{Creature, CurrentAction, EntityStatsBundle, FearState, MovementSpeed, TilePosition};
 use crate::pathfinding::PathfindingGrid;
 /// Modular entity types system
@@ -29,6 +32,18 @@ pub struct Deer;
 /// Marker component for raccoon entities
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Raccoon;
+
+/// Marker component for bear entities
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Bear;
+
+/// Marker component for fox entities
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Fox;
+
+/// Marker designating herbivores that use plant auto-eating logic.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Herbivore;
 
 /// Marker component for wolf entities (future)
 #[derive(Component, Debug, Clone, Copy)]
@@ -85,12 +100,30 @@ impl EntityTemplate {
         emoji: "🦝",
     };
 
-    /// Wolf template (future) - fast predator
+    /// Bear template - slow omnivore with broad roaming
+    pub const BEAR: EntityTemplate = EntityTemplate {
+        name_prefix: "Bear",
+        species: "Bear",
+        movement_speed: 12,
+        wander_radius: 80,
+        emoji: "🐻",
+    };
+
+    /// Fox template - agile mesopredator
+    pub const FOX: EntityTemplate = EntityTemplate {
+        name_prefix: "Fox",
+        species: "Fox",
+        movement_speed: 12,
+        wander_radius: 40,
+        emoji: "🦊",
+    };
+
+    /// Wolf template - coordinated pack hunter
     pub const WOLF: EntityTemplate = EntityTemplate {
         name_prefix: "Wolf",
         species: "Wolf",
-        movement_speed: 6, // 1.67 tiles/sec at 10 TPS (very fast)
-        wander_radius: 50, // Roams widely
+        movement_speed: 12,
+        wander_radius: 200,
         emoji: "🐺",
     };
 }
@@ -123,9 +156,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
     let template = EntityTemplate::RABBIT;
 
     {
-        use crate::entities::reproduction::{
-            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
-        };
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
         let cfg = RabbitBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
         let sex = if rng.gen_bool(0.5) {
@@ -139,6 +170,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
                     name: name.into(),
                     species: template.species.to_string(),
                 },
+                Herbivore,
                 Rabbit,
                 TilePosition::from_tile(position),
                 MovementSpeed::custom(template.movement_speed),
@@ -166,9 +198,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
     let template = EntityTemplate::DEER;
 
     {
-        use crate::entities::reproduction::{
-            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
-        };
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
         // Use deer reproduction config for maturity
         let cfg = DeerBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
@@ -183,6 +213,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                     name: name.into(),
                     species: template.species.to_string(),
                 },
+                Herbivore,
                 Deer,
                 TilePosition::from_tile(position),
                 MovementSpeed::custom(template.movement_speed),
@@ -209,9 +240,7 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
     let template = EntityTemplate::RACCOON;
 
     {
-        use crate::entities::reproduction::{
-            Age, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
-        };
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
         let cfg = RaccoonBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
         let sex = if rng.gen_bool(0.5) {
@@ -225,6 +254,7 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
                     name: name.into(),
                     species: template.species.to_string(),
                 },
+                Herbivore,
                 Raccoon,
                 TilePosition::from_tile(position),
                 MovementSpeed::custom(template.movement_speed),
@@ -241,6 +271,126 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
                 CurrentAction::none(),
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
+            ))
+            .id()
+    }
+}
+
+/// Spawn a bear entity
+pub fn spawn_bear(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+    let template = EntityTemplate::BEAR;
+
+    {
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        let cfg = BearBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Bear,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                BearBehavior::stats_bundle(),
+                BearBehavior::config(),
+                BearBehavior::needs(),
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                },
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(),
+                cfg,
+            ))
+            .id()
+    }
+}
+
+/// Spawn a fox entity
+pub fn spawn_fox(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+    let template = EntityTemplate::FOX;
+
+    {
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        let cfg = FoxBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Fox,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                FoxBehavior::stats_bundle(),
+                FoxBehavior::config(),
+                FoxBehavior::needs(),
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                },
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(),
+                cfg,
+            ))
+            .id()
+    }
+}
+
+/// Spawn a wolf entity
+pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IVec2) -> Entity {
+    let template = EntityTemplate::WOLF;
+
+    {
+        use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        let cfg = WolfBehavior::reproduction_config();
+        let mut rng = rand::thread_rng();
+        let sex = if rng.gen_bool(0.5) {
+            Sex::Male
+        } else {
+            Sex::Female
+        };
+
+        commands
+            .spawn((
+                Creature {
+                    name: name.into(),
+                    species: template.species.to_string(),
+                },
+                Wolf,
+                TilePosition::from_tile(position),
+                MovementSpeed::custom(template.movement_speed),
+                WolfBehavior::stats_bundle(),
+                WolfBehavior::config(),
+                WolfBehavior::needs(),
+                sex,
+                Age {
+                    ticks_alive: cfg.maturity_ticks as u64,
+                    mature_at_ticks: cfg.maturity_ticks,
+                },
+                ReproductionCooldown::default(),
+                WellFedStreak::default(),
+                CurrentAction::none(),
+                cfg,
             ))
             .id()
     }

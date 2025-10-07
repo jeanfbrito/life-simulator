@@ -41,7 +41,10 @@ fn test_consumption_empty_grid() {
     let result = action.execute(&mut world, rabbit_entity, 0);
 
     // Should fail or complete with no consumption
-    assert!(matches!(result, ActionResult::Success | ActionResult::Failed));
+    assert!(matches!(
+        result,
+        ActionResult::Success | ActionResult::Failed
+    ));
 
     // Verify no consumption occurred (grid still empty)
     let resource_grid = world.resource::<ResourceGrid>();
@@ -59,7 +62,9 @@ fn test_consumption_populated_grid() {
     let tile = IVec2::new(5, 5);
     let initial_biomass = 80.0;
 
-    resource_grid.get_or_create_cell(tile, 100.0, 1.0).total_biomass = initial_biomass;
+    resource_grid
+        .get_or_create_cell(tile, 100.0, 1.0)
+        .total_biomass = initial_biomass;
     world.insert_resource(resource_grid);
 
     // Spawn rabbit at the tile
@@ -78,7 +83,10 @@ fn test_consumption_populated_grid() {
     let result = action.execute(&mut world, rabbit_entity, 0);
 
     // Should succeed with consumption
-    assert!(matches!(result, ActionResult::Success | ActionResult::InProgress));
+    assert!(matches!(
+        result,
+        ActionResult::Success | ActionResult::InProgress
+    ));
 
     // Verify biomass was reduced
     let resource_grid = world.resource::<ResourceGrid>();
@@ -87,14 +95,26 @@ fn test_consumption_populated_grid() {
         .map(|c| c.total_biomass)
         .unwrap_or(0.0);
 
-    assert!(final_biomass < initial_biomass, "Biomass should have been consumed");
+    assert!(
+        final_biomass < initial_biomass,
+        "Biomass should have been consumed"
+    );
 
     // Verify regrowth event was scheduled
-    assert!(resource_grid.pending_events() > 0, "Regrowth event should be scheduled");
+    assert!(
+        resource_grid.pending_events() > 0,
+        "Regrowth event should be scheduled"
+    );
 
     println!("✅ Populated grid consumption test passed");
-    println!("   Initial biomass: {}, Final biomass: {}", initial_biomass, final_biomass);
-    println!("   Pending regrowth events: {}", resource_grid.pending_events());
+    println!(
+        "   Initial biomass: {}, Final biomass: {}",
+        initial_biomass, final_biomass
+    );
+    println!(
+        "   Pending regrowth events: {}",
+        resource_grid.pending_events()
+    );
 }
 
 #[test]
@@ -110,7 +130,9 @@ fn test_resource_grid_find_best_cell() {
     ];
 
     for (pos, biomass) in &positions {
-        resource_grid.get_or_create_cell(*pos, 100.0, 1.0).total_biomass = *biomass;
+        resource_grid
+            .get_or_create_cell(*pos, 100.0, 1.0)
+            .total_biomass = *biomass;
     }
 
     // Search from position (2, 2)
@@ -128,7 +150,10 @@ fn test_resource_grid_find_best_cell() {
     println!("Best cell: {:?} with biomass: {}", best_pos, best_biomass);
 
     // The exact choice depends on the utility calculation, but should be reasonable
-    assert!(best_biomass >= 40.0, "Should select a cell with decent biomass");
+    assert!(
+        best_biomass >= 40.0,
+        "Should select a cell with decent biomass"
+    );
 
     println!("✅ Find best cell test passed");
 }
@@ -164,8 +189,10 @@ fn test_animal_foraging_integration() {
     assert!(best_cell.is_some(), "Rabbit should be able to find food");
 
     let (food_pos, food_biomass) = best_cell.unwrap();
-    println!("Rabbit at {:?} found food at {:?} with {} biomass",
-             rabbit_pos, food_pos, food_biomass);
+    println!(
+        "Rabbit at {:?} found food at {:?} with {} biomass",
+        rabbit_pos, food_pos, food_biomass
+    );
 
     assert!(food_biomass >= 10.0, "Food should have sufficient biomass");
 
@@ -178,36 +205,50 @@ fn test_animal_foraging_integration() {
     let mut action = life_simulator::ai::action::GrazeAction::new(food_pos);
     let result = action.execute(&mut app.world_mut(), rabbit_entity, 0);
 
-    assert!(matches!(result, ActionResult::Success | ActionResult::InProgress),
-            "Foraging should succeed");
+    assert!(
+        matches!(result, ActionResult::Success | ActionResult::InProgress),
+        "Foraging should succeed"
+    );
 
     // Verify consumption occurred
-    let final_biomass = app.world()
+    let final_biomass = app
+        .world()
         .resource::<ResourceGrid>()
         .get_cell(food_pos)
         .map(|c| c.total_biomass)
         .unwrap_or(0.0);
 
-    assert!(final_biomass < food_biomass, "Food biomass should be reduced");
+    assert!(
+        final_biomass < food_biomass,
+        "Food biomass should be reduced"
+    );
 
     println!("✅ Animal foraging integration test passed");
-    println!("   Food consumed: {} -> {} biomass", food_biomass, final_biomass);
+    println!(
+        "   Food consumed: {} -> {} biomass",
+        food_biomass, final_biomass
+    );
 }
 
 fn setup_foraging_world(mut resource_grid: ResMut<ResourceGrid>) {
     // Create a realistic foraging environment
     let vegetation_patches = vec![
-        (IVec2::new(5, 3), 70.0),   // Close, good biomass
-        (IVec2::new(8, 8), 50.0),   // Medium distance, decent biomass
-        (IVec2::new(2, 10), 90.0),  // Medium distance, excellent biomass
-        (IVec2::new(12, 1), 30.0),  // Far, low biomass
+        (IVec2::new(5, 3), 70.0),  // Close, good biomass
+        (IVec2::new(8, 8), 50.0),  // Medium distance, decent biomass
+        (IVec2::new(2, 10), 90.0), // Medium distance, excellent biomass
+        (IVec2::new(12, 1), 30.0), // Far, low biomass
     ];
 
     for (pos, biomass) in &vegetation_patches {
-        resource_grid.get_or_create_cell(*pos, 100.0, 1.0).total_biomass = *biomass;
+        resource_grid
+            .get_or_create_cell(*pos, 100.0, 1.0)
+            .total_biomass = *biomass;
     }
 
-    println!("Setup foraging world with {} vegetation patches", vegetation_patches.len());
+    println!(
+        "Setup foraging world with {} vegetation patches",
+        vegetation_patches.len()
+    );
 }
 
 fn spawn_foraging_rabbit(mut commands: Commands) {

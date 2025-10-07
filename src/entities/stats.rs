@@ -7,6 +7,8 @@
 /// - Thresholds (critical/low/normal) trigger AI decisions
 use bevy::prelude::*;
 
+use crate::entities::{Carcass, Creature, SpeciesNeeds, TilePosition};
+
 // ============================================================================
 // STAT COMPONENTS
 // ============================================================================
@@ -285,12 +287,35 @@ pub fn tick_stats_system(
 }
 
 /// Handle death when health reaches zero
-pub fn death_system(mut commands: Commands, query: Query<(Entity, &Health)>) {
-    for (entity, health) in query.iter() {
+pub fn death_system(
+    mut commands: Commands,
+    query: Query<(
+        Entity,
+        &Health,
+        Option<&TilePosition>,
+        Option<&SpeciesNeeds>,
+        Option<&Creature>,
+    )>,
+) {
+    for (entity, health, position, needs, creature) in query.iter() {
         if health.is_dead() {
             info!("Entity {:?} has died!", entity);
-            // For now, just remove the entity
-            // In future: trigger death animation, drop items, etc.
+
+            if let Some(pos) = position {
+                let species_label = creature
+                    .map(|c| c.species.clone())
+                    .unwrap_or_else(|| "Unknown".to_string());
+                let base_nutrition = needs
+                    .map(|n| (n.eat_amount * 3.0).max(20.0))
+                    .unwrap_or(50.0);
+                let decay_ticks = 7_200; // ~12 minutes at 10 TPS
+
+                commands.spawn((
+                    Carcass::new(species_label, base_nutrition, decay_ticks),
+                    TilePosition::from_tile(pos.tile),
+                ));
+            }
+
             commands.entity(entity).despawn();
         }
     }

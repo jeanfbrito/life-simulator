@@ -109,7 +109,12 @@ fn find_best_forage_cell_with_strategy(
                         }
 
                         let check_pos = from + IVec2::new(dx, dy);
-                        if is_cell_suitable_for_foraging(check_pos, from, world_loader, resource_grid) {
+                        if is_cell_suitable_for_foraging(
+                            check_pos,
+                            from,
+                            world_loader,
+                            resource_grid,
+                        ) {
                             return Some(check_pos);
                         }
                     }

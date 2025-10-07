@@ -87,6 +87,21 @@ impl SpeciesSystemsRegistry {
                 .with_mate_matching()
                 .with_birth_system()
                 .with_planner_system(),
+            // Bear systems
+            SpeciesSystemsDescriptor::new("Bear")
+                .with_mate_matching()
+                .with_birth_system()
+                .with_planner_system(),
+            // Fox systems
+            SpeciesSystemsDescriptor::new("Fox")
+                .with_mate_matching()
+                .with_birth_system()
+                .with_planner_system(),
+            // Wolf systems
+            SpeciesSystemsDescriptor::new("Wolf")
+                .with_mate_matching()
+                .with_birth_system()
+                .with_planner_system(),
         ];
 
         Self {

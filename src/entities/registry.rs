@@ -6,7 +6,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use super::{Deer, Human, Rabbit, Raccoon, Wolf};
+use super::{Bear, Deer, Fox, Herbivore, Human, Rabbit, Raccoon, Wolf};
 use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
 use crate::entities::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
 use crate::pathfinding::PathfindingGrid;
@@ -125,17 +125,43 @@ impl SpeciesRegistry {
                 viewer_color: "#696969",
             },
             SpeciesDescriptor {
+                species: "Bear",
+                name_prefix: "Bear",
+                emoji: "🐻",
+                spawn_fn: spawn_bear_registry,
+                movement_speed: 12,
+                wander_radius: 80,
+                is_juvenile: false,
+                juvenile_name_prefix: Some("Cub"),
+                viewer_order: 70,
+                viewer_scale: 1.2,
+                viewer_color: "#3b2f2f",
+            },
+            SpeciesDescriptor {
+                species: "Fox",
+                name_prefix: "Fox",
+                emoji: "🦊",
+                spawn_fn: spawn_fox_registry,
+                movement_speed: 16,
+                wander_radius: 40,
+                is_juvenile: false,
+                juvenile_name_prefix: Some("Kit"),
+                viewer_order: 65,
+                viewer_scale: 0.6,
+                viewer_color: "#c1440e",
+            },
+            SpeciesDescriptor {
                 species: "Wolf",
                 name_prefix: "Wolf",
                 emoji: "🐺",
                 spawn_fn: spawn_wolf_registry,
-                movement_speed: 6,
-                wander_radius: 50,
+                movement_speed: 12,
+                wander_radius: 200,
                 is_juvenile: false,
                 juvenile_name_prefix: Some("Pup"),
                 viewer_order: 80,
-                viewer_scale: 1.0,
-                viewer_color: "#2f4f4f",
+                viewer_scale: 0.9,
+                viewer_color: "#666666",
             },
         ];
 
@@ -223,6 +249,7 @@ fn spawn_rabbit_registry(commands: &mut Commands, name: String, position: IVec2)
                 name,
                 species: descriptor.species.to_string(),
             },
+            Herbivore,
             Rabbit,
             TilePosition::from_tile(position),
             MovementSpeed::custom(descriptor.movement_speed),
@@ -262,6 +289,7 @@ fn spawn_deer_registry(commands: &mut Commands, name: String, position: IVec2) -
                 name,
                 species: descriptor.species.to_string(),
             },
+            Herbivore,
             Deer,
             TilePosition::from_tile(position),
             MovementSpeed::custom(descriptor.movement_speed),
@@ -301,6 +329,7 @@ fn spawn_raccoon_registry(commands: &mut Commands, name: String, position: IVec2
                 name,
                 species: descriptor.species.to_string(),
             },
+            Herbivore,
             Raccoon,
             TilePosition::from_tile(position),
             MovementSpeed::custom(descriptor.movement_speed),
@@ -320,12 +349,101 @@ fn spawn_raccoon_registry(commands: &mut Commands, name: String, position: IVec2
         .id()
 }
 
+/// Registry-based spawn function for bears
+fn spawn_bear_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
+    let descriptor = SPECIES_REGISTRY
+        .find_by_species("Bear")
+        .expect("Bear descriptor registered");
+
+    use super::types::bear::BearBehavior;
+
+    let cfg = BearBehavior::reproduction_config();
+    let mut rng = rand::thread_rng();
+    let sex = if rng.gen_bool(0.5) {
+        Sex::Male
+    } else {
+        Sex::Female
+    };
+
+    commands
+        .spawn((
+            Creature {
+                name,
+                species: descriptor.species.to_string(),
+            },
+            Bear,
+            TilePosition::from_tile(position),
+            MovementSpeed::custom(descriptor.movement_speed),
+            BearBehavior::stats_bundle(),
+            BearBehavior::config(),
+            BearBehavior::needs(),
+            sex,
+            Age {
+                ticks_alive: cfg.maturity_ticks as u64,
+                mature_at_ticks: cfg.maturity_ticks,
+            },
+            ReproductionCooldown::default(),
+            WellFedStreak::default(),
+            CurrentAction::none(),
+            cfg,
+        ))
+        .id()
+}
+
+/// Registry-based spawn function for foxes
+fn spawn_fox_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
+    let descriptor = SPECIES_REGISTRY
+        .find_by_species("Fox")
+        .expect("Fox descriptor registered");
+
+    use super::types::fox::FoxBehavior;
+
+    let cfg = FoxBehavior::reproduction_config();
+    let mut rng = rand::thread_rng();
+    let sex = if rng.gen_bool(0.5) {
+        Sex::Male
+    } else {
+        Sex::Female
+    };
+
+    commands
+        .spawn((
+            Creature {
+                name,
+                species: descriptor.species.to_string(),
+            },
+            Fox,
+            TilePosition::from_tile(position),
+            MovementSpeed::custom(descriptor.movement_speed),
+            FoxBehavior::stats_bundle(),
+            FoxBehavior::config(),
+            FoxBehavior::needs(),
+            sex,
+            Age {
+                ticks_alive: cfg.maturity_ticks as u64,
+                mature_at_ticks: cfg.maturity_ticks,
+            },
+            ReproductionCooldown::default(),
+            WellFedStreak::default(),
+            CurrentAction::none(),
+            cfg,
+        ))
+        .id()
+}
+
 /// Registry-based spawn function for wolves
 fn spawn_wolf_registry(commands: &mut Commands, name: String, position: IVec2) -> Entity {
     let descriptor = SPECIES_REGISTRY.wolf();
 
-    // TODO: Implement WolfBehavior when wolves are added
-    // For now, use basic components
+    use super::types::wolf::WolfBehavior;
+
+    let cfg = WolfBehavior::reproduction_config();
+    let mut rng = rand::thread_rng();
+    let sex = if rng.gen_bool(0.5) {
+        Sex::Male
+    } else {
+        Sex::Female
+    };
 
     commands
         .spawn((
@@ -336,8 +454,18 @@ fn spawn_wolf_registry(commands: &mut Commands, name: String, position: IVec2) -
             Wolf,
             TilePosition::from_tile(position),
             MovementSpeed::custom(descriptor.movement_speed),
-            EntityStatsBundle::default(),
+            WolfBehavior::stats_bundle(),
+            WolfBehavior::config(),
+            WolfBehavior::needs(),
+            sex,
+            Age {
+                ticks_alive: cfg.maturity_ticks as u64,
+                mature_at_ticks: cfg.maturity_ticks,
+            },
+            ReproductionCooldown::default(),
+            WellFedStreak::default(),
             CurrentAction::none(),
+            cfg,
         ))
         .id()
 }

@@ -1,4 +1,5 @@
 pub mod auto_eat;
+pub mod carcass;
 pub mod current_action;
 pub mod entity_tracker;
 pub mod entity_types;
@@ -28,11 +29,14 @@ pub use stats::{
     utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
 };
 
+pub use carcass::{tick_carcasses, Carcass};
+
 pub use fear::{fear_speed_system, predator_proximity_system, FearPlugin, FearState};
 
 pub use entity_types::{
-    count_entities_by_type, spawn_deer, spawn_human, spawn_humans, spawn_rabbit, spawn_rabbits,
-    spawn_raccoon, Deer, EntityTemplate, Human, Rabbit, Raccoon, Wolf,
+    count_entities_by_type, spawn_bear, spawn_deer, spawn_fox, spawn_human, spawn_humans,
+    spawn_rabbit, spawn_rabbits, spawn_raccoon, spawn_wolf, Bear, Deer, EntityTemplate, Fox,
+    Herbivore, Human, Rabbit, Raccoon, Wolf,
 };
 
 pub use registry::{
@@ -69,7 +73,10 @@ pub fn get_species_metadata_json() -> String {
     let juvenile_scales = serde_json::json!({
         "Rabbit": 0.7,
         "Deer": 0.8,
-        "Raccoon": 0.75
+        "Raccoon": 0.75,
+        "Bear": 0.65,
+        "Fox": 0.6,
+        "Wolf": 0.75
     });
 
     let result = serde_json::json!({
@@ -96,9 +103,14 @@ pub use reproduction::{
     MatingIntent, Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 
-pub use types::deer::{deer_birth_system, deer_mate_matching_system};
-pub use types::rabbit::{rabbit_birth_system, rabbit_mate_matching_system};
-pub use types::raccoon::{raccoon_birth_system, raccoon_mate_matching_system};
+pub use types::bear::{bear_birth_system, bear_mate_matching_system, plan_bear_actions};
+pub use types::deer::{deer_birth_system, deer_mate_matching_system, plan_deer_actions};
+pub use types::fox::{fox_birth_system, fox_mate_matching_system, plan_fox_actions};
+pub use types::rabbit::{plan_rabbit_actions, rabbit_birth_system, rabbit_mate_matching_system};
+pub use types::raccoon::{
+    plan_raccoon_actions, raccoon_birth_system, raccoon_mate_matching_system,
+};
+pub use types::wolf::{plan_wolf_actions, wolf_birth_system, wolf_mate_matching_system};
 pub use types::{BehaviorConfig, SpeciesNeeds};
 
 pub use current_action::CurrentAction;
@@ -161,10 +173,17 @@ impl Plugin for EntitiesPlugin {
                     rabbit_mate_matching_system,     // Pairing (rabbits)
                     deer_mate_matching_system,       // Pairing (deer)
                     raccoon_mate_matching_system,    // Pairing (raccoons)
+                    bear_mate_matching_system,       // Pairing (bears)
+                    fox_mate_matching_system,        // Pairing (foxes)
+                    wolf_mate_matching_system,       // Pairing (wolves)
                     rabbit_birth_system,             // Rabbit births
                     deer_birth_system,               // Deer births
                     raccoon_birth_system,            // Raccoon births
+                    bear_birth_system,               // Bear births
+                    fox_birth_system,                // Fox births
+                    wolf_birth_system,               // Wolf births
                     stats::death_system,             // Handle death
+                    tick_carcasses,                  // Decay carcasses
                 )
                     .run_if(should_run_tick_systems),
             );

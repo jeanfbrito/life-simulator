@@ -1,12 +1,11 @@
+use bevy::math::IVec2;
+use life_simulator::vegetation::resource_grid::grid_helpers::*;
 /// Performance benchmark for ResourceGrid (Phase 1 validation)
 ///
 /// This test validates that the sparse, event-driven resource grid
 /// can handle 10k cells with per-tick updates under 1ms as specified in the rewrite plan.
-
 use life_simulator::vegetation::resource_grid::*;
-use life_simulator::vegetation::resource_grid::grid_helpers::*;
 use std::time::Instant;
-use bevy::math::IVec2;
 
 #[test]
 fn test_10k_cell_performance() {
@@ -29,7 +28,8 @@ fn test_10k_cell_performance() {
             // Each chunk has ~25% vegetation coverage (sparse)
             for local_x in 0..chunk_size {
                 for local_y in 0..chunk_size {
-                    if rand::random::<f32>() < 0.25 { // 25% chance of vegetation
+                    if rand::random::<f32>() < 0.25 {
+                        // 25% chance of vegetation
                         let world_x = chunk_x * chunk_size + local_x;
                         let world_y = chunk_y * chunk_size + local_y;
                         let pos = IVec2::new(world_x, world_y);
@@ -44,9 +44,9 @@ fn test_10k_cell_performance() {
                         };
 
                         let growth_modifier = match rand::random::<u32>() % 3 {
-                            0 => 1.0,  // Normal
-                            1 => 1.1,  // Good (forest, swamp)
-                            _ => 0.7,  // Poor (dry terrain)
+                            0 => 1.0, // Normal
+                            1 => 1.1, // Good (forest, swamp)
+                            _ => 0.7, // Poor (dry terrain)
                         };
 
                         grid.get_or_create_cell(pos, max_biomass, growth_modifier);
@@ -68,7 +68,11 @@ fn test_10k_cell_performance() {
     }
 
     let setup_time = setup_start.elapsed();
-    println!("✅ Setup completed: {} cells in {:?}", positions.len(), setup_time);
+    println!(
+        "✅ Setup completed: {} cells in {:?}",
+        positions.len(),
+        setup_time
+    );
     assert!(positions.len() >= 10000, "Should create at least 10k cells");
 
     // Phase 2: Simulate consumption events
@@ -87,7 +91,10 @@ fn test_10k_cell_performance() {
     }
 
     let consume_time = consume_start.elapsed();
-    println!("✅ Consumption simulation: {} events in {:?}", consumption_events, consume_time);
+    println!(
+        "✅ Consumption simulation: {} events in {:?}",
+        consumption_events, consume_time
+    );
 
     // Phase 3: Process regrowth events
     println!("🌱 Processing regrowth events...");
@@ -136,21 +143,35 @@ fn test_10k_cell_performance() {
 
     // Phase 1 Validation: Per-tick updates must be ≤ 1ms
     let one_ms = std::time::Duration::from_millis(1);
-    assert!(avg_tick_time <= one_ms,
-        "❌ Phase 1 FAILED: Average tick time {:?} exceeds 1ms budget", avg_tick_time);
-    assert!(*max_tick_time <= one_ms * 2,
-        "❌ Phase 1 FAILED: Max tick time {:?} exceeds 2ms tolerance", max_tick_time);
+    assert!(
+        avg_tick_time <= one_ms,
+        "❌ Phase 1 FAILED: Average tick time {:?} exceeds 1ms budget",
+        avg_tick_time
+    );
+    assert!(
+        *max_tick_time <= one_ms * 2,
+        "❌ Phase 1 FAILED: Max tick time {:?} exceeds 2ms tolerance",
+        max_tick_time
+    );
 
     println!("✅ Phase 1 VALIDATION PASSED: Per-tick updates within budget");
 
     // Additional validation: Ensure sparse storage efficiency
-    let total_possible_tiles = (world_radius_chunks * 2 + 1) * chunk_size * (world_radius_chunks * 2 + 1) * chunk_size;
+    let total_possible_tiles =
+        (world_radius_chunks * 2 + 1) * chunk_size * (world_radius_chunks * 2 + 1) * chunk_size;
     let storage_efficiency = (grid.cell_count() as f32) / (total_possible_tiles as f32) * 100.0;
-    println!("💾 Storage efficiency: {:.1}% ({} cells / {} possible tiles)",
-        storage_efficiency, grid.cell_count(), total_possible_tiles);
+    println!(
+        "💾 Storage efficiency: {:.1}% ({} cells / {} possible tiles)",
+        storage_efficiency,
+        grid.cell_count(),
+        total_possible_tiles
+    );
 
-    assert!(storage_efficiency < 50.0,
-        "Storage should be sparse (< 50% of possible tiles), got {:.1}%", storage_efficiency);
+    assert!(
+        storage_efficiency < 50.0,
+        "Storage should be sparse (< 50% of possible tiles), got {:.1}%",
+        storage_efficiency
+    );
 
     println!("✅ Sparse storage efficiency validated");
 

@@ -1,5 +1,5 @@
 use crate::entities::types::SpeciesNeeds;
-use crate::entities::{stats::Hunger, TilePosition};
+use crate::entities::{stats::Hunger, Herbivore, TilePosition};
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 /// Auto-eat system for herbivores
@@ -9,7 +9,7 @@ use bevy::prelude::*;
 
 /// System that auto-eats grass when standing on it and hungry
 pub fn auto_eat_system(
-    mut query: Query<(Entity, &TilePosition, &mut Hunger, Option<&SpeciesNeeds>)>,
+    mut query: Query<(Entity, &TilePosition, &mut Hunger, Option<&SpeciesNeeds>), With<Herbivore>>,
     world_loader: Res<WorldLoader>,
 ) {
     for (entity, position, mut hunger, needs) in query.iter_mut() {

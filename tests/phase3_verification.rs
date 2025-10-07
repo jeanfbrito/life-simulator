@@ -22,8 +22,8 @@ fn test_phase3_constants_verification() {
     );
     assert_eq!(
         predator_effects::FEAR_RADIUS,
-        20,
-        "Fear radius should be 20 tiles"
+        40,
+        "Fear radius should be 40 tiles"
     );
     assert_eq!(
         predator_effects::FEAR_BIOMASS_TOLERANCE,
@@ -257,8 +257,8 @@ fn test_phase3_constants_match_plan() {
     );
     assert_eq!(
         predator_effects::FEAR_RADIUS,
-        20,
-        "20 tiles detection radius"
+        40,
+        "40 tiles detection radius"
     );
     assert_eq!(
         predator_effects::FEAR_BIOMASS_TOLERANCE,

@@ -11,6 +11,7 @@ pub mod consideration;
 pub mod event_driven_planner;
 pub mod herbivore_toolkit;
 pub mod planner;
+pub mod predator_toolkit;
 pub mod queue;
 pub mod replan_queue;
 pub mod trigger_emitters;

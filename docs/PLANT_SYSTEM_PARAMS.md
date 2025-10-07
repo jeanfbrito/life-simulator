@@ -213,7 +213,7 @@ pub const FORAGE_MIN_BIOMASS: f32 = 10.0; // minimum for foraging
 
 ```rust
 pub const FEAR_FEEDING_REDUCTION: f32 = 0.3; // 30% shorter feeding
-pub const FEAR_RADIUS: i32 = 20; // tiles
+pub const FEAR_RADIUS: i32 = 40; // tiles
 pub const FEAR_SPEED_BOOST: f32 = 1.5; // 1.5x movement speed
 ```
 

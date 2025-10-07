@@ -136,6 +136,9 @@ impl Plugin for EventDrivenPlannerPlugin {
                 crate::entities::types::rabbit::plan_rabbit_actions,
                 crate::entities::types::deer::plan_deer_actions,
                 crate::entities::types::raccoon::plan_raccoon_actions,
+                crate::entities::types::bear::plan_bear_actions,
+                crate::entities::types::fox::plan_fox_actions,
+                crate::entities::types::wolf::plan_wolf_actions,
                 cleanup_replanning_markers,
             )
                 .chain()

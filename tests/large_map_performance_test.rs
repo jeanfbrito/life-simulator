@@ -8,11 +8,11 @@
 //! 5. LOD system effectiveness in large-scale scenarios
 
 use bevy::prelude::IVec2;
+use life_simulator::tilemap::ChunkCoordinate;
 use life_simulator::vegetation::chunk_lod::{
-    ChunkLODManager, ChunkMetadata, ChunkTemperature, ChunkLODConfig
+    ChunkLODConfig, ChunkLODManager, ChunkMetadata, ChunkTemperature,
 };
 use life_simulator::vegetation::resource_grid::ResourceGrid;
-use life_simulator::tilemap::ChunkCoordinate;
 use std::time::{Duration, Instant};
 
 /// Large map configuration for performance testing
@@ -37,7 +37,11 @@ enum AgentPattern {
     /// Agents in multiple small clusters
     MultiCluster { clusters: Vec<(IVec2, i32)> },
     /// Agents along a path/line
-    Linear { start: IVec2, end: IVec2, count: usize },
+    Linear {
+        start: IVec2,
+        end: IVec2,
+        count: usize,
+    },
 }
 
 impl LargeMapConfig {
@@ -182,7 +186,11 @@ fn run_performance_test(config: &LargeMapConfig) -> PerformanceMetrics {
 
     // Generate agents
     let agents = config.generate_agents();
-    println!("👥 Generated {} agents with pattern: {:?}", agents.len(), config.agent_pattern);
+    println!(
+        "👥 Generated {} agents with pattern: {:?}",
+        agents.len(),
+        config.agent_pattern
+    );
 
     // Performance measurement setup
     let start_time = Instant::now();
@@ -244,7 +252,10 @@ fn print_performance_results(test_name: &str, metrics: &PerformanceMetrics) {
     println!("   Active Chunks: {} (hot + warm)", metrics.active_chunks);
     println!("   Cold Chunks: {}", metrics.cold_chunks);
     println!("   Total Chunks Tracked: {}", metrics.memory_chunks);
-    println!("   LOD Efficiency: {:.2}% (active/total)", metrics.lod_efficiency * 100.0);
+    println!(
+        "   LOD Efficiency: {:.2}% (active/total)",
+        metrics.lod_efficiency * 100.0
+    );
 
     // Performance assessment
     let avg_update_ms = metrics.avg_update_time.as_millis();
@@ -277,7 +288,7 @@ fn test_large_map_clustered_agents() {
         1200, // 1200 chunks (~35x35 grid)
         AgentPattern::Clustered {
             center: IVec2::new(0, 0),
-            radius: 15 // Much tighter clustering
+            radius: 15, // Much tighter clustering
         },
         50, // 50 agents clustered together
     );
@@ -286,12 +297,18 @@ fn test_large_map_clustered_agents() {
     print_performance_results("Large Map - Clustered Agents", &metrics);
 
     // Validate performance expectations for clustered agents
-    assert!(metrics.avg_update_time.as_millis() <= 15,
-           "Average update time should be ≤15ms for clustered agents");
-    assert!(metrics.max_update_time.as_millis() <= 30,
-           "Maximum update time should be ≤30ms for clustered agents");
-    assert!(metrics.lod_efficiency <= 0.7,
-           "LOD efficiency should be ≤70% for tightly clustered agents (active/total chunks)");
+    assert!(
+        metrics.avg_update_time.as_millis() <= 15,
+        "Average update time should be ≤15ms for clustered agents"
+    );
+    assert!(
+        metrics.max_update_time.as_millis() <= 30,
+        "Maximum update time should be ≤30ms for clustered agents"
+    );
+    assert!(
+        metrics.lod_efficiency <= 0.7,
+        "LOD efficiency should be ≤70% for tightly clustered agents (active/total chunks)"
+    );
 
     println!("✅ Large map clustered agents test passed");
 }
@@ -308,10 +325,14 @@ fn test_large_map_distributed_agents() {
     print_performance_results("Large Map - Distributed Agents", &metrics);
 
     // Validate performance expectations for distributed agents
-    assert!(metrics.avg_update_time.as_millis() <= 15,
-           "Average update time should be ≤15ms for distributed agents");
-    assert!(metrics.max_update_time.as_millis() <= 30,
-           "Maximum update time should be ≤30ms for distributed agents");
+    assert!(
+        metrics.avg_update_time.as_millis() <= 15,
+        "Average update time should be ≤15ms for distributed agents"
+    );
+    assert!(
+        metrics.max_update_time.as_millis() <= 30,
+        "Maximum update time should be ≤30ms for distributed agents"
+    );
 
     println!("✅ Large map distributed agents test passed");
 }
@@ -334,12 +355,18 @@ fn test_large_map_multi_cluster() {
     print_performance_results("Large Map - Multi-Cluster", &metrics);
 
     // Validate performance expectations for multi-cluster
-    assert!(metrics.avg_update_time.as_millis() <= 12,
-           "Average update time should be ≤12ms for multi-cluster agents");
-    assert!(metrics.max_update_time.as_millis() <= 25,
-           "Maximum update time should be ≤25ms for multi-cluster agents");
-    assert!(metrics.lod_efficiency <= 0.3,
-           "LOD efficiency should be ≤30% for tight multi-cluster agents");
+    assert!(
+        metrics.avg_update_time.as_millis() <= 12,
+        "Average update time should be ≤12ms for multi-cluster agents"
+    );
+    assert!(
+        metrics.max_update_time.as_millis() <= 25,
+        "Maximum update time should be ≤25ms for multi-cluster agents"
+    );
+    assert!(
+        metrics.lod_efficiency <= 0.3,
+        "LOD efficiency should be ≤30% for tight multi-cluster agents"
+    );
 
     println!("✅ Large map multi-cluster test passed");
 }
@@ -354,7 +381,10 @@ fn test_cpu_usage_scalability() {
     for chunk_count in [400, 800, 1200, 1600] {
         let config = LargeMapConfig::new(
             chunk_count,
-            AgentPattern::Clustered { center: IVec2::new(0, 0), radius: 30 },
+            AgentPattern::Clustered {
+                center: IVec2::new(0, 0),
+                radius: 30,
+            },
             30,
         );
 
@@ -365,8 +395,11 @@ fn test_cpu_usage_scalability() {
         let metrics = run_performance_test(&short_config);
         results.push((chunk_count, metrics.avg_update_time.as_micros()));
 
-        println!("   {} chunks: {}µs avg update time",
-                chunk_count, metrics.avg_update_time.as_micros());
+        println!(
+            "   {} chunks: {}µs avg update time",
+            chunk_count,
+            metrics.avg_update_time.as_micros()
+        );
     }
 
     // Validate that CPU usage scales sub-linearly with chunk count
@@ -375,15 +408,27 @@ fn test_cpu_usage_scalability() {
     let (chunks_1200, time_1200) = results[2];
 
     let chunks_ratio = chunks_1200 as f32 / chunks_400 as f32; // Should be ~3.0
-    let time_ratio = if time_400 > 0 { time_1200 as f32 / time_400 as f32 } else { 1.0 };
+    let time_ratio = if time_400 > 0 {
+        time_1200 as f32 / time_400 as f32
+    } else {
+        1.0
+    };
 
-    println!("   Chunk ratio: {:.1}x ({} -> {})", chunks_ratio, chunks_400, chunks_1200);
-    println!("   Time ratio: {:.1}x ({}µs -> {}µs)", time_ratio, time_400, time_1200);
+    println!(
+        "   Chunk ratio: {:.1}x ({} -> {})",
+        chunks_ratio, chunks_400, chunks_1200
+    );
+    println!(
+        "   Time ratio: {:.1}x ({}µs -> {}µs)",
+        time_ratio, time_400, time_1200
+    );
 
     // Time ratio should be significantly less than chunk ratio due to LOD efficiency
     // or at least not proportionally higher
-    assert!(time_ratio <= chunks_ratio * 1.2,
-           "CPU usage should scale sub-linearly with chunk count due to LOD");
+    assert!(
+        time_ratio <= chunks_ratio * 1.2,
+        "CPU usage should scale sub-linearly with chunk count due to LOD"
+    );
 
     println!("✅ CPU usage scalability test passed - LOD system provides good scalability");
 }
@@ -394,7 +439,10 @@ fn test_memory_efficiency() {
 
     let config = LargeMapConfig::new(
         2000, // 2000 chunks (~45x45 grid)
-        AgentPattern::Clustered { center: IVec2::new(0, 0), radius: 25 },
+        AgentPattern::Clustered {
+            center: IVec2::new(0, 0),
+            radius: 25,
+        },
         20, // Only 20 agents
     );
 
@@ -413,14 +461,21 @@ fn test_memory_efficiency() {
     let metrics = lod_manager.get_metrics();
 
     println!("   Total chunks in memory: {}", metrics.total_chunks);
-    println!("   Active chunks (hot + warm): {}", metrics.hot_chunks + metrics.warm_chunks);
+    println!(
+        "   Active chunks (hot + warm): {}",
+        metrics.hot_chunks + metrics.warm_chunks
+    );
     println!("   Cold chunks (impostor only): {}", metrics.cold_chunks);
-    println!("   Memory efficiency: {:.1}% of chunks are active",
-            (metrics.hot_chunks + metrics.warm_chunks) as f32 / metrics.total_chunks as f32 * 100.0);
+    println!(
+        "   Memory efficiency: {:.1}% of chunks are active",
+        (metrics.hot_chunks + metrics.warm_chunks) as f32 / metrics.total_chunks as f32 * 100.0
+    );
 
     // With clustered agents, most chunks should be cold (impostor only)
-    assert!(metrics.cold_chunks > metrics.total_chunks / 2,
-           "Most chunks should be cold when agents are clustered");
+    assert!(
+        metrics.cold_chunks > metrics.total_chunks / 2,
+        "Most chunks should be cold when agents are clustered"
+    );
 
     println!("✅ Memory efficiency test passed - LOD system effectively reduces memory usage");
 }
@@ -432,7 +487,10 @@ fn test_performance_comparison() {
     // Test clustered agents
     let mut clustered_config = LargeMapConfig::new(
         1000,
-        AgentPattern::Clustered { center: IVec2::new(0, 0), radius: 40 },
+        AgentPattern::Clustered {
+            center: IVec2::new(0, 0),
+            radius: 40,
+        },
         40,
     );
     clustered_config.test_duration_ms = 3000;
@@ -440,33 +498,47 @@ fn test_performance_comparison() {
     let clustered_metrics = run_performance_test(&clustered_config);
 
     // Test distributed agents
-    let mut distributed_config = LargeMapConfig::new(
-        1000,
-        AgentPattern::Distributed { spacing: 300 },
-        40,
-    );
+    let mut distributed_config =
+        LargeMapConfig::new(1000, AgentPattern::Distributed { spacing: 300 }, 40);
     distributed_config.test_duration_ms = 3000;
 
     let distributed_metrics = run_performance_test(&distributed_config);
 
     println!("\n   Clustered Agents:");
-    println!("     Avg update time: {}ms", clustered_metrics.avg_update_time.as_millis());
+    println!(
+        "     Avg update time: {}ms",
+        clustered_metrics.avg_update_time.as_millis()
+    );
     println!("     Active chunks: {}", clustered_metrics.active_chunks);
-    println!("     LOD efficiency: {:.1}%", clustered_metrics.lod_efficiency * 100.0);
+    println!(
+        "     LOD efficiency: {:.1}%",
+        clustered_metrics.lod_efficiency * 100.0
+    );
 
     println!("\n   Distributed Agents:");
-    println!("     Avg update time: {}ms", distributed_metrics.avg_update_time.as_millis());
+    println!(
+        "     Avg update time: {}ms",
+        distributed_metrics.avg_update_time.as_millis()
+    );
     println!("     Active chunks: {}", distributed_metrics.active_chunks);
-    println!("     LOD efficiency: {:.1}%", distributed_metrics.lod_efficiency * 100.0);
+    println!(
+        "     LOD efficiency: {:.1}%",
+        distributed_metrics.lod_efficiency * 100.0
+    );
 
     // Clustered should be more efficient
     let time_improvement = distributed_metrics.avg_update_time.as_millis() as f32
-                          / clustered_metrics.avg_update_time.as_millis() as f32;
+        / clustered_metrics.avg_update_time.as_millis() as f32;
 
-    println!("\n   Performance improvement (clustered vs distributed): {:.1}x faster", time_improvement);
+    println!(
+        "\n   Performance improvement (clustered vs distributed): {:.1}x faster",
+        time_improvement
+    );
 
-    assert!(time_improvement >= 1.5,
-           "Clustered agents should be at least 1.5x faster than distributed");
+    assert!(
+        time_improvement >= 1.5,
+        "Clustered agents should be at least 1.5x faster than distributed"
+    );
 
     println!("✅ Performance comparison test passed - clustering provides significant benefits");
 }

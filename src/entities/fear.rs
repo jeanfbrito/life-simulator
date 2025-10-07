@@ -1,5 +1,5 @@
-use crate::entities::entity_types::{Rabbit, Wolf};
-use crate::entities::TilePosition;
+use crate::entities::entity_types::{Herbivore, Wolf};
+use crate::entities::{Creature, TilePosition};
 use crate::vegetation::constants::predator_effects::*;
 /// Predator fear system for herbivore behavior modification
 ///
@@ -117,14 +117,17 @@ impl FearState {
 
 /// System to detect predator proximity and update fear states
 pub fn predator_proximity_system(
-    mut prey_query: Query<(Entity, &TilePosition, &mut FearState), (With<Rabbit>, Without<Wolf>)>,
+    mut prey_query: Query<
+        (Entity, &Creature, &TilePosition, &mut FearState),
+        (With<Herbivore>, Without<Wolf>),
+    >,
     predator_query: Query<&TilePosition, With<Wolf>>,
 ) {
     // Collect predator positions
     let predator_positions: Vec<IVec2> = predator_query.iter().map(|pos| pos.tile).collect();
 
     // Update fear states for all prey
-    for (entity, prey_pos, mut fear_state) in prey_query.iter_mut() {
+    for (entity, creature, prey_pos, mut fear_state) in prey_query.iter_mut() {
         let mut nearby_predators = 0;
 
         // Check each predator
@@ -136,7 +139,7 @@ pub fn predator_proximity_system(
 
                 // Log fear detection
                 debug!(
-                    "🦊 Entity {:?} detects predator at distance {:.1} (fear radius: {})",
+                    "👀 Fear sensor: entity {:?} detects predator at distance {:.1} (radius {})",
                     entity, distance, FEAR_RADIUS
                 );
             }
@@ -146,21 +149,36 @@ pub fn predator_proximity_system(
         if nearby_predators > 0 {
             fear_state.apply_fear_stimulus(nearby_predators);
 
-            debug!(
-                "🐰 Entity {:?} fear level: {:.2} ({} predators nearby)",
-                entity, fear_state.fear_level, nearby_predators
+            info!(
+                "😨 {} {:?} fear level: {:.2} ({} predators within {} tiles)",
+                creature.species, entity, fear_state.fear_level, nearby_predators, FEAR_RADIUS
             );
         } else {
+            let was_fearful = fear_state.is_fearful();
             fear_state.decay_fear();
+
+            if was_fearful && !fear_state.is_fearful() {
+                debug!(
+                    "🙂 {} {:?} fear dissipated after {} ticks without predators",
+                    creature.species, entity, fear_state.ticks_since_danger
+                );
+            }
         }
     }
 }
 
 /// System to apply fear-based movement speed modifications
 pub fn fear_speed_system(
-    mut prey_query: Query<(&mut FearState, &mut crate::entities::MovementSpeed), With<Rabbit>>,
+    mut prey_query: Query<
+        (
+            &mut FearState,
+            &mut crate::entities::MovementSpeed,
+            &Creature,
+        ),
+        (With<Herbivore>, Without<Wolf>),
+    >,
 ) {
-    for (fear_state, mut movement_speed) in prey_query.iter_mut() {
+    for (fear_state, mut movement_speed, creature) in prey_query.iter_mut() {
         if fear_state.is_fearful() {
             let speed_modifier = fear_state.get_speed_modifier();
             let base_speed = movement_speed.ticks_per_move;
@@ -172,6 +190,11 @@ pub fn fear_speed_system(
             debug!(
                 "🏃 Fear speed boost: {:.2}x ({} → {} ticks/tile)",
                 speed_modifier, base_speed, movement_speed.ticks_per_move
+            );
+
+            debug!(
+                "🐾 {} speed boost: {:.2}x ({} → {} ticks/tile)",
+                creature.species, speed_modifier, base_speed, movement_speed.ticks_per_move
             );
         }
     }
@@ -195,7 +218,7 @@ impl Plugin for FearPlugin {
 /// System to initialize fear states for existing herbivores
 fn initialize_fear_states(
     mut commands: Commands,
-    herbivore_query: Query<Entity, (With<Rabbit>, Without<FearState>)>,
+    herbivore_query: Query<Entity, (With<Herbivore>, Without<FearState>)>,
 ) {
     for entity in herbivore_query.iter() {
         commands.entity(entity).insert(FearState::new());
