@@ -1,6 +1,24 @@
 # Species Reference Guide
 
-This document summarises the behaviour, reproduction numbers, and viewer metadata for every playable species currently wired into the Life Simulator. Treat it as a field manual when introducing new creatures—match the patterns below to keep the simulation balanced.
+This document summarises the behaviour, reproduction numbers, and viewer metadata for every species in the Life Simulator ecosystem. The simulator features complex predator-prey dynamics with fear responses, hunting strategies, and ecosystem interactions.
+
+## Ecosystem Overview
+
+### 🌿 Herbivores
+- **Rabbit** - Fast-reproducing, highly sensitive to fear
+- **Deer** - Family-oriented, moderate fear responses
+- **Raccoon** - Opportunistic, adaptable behavior
+
+### 🦁 Predators
+- **Wolf** - Pack hunter, coordinated hunting strategies
+- **Fox** - Solitary hunter, scent tracking specialist
+- **Bear** - Apex predator, dominant ecosystem presence
+
+### ⚡ Key Systems
+- **Fear Response**: Spatial predator detection with 40-tile radius
+- **Behavioral Changes**: 30% reduced feeding, 1.5x speed boost when fleeing
+- **Territory Management**: Scent marking and patrol behaviors
+- **Event-Driven AI**: Dynamic response to environmental triggers
 
 All timings below assume the current simulation rate of **10 ticks per second**.
 

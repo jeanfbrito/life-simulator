@@ -11,16 +11,34 @@ life-simulator/
 │   ├── lib.rs               # Library exports for integration tests and tooling
 │   ├── map_generator.rs     # Standalone map generator binary
 │   ├── world_loader.rs      # Loading and management of saved worlds
-│   ├── web_server_simple.rs # HTTP server powering the viewer & API
-│   ├── entities/            # ECS components, systems, species registry
+│   ├── web_server_simple.rs # HTTP server with biomass API and performance endpoints
+│   ├── entities/            # ECS components, systems, species registry, fear system
+│   │   ├── types/           # Species modules (rabbit, deer, wolf, fox, bear, raccoon)
+│   │   ├── fear.rs          # Fear component and predator detection system
+│   │   ├── carcass.rs       # Carcass system for nutrient cycling
+│   │   └── auto_eat.rs      # Automated eating behavior with fear integration
+│   ├── ai/                  # Event-driven AI planners and behavior systems
+│   │   ├── predator_toolkit.rs  # Hunting, scent marking, territory management
+│   │   ├── event_driven_planner.rs  # Fear-aware decision making
+│   │   ├── trigger_emitters.rs     # Environmental and internal event triggers
+│   │   └── behaviors/       # Species-specific behavior modules
 │   ├── simulation/          # Tick scheduling and simulation resources
+│   │   └── profiler.rs      # Performance monitoring and metrics
 │   ├── tilemap/             # Chunk-based terrain data
+│   ├── vegetation/          # ResourceGrid, LOD system, plant growth simulation
+│   │   ├── resource_grid.rs     # High-performance vegetation storage
+│   │   ├── chunk_lod.rs          # Level-of-detail rendering system
+│   │   ├── constants.rs          # Plant system parameters
+│   │   └── benchmark.rs          # Performance testing utilities
 │   ├── resources.rs         # Resource layer generation helpers
 │   ├── serialization.rs     # RON/world save and load helpers
 │   └── web/                 # WebSocket prototype (future work)
 ├── maps/                    # Generated world files (`.ron`)
-├── web-viewer/              # Static viewer assets (`viewer.html`, JS, CSS)
-├── docs/                    # Architecture notes and debugging playbooks
+├── web-viewer/              # Static viewer with biomass overlay and entity tracking
+├── docs/                    # Architecture notes, ADRs, and implementation guides
+├── tests/                   # Integration tests, benchmarks, and validation suites
+├── scripts/                 # Testing and benchmarking scripts
+├── config/                  # Spawn configuration and system parameters
 ├── Cargo.toml               # Workspace manifest
 └── README.md                # High-level project overview (see there first)
 ```

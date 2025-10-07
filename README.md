@@ -1,24 +1,29 @@
-# Life Simulator 🦌🐇🦝
+# Life Simulator 🦌🐇🦝🦁🐺
 
-Life Simulator is a cozy headless world where rabbits, deer, raccoons (and more to come) eat, drink, sleep, and raise their young on handcrafted islands. The core sim runs in Bevy 0.16 without graphics; you peek inside through a lightweight web viewer or by calling the HTTP API.
+Life Simulator is a rich ecosystem simulation where herbivores and predators live, hunt, and evolve on procedurally generated islands. The core sim runs in Bevy 0.16 without graphics; you peek inside through a lightweight web viewer or by calling the HTTP API.
 
-## Why you might love this project
+## ✨ What makes this special
 
-- **Watch ecosystems evolve** – animals form pairs, carry pregnancies, birth litters, and juveniles imprint on their mothers.
-- **Plug-and-play species** – reproduction, AI planners, and viewer metadata all come from per-species modules, so cloning behaviour is as easy as cloning a descriptor.
-- **Data-driven bootstrapping** – demo spawns, names, and logging live in a RON config you can tweak without recompiling.
-- **Shareable worlds** – generate islands once with the map CLI, then replay the same world forever or ship it to a friend.
-- **Headless & scriptable** – everything streams over HTTP/websocket, perfect for dashboards, bots, or further automation.
+- **Dynamic Predator-Prey Ecosystems** – Wolves hunt rabbits, foxes patrol territories, while bears dominate the landscape. Herbivores exhibit realistic fear responses including fleeing, reduced feeding, and altered grazing patterns.
+- **Advanced Plant System** – Real-time vegetation growth with ResourceGrid technology, biomass density visualization, and ecosystem-wide nutrient cycling.
+- **Complex Animal Behaviors** – Animals form pairs, carry pregnancies, birth litters, exhibit fear responses, and adapt their behavior based on predator presence and resource availability.
+- **Modular Species Architecture** – Each species (rabbits, deer, raccoons, wolves, foxes, bears) has its own module with configurable behaviors, reproduction strategies, and AI patterns.
+- **Living Worlds** – Vegetation grows, gets consumed, and regenerates based on grazing pressure. Carcasses from predators enrich the soil, creating realistic ecosystem dynamics.
+- **Real-time Web Visualization** – Watch the ecosystem evolve through an interactive web viewer with biomass overlays, entity tracking, and live statistics.
 
 ## Tour of the experience
 
 | Feature | What you'll see |
 | --- | --- |
-| 🗺️ Island worlds | Sand-lined beaches leading into forests, mountains, and ponds, all generated with deterministic maths. |
-| 🐇 Rabbits | Fast-reproducing herbivores that graze aggressively and form pairs quickly. |
-| 🦌 Deer | Slower, majestic creatures whose fawns trail their mothers until adulthood. |
-| 🦝 Raccoons | Opportunistic foragers that balance thirst and hunger before seeking mates. |
-| 🌐 Web viewer | A HTML/JS viewer (in `web-viewer/viewer.html`) that queries `127.0.0.1:54321` for terrain and entity data. |
+| 🗺️ Living Islands | Sand-lined beaches leading into forests, mountains, and ponds, with dynamic vegetation that responds to grazing pressure. |
+| 🐇 Rabbits | Fast-reproducing herbivores that graze aggressively and exhibit realistic fear responses when predators are nearby. |
+| 🦌 Deer | Majestic creatures whose fawns trail their mothers until adulthood, with cautious grazing behaviors. |
+| 🦝 Raccoons | Opportunistic foragers that balance thirst and hunger while staying alert to danger. |
+| 🐺 Wolves | Pack hunters that patrol territories, mark scents, and create coordinated hunting strategies. |
+| 🦊 Foxes | Cunning solitary hunters that use scent tracking and territory patrol techniques. |
+| 🐻 Bears | Powerful apex predators that dominate territories and create fear responses across the ecosystem. |
+| 🌿 Biomass Visualization | Real-time grass density overlay showing vegetation health and grazing patterns. |
+| 🌐 Advanced Web Viewer | Interactive HTML/JS viewer with entity tracking, fear response visualization, and ecosystem statistics. |
 
 ## Quick start (5 minutes)
 
@@ -42,141 +47,168 @@ Life Simulator is a cozy headless world where rabbits, deer, raccoons (and more 
 
 4. **Open the viewer**
    - Visit http://127.0.0.1:54321/viewer.html
-   - Drag to pan, scroll to zoom, click an entity to inspect its stats.
+   - Drag to pan, scroll to zoom, click entities to inspect stats
+   - Toggle biomass overlay to see vegetation density
+   - Watch fear responses as predators hunt herbivores
 
-The demo spawn config will introduce rabbits near the origin, a deer pair, and a raccoon couple so you can immediately watch behaviour unfold. Tweak `config/spawn_config.ron` to change names, counts, or logging.
+The demo spawn config introduces a complete ecosystem with herbivores and predators so you can immediately watch dynamics unfold. Toggle `CONFIG.showGrassDensity` in the viewer to see real-time biomass visualization. Tweak `config/spawn_config.ron` to customize species, names, or behavior.
 
 ## Under the hood (at a glance)
 
-- **Headless Bevy** runs the ECS, ticking stats, movement, AI planners, and reproduction systems.
-- **Species registry** lives in `src/entities/registry.rs`, exposing spawn handlers, viewer metadata, and default behaviours.
-- **AI planners** reuse shared herbivore logic, with species contributing thresholds and follow/mate preferences.
-- **Viewer API** (`web_server_simple.rs`) serves `/api/entities`, `/api/species`, and chunk endpoints for the browser client.
+### Core Systems
+- **Headless Bevy** runs the ECS, ticking stats, movement, AI planners, and reproduction systems at 10 TPS.
+- **ResourceGrid Vegetation System** - High-performance vegetation storage with Level-of-Detail (LOD) rendering.
+- **Fear & Predator System** - Spatial predator detection, fear propagation, and behavioral response mechanisms.
+- **Event-Driven AI** - Trigger-based decision making with FearTrigger, PredatorScent, and environmental events.
+- **Modular Species Architecture** - Each species has its own module with configurable behaviors and reproduction strategies.
+
+### Key Technologies
+- **Species Registry** (`src/entities/registry.rs`) - Manages spawn handlers, viewer metadata, and behaviors.
+- **AI Planners** (`src/ai/`) - Event-driven planning system with fear-aware decision making.
+- **Predator Toolkit** (`src/ai/predator_toolkit.rs`) - Scent marking, territory detection, prey tracking.
+- **Web Viewer API** (`web_server_simple.rs`) - Real-time HTTP API serving entities, species, vegetation, and performance data.
 
 Curious how it all works? Dive into the docs:
 
-- [Species Architecture](docs/SPECIES_ARCHITECTURE.md) – registry, planner hooks, viewer metadata
+### 📚 Documentation
+- [Species Reference Guide](docs/SPECIES_REFERENCE.md) – Complete species catalog with behaviors, stats, and reproduction
+- [Plant System Parameters](docs/PLANT_SYSTEM_PARAMS.md) – Vegetation growth, ResourceGrid, and ecosystem configuration
+- [Event-Driven Planner Implementation](docs/EVENT_DRIVEN_PLANNER_IMPLEMENTATION.md) – AI architecture and fear systems
 - [Technical Overview & Developer Guide](docs/TECH_OVERVIEW.md) – project layout, build commands, testing tips
-- `docs/` folder – fix-it journals and design notes accumulated during development
+- `docs/` folder – ADRs, design notes, and implementation journals
+
+### 🧪 Testing & Validation
+- Comprehensive test suite covering plant system, predator-prey dynamics, and AI behaviors
+- Performance benchmarking scripts for vegetation system validation
+- Integration tests for fear mechanics and ecosystem interactions
 
 ## Extending the sim
 
-Want to introduce a new animal or tweak behaviour?
+Want to add new species, behaviors, or ecosystem features?
 
-1. Copy an existing module in `src/entities/types/` and adjust stats + reproduction config.
-2. Register it in the species registry (spawn fn + metadata) and spawn config.
-3. Add viewer styling via the metadata returned from `/api/species`.
-4. Run `cargo check` + `cargo test` (see `docs/TECH_OVERVIEW.md` for details).
+### 🦁 Adding New Species
+1. **Create Species Module** - Copy an existing module in `src/entities/types/` (rabbit, wolf, etc.)
+2. **Define Behaviors** - Implement hunting, grazing, fear responses, and reproduction strategies
+3. **Configure Stats** - Set movement speeds, reproduction rates, fear thresholds, and AI parameters
+4. **Register Species** - Add to species registry with spawn functions and viewer metadata
+5. **Update Configuration** - Add to `config/spawn_config.ron` for demo spawning
 
-The modular layout keeps species-specific logic out of engine code, letting you iterate quickly without touching the core systems.
+### 🌿 Extending Plant System
+1. **Modify ResourceGrid** - Add new resource types or growth patterns in `src/vegetation/`
+2. **Update Constants** - Adjust growth rates, biomass thresholds, and ecosystem parameters
+3. **Add New Behaviors** - Create actions that interact with vegetation (eating, trampling, etc.)
+4. **Update Visualization** - Extend biomass overlay and web viewer for new features
+
+### 🧠 Advanced AI Features
+1. **Event System** - Add new trigger types and event emitters in `src/ai/trigger_emitters.rs`
+2. **Behavior Trees** - Create complex action sequences and decision trees
+3. **Fear System** - Extend fear propagation and response mechanisms
+4. **Performance Optimization** - Add spatial indexing and caching systems
+
+Run `cargo check` + `cargo test` to validate changes. The modular architecture isolates species-specific logic from core systems.
 
 Happy simming! 🐾
-   - HTTP API for terrain data access
 
-## Dependencies
+## 🌐 API Endpoints
 
-- `bevy` 0.16 - Main game engine
-- `rand` 0.8 - Random number generation
+The HTTP server provides comprehensive real-time data access:
 
-## Performance Configuration
-
-The project includes optimized build configurations:
-
-- Development builds balance compilation speed with performance
-- Release builds use LTO (Link Time Optimization) for maximum performance
-- Dynamic linking is available for faster development iteration
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## License
-
-This project is dual-licensed under either:
-
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-
-## API Endpoints
-
-The HTTP server provides the following endpoints:
-
-### World Management
-- `GET /api/world_info` - Current world information (name, seed, chunk count, bounds)
+### Core World Data
+- `GET /api/world_info` - World metadata (name, seed, chunk count, bounds)
 - `GET /api/world/current` - Current loaded world details
 - `GET /api/worlds` - List all available generated worlds
-- `POST /api/world/select` - Switch to a different world (JSON: `{"world_name": "my_world"}`)
+- `POST /api/world/select` - Switch to different world
+
+### Entity & Species Data
+- `GET /api/entities` - Real-time entity positions, stats, and behaviors
+- `GET /api/species` - Species metadata with behaviors and reproduction info
+
+### 🌿 Vegetation & Ecosystem
+- `GET /api/vegetation/biomass` - Real-time biomass density heatmap
+- `GET /api/vegetation/performance` - Vegetation system performance metrics
+- `GET /api/vegetation/memory` - Memory usage analysis for ResourceGrid
+- `GET /api/vegetation/stats` - Ecosystem statistics and health metrics
+- `GET /api/vegetation/metrics` - Comprehensive performance dashboard
+
+### 📊 Performance & Benchmarking
+- `GET /api/vegetation/benchmark/quick` - Run quick performance benchmark
+- `GET /api/vegetation/benchmark/phase4` - Comprehensive system benchmark
+- `GET /api/vegetation/benchmark/current` - Current performance rating
+- `GET /api/vegetation/benchmark/history` - Historical performance trends
 
 ### Terrain Data
-- `GET /viewer.html` - Main terrain viewer interface
-- `GET /api/chunks?coords=x1,y1&coords=x2,y2` - Terrain data for specified chunks
-- `GET /api/chunks?center_x=0&center_y=0&radius=3&layers=true` - Multi-layer terrain data with batched requests
+- `GET /viewer.html` - Interactive web viewer with biomass overlays
+- `GET /api/chunks?coords=x1,y1&coords=x2,y2` - Terrain data for specific chunks
+- `GET /api/chunks?center_x=0&center_y=0&radius=3&layers=true` - Multi-layer data with batching
 
-### World Selection Usage
+## 🚀 Performance Features
+
+### Optimized Build Configurations
+- **Development**: Balanced compilation speed with performance
+- **Release**: LTO (Link Time Optimization) for maximum performance
+- **Dynamic Linking**: Faster development iteration
+
+### Real-time Optimizations
+- **ResourceGrid LOD**: Level-of-detail system for efficient vegetation rendering
+- **Spatial Indexing**: Optimized fear detection and predator-prey calculations
+- **Event-driven AI**: Efficient decision making with trigger-based updates
+- **Batched API Requests**: Prevents connection timeouts for large data requests
+
+### API Usage Examples
 
 ```bash
 # List available worlds
 curl http://127.0.0.1:54321/api/worlds
 
-# Select a different world
+# Select different world
 curl -X POST http://127.0.0.1:54321/api/world/select \
   -H "Content-Type: application/json" \
   -d '{"world_name": "my_world"}'
+
+# Get real-time biomass data
+curl http://127.0.0.1:54321/api/vegetation/biomass
+
+# Run performance benchmark
+curl http://127.0.0.1:54321/api/vegetation/benchmark/quick
 ```
 
-### URL Length Limitations and Batched Requests
+## 📦 Dependencies
 
-When requesting large numbers of chunks (e.g., 7x7 grid = 49 chunks), the URL can become too long and cause `net::ERR_CONNECTION_RESET` errors. The web viewer automatically handles this by:
+- `bevy` 0.16 - Main game engine with ECS and networking
+- `rand` 0.8 - Random number generation for deterministic worlds
+- `serde` & `ron` - Data serialization for world files
+- `tokio` - Async runtime for web server functionality
 
-- **Batch Size**: Requests are split into batches of 10 chunks maximum
-- **Automatic Batching**: The viewer splits large requests into multiple smaller requests
-- **Data Merging**: Responses from multiple batches are merged before rendering
+## 🤝 Contributing
 
-#### Implementation Details
+We welcome contributions! Here's how to get started:
 
-The chunk request system supports two URL parameter formats:
+1. **Fork the repository** and create a feature branch
+2. **Understand the Architecture** - Read the documentation in `docs/`
+3. **Run Tests** - Ensure `cargo test` passes before submitting
+4. **Add Tests** - Include tests for new features and behaviors
+5. **Update Documentation** - Keep docs current with code changes
+6. **Submit Pull Request** - With clear description of changes
 
-1. **Legacy Format**: `coords=x,y&coords=x+1,y` (individual chunk coordinates)
-2. **Center Format**: `center_x=0&center_y=0&radius=3` (center point and radius)
+### Development Workflow
+```bash
+# Generate test world
+cargo run --bin map_generator -- --name dev_world
 
-The server automatically detects and handles both formats for backward compatibility.
+# Run with debug logging
+RUST_LOG=info cargo run --bin life-simulator
 
-### Testing Checklist
+# Run specific test modules
+cargo test --test predator_fear_test
+cargo test --test resource_grid_benchmark
+```
 
-Before considering map viewer functionality complete, verify the following:
+## 📄 License
 
-#### Basic Functionality
-- [ ] Server starts successfully on `http://127.0.0.1:54321`
-- [ ] Web viewer loads at `http://127.0.0.1:54321/viewer.html`
-- [ ] World info API returns correct center chunk and size
+This project is dual-licensed under either:
 
-#### Terrain Display
-- [ ] Complete 7x7 grid loads correctly (49 chunks total)
-- [ ] Both terrain and resources layers display properly
-- [ ] Chunk boundaries render without artifacts
-- [ ] Terrain colors match expected types (water, sand, grass, forest, etc.)
-
-#### Performance and Reliability
-- [ ] Batched requests work without connection reset errors
-- [ ] Map loads within reasonable time (< 5 seconds)
-- [ ] No JavaScript console errors during map loading
-- [ ] Edge chunks (outside saved world) show deep water correctly
-
-#### Interactive Features
-- [ ] Pan functionality works (click and drag)
-- [ ] Zoom functionality works (mouse wheel)
-- [ ] Layer toggle (if implemented) works correctly
-- [ ] Coordinate display updates correctly during navigation
-
-#### Data Integrity
-- [ ] Saved world data matches displayed terrain
-- [ ] Resources layer data loads correctly when `layers=true` parameter is used
-- [ ] Chunk coordinates are calculated correctly from center point
-- [ ] No missing or corrupted chunks in the displayed area
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
 
 ## References and Inspiration
 

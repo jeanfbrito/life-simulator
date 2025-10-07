@@ -1,16 +1,28 @@
 # Species Architecture Guide
 
-This document describes the modular species architecture implemented in the life simulator, which allows new species to be added with minimal engine changes.
+This document describes the modular species architecture implemented in the life simulator, which supports complex ecosystems with herbivores, predators, and dynamic interactions.
 
 ## Overview
 
-The species architecture replaces hard-coded entity definitions with a modular, registry-based system that centralizes:
+The species architecture provides a modular, registry-based system that centralizes:
 
-- Species metadata and spawn configuration
-- Behavior configuration and AI parameters
-- System registration for species-specific logic
-- Viewer rendering metadata
-- Demo bootstrap configuration
+- **Species Metadata** - Spawn configuration, visual representation, and behavioral traits
+- **AI Systems** - Event-driven planners, fear responses, hunting strategies, and grazing behaviors
+- **Ecosystem Integration** - Predator-prey dynamics, fear propagation, and resource competition
+- **Performance Optimization** - Spatial indexing, LOD systems, and efficient entity management
+- **Web Integration** - Real-time API endpoints, biomass visualization, and entity tracking
+
+## Current Species Ecosystem
+
+### 🌿 Herbivores
+- **Rabbit** - Fast-reproducing, quick grazing, high fear sensitivity
+- **Deer** - Majestic, family-oriented, moderate fear responses
+- **Raccoon** - Opportunistic forager, balanced behavior, adaptable
+
+### 🦁 Predators
+- **Wolf** - Pack hunter, coordinated hunting, scent marking, territory patrol
+- **Fox** - Solitary hunter, cunning strategies, scent tracking
+- **Bear** - Apex predator, dominant presence, wide fear radius
 
 ## Core Components
 
@@ -194,6 +206,82 @@ pub struct SpawnSettings {
     ),
 )
 ```
+
+## Fear System & Predator Integration
+
+### 5. Fear Component (`src/entities/fear.rs`)
+
+The fear system provides realistic predator-prey dynamics through spatial detection and behavioral responses.
+
+```rust
+#[derive(Component, Debug, Clone)]
+pub struct Fear {
+    /// Current fear level (0.0 = calm, 1.0 = terrified)
+    pub level: f32,
+    /// Fear threshold for triggering responses (0.0-1.0)
+    pub threshold: f32,
+    /// Rate at which fear decays over time (0.0-1.0 per second)
+    pub decay_rate: f32,
+    /// Last tick when fear was updated
+    pub last_updated: u64,
+}
+```
+
+**Key Features:**
+- **Spatial Detection**: 40-tile fear radius for predator presence
+- **Behavioral Changes**:
+  - 30% reduced feeding duration under fear
+  - 1.5x movement speed boost when fleeing
+  - 20% lower biomass tolerance when threatened
+- **Fear Propagation**: Fear spreads between nearby herbivores
+- **Temporal Decay**: Fear levels naturally decrease over time
+
+### 6. Predator Toolkit (`src/ai/predator_toolkit.rs`)
+
+Advanced hunting and territory management system for predator species.
+
+```rust
+pub struct PredatorToolkit {
+    /// Current hunting state
+    pub hunting_state: HuntingState,
+    /// Territory center and radius
+    pub territory: Option<Territory>,
+    /// Scent marks for territory boundaries
+    pub scent_marks: Vec<ScentMark>,
+    /// Cooldown timers for hunting behaviors
+    pub hunt_cooldown: u64,
+    /// Preferred prey types with priority
+    pub prey_preferences: Vec<PreyPreference>,
+}
+```
+
+**Predator Behaviors:**
+- **Hunt**: Coordinated pursuit of detected prey
+- **PatrolTerritory**: Systematic boundary checking
+- **MarkScent**: Territory marking for communication
+- **TrackPrey**: Following scent trails and disturbances
+
+### 7. Event-Driven AI (`src/ai/event_driven_planner.rs`)
+
+Sophisticated AI system that responds to environmental triggers and internal states.
+
+```rust
+pub struct EventDrivenPlanner {
+    /// Current emotional state affecting decisions
+    pub emotional_state: EmotionalState,
+    /// Recent events that influence behavior
+    pub event_memory: VecDeque<GameEvent>,
+    /// Behavioral priorities based on context
+    pub behavior_priorities: BehaviorPriorities,
+}
+```
+
+**Event Types:**
+- **FearTrigger**: Predator detected within fear radius
+- **PredatorScent**: Scent markers detected in environment
+- **ThirstTrigger**: Critical thirst level reached
+- **HungerTrigger**: Critical hunger level reached
+- **MateTrigger**: Suitable mate detected nearby
 
 ## Adding New Species
 
