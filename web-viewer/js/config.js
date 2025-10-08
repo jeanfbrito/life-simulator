@@ -31,7 +31,7 @@ export const CONFIG = {
     chunkLoadRadius: 5,
     chunkLoadDebounce: 100, // ms delay for chunk loading
     chunkBatchSize: 10,
-    initialChunkRadius: 3,
+    initialChunkRadius: 5, // Load more chunks to show full world
 
     // Zoom settings
     minZoom: 0.25,
