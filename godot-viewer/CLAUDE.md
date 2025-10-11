@@ -209,9 +209,35 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String):
 - Result: Tiles appear at wildly wrong positions
 
 **When to use coordinate conversion:**
-- `map_to_local()`: When positioning camera (tile → pixel)
+- `map_to_local()`: When positioning camera (tile → pixel) and entities (tile → pixel)
 - `local_to_map()`: When converting mouse clicks (pixel → tile)
 - `set_cell()`: NEVER - it expects tile coordinates directly
+
+## Entity Positioning in Isometric Space
+
+**Entities must be positioned in pixel coordinates using `map_to_local()`:**
+
+```gdscript
+# ✅ CORRECT - Entity positioning from backend tile coordinates
+var entity_tile_pos = Vector2i(entity_data.position.x, entity_data.position.y)
+var entity_pixel_pos = tilemap.map_to_local(entity_tile_pos)
+
+# Apply Y offset to keep feet in grid (-0.2 tiles)
+entity_pixel_pos.y += Config.TILE_SIZE * config.offset_y  # offset_y = -0.2
+
+container.position = entity_pixel_pos  # Set Node2D position in pixels
+```
+
+**Why this works:**
+- Backend sends entity positions in tile coordinates (e.g., `{x: 5, y: 10}`)
+- Godot Node2D positions are in pixel coordinates
+- `map_to_local()` converts tile → pixel with isometric projection
+- Y-offset of -0.2 tiles moves entity upward to keep feet in tile boundary
+
+**Common mistakes:**
+- ❌ Setting entity position directly to tile values: `entity.position = Vector2(5, 10)`
+- ❌ Forgetting Y-offset: entities appear too low in the tile
+- ❌ Using pixel coordinates for tile-based queries
 
 ## Project Structure
 
@@ -258,35 +284,59 @@ godot-viewer/
 ### Expected Startup Sequence
 
 ```
+Config singleton initialized
+Loading species configuration from API...
+ChunkManager initialized
+WorldDataCache initialized
+🌳 ResourceManager initialized
+🐇 EntityManager initialized
 🗺️ TerrainTileMap initialized
-📋 TileMap layers count: 1
-📋 Layer 0 enabled: true
-🎨 Creating basic TileSet...
-✅ Created basic TileSet with white diamond
+✅ TileSet loaded successfully
+🎨 Terrain mapping setup for 12 terrain types
+📊 TopBar initialized successfully
 🌍 WorldRenderer initialized
-📹 Camera positioned at tile (0, 0) = pixel (0.0, 0.0) with zoom 0.5x
+📹 Camera positioned at tile (0, 0) = pixel (128.0, 32.0) with zoom 0.5x
+🚀 Starting world loading...
+✅ Species configuration loaded from API
+Species loaded: ["default", "Bear", "Deer", "Fox", "Human", "Rabbit", "Raccoon", "Wolf"]
 📦 Loading chunks around: (0, 0) (radius: 5)
 🎨 Painted 10 new chunks (total visible: 49)
-🎨 Painted 10 new chunks (total visible: 49)
+🌳 Rendered X resources for chunk Y
+🐇 Spawned entity 0 (Rabbit) at (x, y)
+🐇 Spawned entity 1 (Wolf) at (x, y)
 ...
 📊 Total rendered chunks: 49 / 49 visible
    - Total cells rendered: 12544
+✅ World loading completed - viewer should show terrain
 ```
 
 ### Keyboard Controls
 
-- **Arrow Keys**: Pan camera
+**Camera:**
+- **Arrow Keys / WASD**: Pan camera
 - **+/-**: Zoom in/out
-- **Escape**: Quit
+- **R**: Reset camera to origin
+
+**UI Toggles:**
+- **G**: Toggle grid overlay
+- **Tab**: Toggle statistics HUD
+- **H**: Toggle help/controls overlay
+
+**System:**
+- **Escape**: Quit application
 
 ## API Integration
 
-### Chunk Loading Endpoints
+### API Endpoints
 
 ```gdscript
 # Load world info
 GET http://localhost:54321/api/world/current
 GET http://localhost:54321/api/world_info
+
+# Load species configuration
+GET http://localhost:54321/api/species
+# Response: { "species": {...}, "default_entity": {...}, "juvenile_scales": {...} }
 
 # Load chunk data (with layers)
 GET http://localhost:54321/api/chunks?coords=0,0&coords=1,0&layers=true
@@ -300,6 +350,10 @@ GET http://localhost:54321/api/chunks?coords=0,0&coords=1,0&layers=true
     }
   }
 }
+
+# Poll entities (every 200ms)
+GET http://localhost:54321/api/entities
+# Response: { "entities": [{id, name, entity_type, position, current_action, ...}, ...] }
 ```
 
 ### Chunk Data Structure
@@ -368,21 +422,30 @@ print("Chunk 0,0 size: ", chunk_data.size())
 - Each cell: 1 texture reference + tile data
 - Estimated: ~2-3 MB for full island
 
+## Implemented Features (2025-01-11)
+
+1. ✅ **Resource Rendering** - Trees, bushes, rocks, flowers with emoji symbols
+2. ✅ **Entity Rendering** - All 7 species with proper emojis and scaling
+3. ✅ **Entity Polling** - Real-time updates every 200ms from backend
+4. ✅ **Species Configuration** - Loaded from `/api/species` endpoint
+5. ✅ **Action Labels** - Entity current actions displayed above sprites
+6. ✅ **Y-Sorting** - Proper depth sorting for entities and resources
+7. ✅ **Top Bar UI** - Statistics, FPS, entity counts, action buttons
+
 ## Known Limitations
 
-1. **No smooth scrolling** - Camera pan is instant (not interpolated)
-2. **Static zoom** - No mouse wheel zoom yet
-3. **No resource rendering** - Only terrain layer displayed
-4. **No entity rendering** - Only static world data
+1. **Camera controls** - Arrow keys only, no mouse drag/wheel zoom yet
+2. **Discrete movement** - Entities jump between tiles (matches backend simulation)
+3. **Static camera** - No smooth scrolling or interpolation
 
 ## Future Enhancements
 
-- [ ] Add resource emoji rendering on terrain
-- [ ] Add entity polling and rendering
-- [ ] Implement smooth camera pan/zoom
+- [ ] Implement smooth camera pan/zoom with mouse
 - [ ] Add minimap in corner
 - [ ] Mouse click to inspect tiles
 - [ ] Show tile coordinates on hover
+- [ ] Add more detailed entity tooltips
+- [ ] Implement camera edge scrolling
 
 ## References
 
