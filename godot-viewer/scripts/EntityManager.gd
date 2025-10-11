@@ -144,6 +144,10 @@ func _create_entity(entity_id: int, data: Dictionary):
 
 	# Y-sort uses Y position for depth (handled automatically by y_sort_enabled)
 
+	# Add debug position marker if enabled
+	if Config.debug_show_position_markers:
+		_add_debug_marker(container)
+
 	# Add action label if present and zoomed in enough
 	if data.has("current_action") and Config.TILE_SIZE >= 8:
 		_add_action_label(container, data.current_action)
@@ -216,6 +220,29 @@ func _update_action_label(container: Node2D, action: String):
 	# Add new action label if needed
 	if action != "" and action != "Idle":
 		_add_action_label(container, action)
+
+# Add debug cross marker at container origin
+func _add_debug_marker(container: Node2D):
+	var cross_size = 5.0
+	var cross_color = Color(1.0, 0.0, 0.0, 1.0)  # Red
+
+	# Horizontal line
+	var h_line = Line2D.new()
+	h_line.add_point(Vector2(-cross_size, 0))
+	h_line.add_point(Vector2(cross_size, 0))
+	h_line.default_color = cross_color
+	h_line.width = 2.0
+	h_line.z_index = 100
+	container.add_child(h_line)
+
+	# Vertical line
+	var v_line = Line2D.new()
+	v_line.add_point(Vector2(0, -cross_size))
+	v_line.add_point(Vector2(0, cross_size))
+	v_line.default_color = cross_color
+	v_line.width = 2.0
+	v_line.z_index = 100
+	container.add_child(v_line)
 
 # Get entity count
 func get_entity_count() -> int:

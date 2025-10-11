@@ -70,6 +70,10 @@ func paint_resources(chunk_key: String, resource_data: Array):
 
 			# Y-sort uses Y position for depth (handled automatically by y_sort_enabled)
 
+			# Add debug position marker if enabled
+			if Config.debug_show_position_markers:
+				_add_debug_marker(container)
+
 			add_child(container)
 			sprites.append(container)
 
@@ -102,6 +106,29 @@ func get_total_resource_count() -> int:
 	for chunk_key in resource_sprites.keys():
 		total += get_resource_count(chunk_key)
 	return total
+
+# Add debug cross marker at container origin
+func _add_debug_marker(container: Node2D):
+	var cross_size = 5.0
+	var cross_color = Color(1.0, 0.0, 0.0, 1.0)  # Red
+
+	# Horizontal line
+	var h_line = Line2D.new()
+	h_line.add_point(Vector2(-cross_size, 0))
+	h_line.add_point(Vector2(cross_size, 0))
+	h_line.default_color = cross_color
+	h_line.width = 2.0
+	h_line.z_index = 100
+	container.add_child(h_line)
+
+	# Vertical line
+	var v_line = Line2D.new()
+	v_line.add_point(Vector2(0, -cross_size))
+	v_line.add_point(Vector2(0, cross_size))
+	v_line.default_color = cross_color
+	v_line.width = 2.0
+	v_line.z_index = 100
+	container.add_child(v_line)
 
 # Debug information
 func debug_print_status():
