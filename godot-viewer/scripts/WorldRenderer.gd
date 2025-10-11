@@ -357,11 +357,40 @@ func reset_camera_to_origin():
 		print("📹 Camera reset to origin (0,0)")
 		_update_visible_chunks()
 
-# Force refresh all visible chunks
+# Force refresh all visible chunks - Full reload of everything
 func force_refresh_chunks():
-	print("🔄 Forcing chunk refresh...")
-	_update_visible_chunks()
-	print("✅ Chunks refreshed")
+	print("🔄 Starting full reload...")
+
+	# 1. Clear all existing data
+	print("🗑️ Clearing entities...")
+	if entity_manager:
+		entity_manager.clear_all_entities()
+
+	print("🗑️ Clearing resources...")
+	if resource_manager:
+		resource_manager.clear_all_resources()
+
+	print("🗑️ Clearing terrain tiles...")
+	if terrain_tilemap:
+		terrain_tilemap.clear_all_tiles()
+
+	print("🗑️ Clearing world data cache...")
+	WorldDataCache.clear_cache()
+
+	# 2. Reset state
+	current_chunk_keys.clear()
+	world_loaded = false
+	loading_chunks = false
+
+	# 3. Reload species configuration
+	print("📥 Reloading species config...")
+	await Config.load_species_config()
+
+	# 4. Reload world data
+	print("📥 Reloading world...")
+	start_world_loading()
+
+	print("✅ Full reload initiated")
 
 # Debug information
 func debug_print_status():

@@ -76,7 +76,7 @@ func setup_button_tooltips() -> void:
 	if help_button:
 		help_button.tooltip_text = "Toggle Help (H)"
 	if refresh_button:
-		refresh_button.tooltip_text = "Refresh Chunks"
+		refresh_button.tooltip_text = "Reload World (Full Refresh)"
 
 # Connect all button signals
 func connect_button_signals() -> void:
@@ -200,7 +200,7 @@ func _on_help_toggle_pressed() -> void:
 		print("⚠️ TopBar: ControlsOverlay not available")
 
 func _on_refresh_pressed() -> void:
-	print("🔄 TopBar: Refresh button pressed")
+	print("🔄 TopBar: Reload button pressed - initiating full world refresh")
 	if world_renderer:
 		world_renderer.force_refresh_chunks()
 	else:
