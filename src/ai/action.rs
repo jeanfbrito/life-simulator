@@ -1,6 +1,7 @@
 use crate::entities::stats::{Energy, Hunger, Thirst};
 use crate::entities::{Carcass, Creature, MoveOrder, SpeciesNeeds, TilePosition};
 use crate::pathfinding::{Path, PathRequest, PathfindingFailed};
+use crate::resources::ResourceType;
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 /// Action system for TQUAI
@@ -62,6 +63,10 @@ pub enum ActionType {
         partner: Entity,
         meeting_tile: IVec2,
         duration_ticks: u32,
+    },
+    Harvest {
+        target_tile: IVec2,
+        resource_type: crate::resources::ResourceType,
     },
     // Future actions:
     // Hunt { target: Entity },
@@ -1213,6 +1218,136 @@ impl Action for MateAction {
     }
 }
 
+/// Harvest Action - Collect harvestable resources like mushrooms, roots, etc.
+pub struct HarvestAction {
+    target_tile: IVec2,
+    resource_type: ResourceType,
+    completed: bool,
+}
+
+impl HarvestAction {
+    pub fn new(target_tile: IVec2, resource_type: ResourceType) -> Self {
+        Self {
+            target_tile,
+            resource_type,
+            completed: false,
+        }
+    }
+}
+
+impl Action for HarvestAction {
+    fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
+        // Check if entity is at the target tile
+        if let Some(position) = world.get::<TilePosition>(entity) {
+            if position.tile != self.target_tile {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        // Check if the resource is still available and can be harvested
+        if let Some(world_loader) = world.get_resource::<crate::world_loader::WorldLoader>() {
+            // Check if resource type matches what we expect to harvest
+            if let Some(resource_at_tile) = world_loader.get_resource_at(self.target_tile.x, self.target_tile.y) {
+                if let Some(actual_resource) = ResourceType::from_str(&resource_at_tile) {
+                    return actual_resource == self.resource_type && actual_resource.is_gatherable();
+                }
+            }
+        }
+
+        false
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, tick: u64) -> ActionResult {
+        if self.completed {
+            return ActionResult::Success;
+        }
+
+        // Check if entity is at the correct position
+        let position = match world.get::<TilePosition>(entity) {
+            Some(pos) => pos,
+            None => return ActionResult::Failed,
+        };
+
+        if position.tile != self.target_tile {
+            return ActionResult::Failed;
+        }
+
+        // Perform the harvest using resource scope to get mutable access
+        let harvest_result = world.resource_scope(
+            |world, mut resource_grid: Mut<crate::vegetation::resource_grid::ResourceGrid>| {
+                // Get world loader
+                let world_loader = match world.get_resource::<crate::world_loader::WorldLoader>() {
+                    Some(loader) => loader,
+                    None => return ActionResult::Failed,
+                };
+
+                // Verify the resource is still present and harvestable
+                let resource_at_tile = match world_loader.get_resource_at(self.target_tile.x, self.target_tile.y) {
+                    Some(resource) => resource,
+                    None => return ActionResult::Failed,
+                };
+
+                let actual_resource = match ResourceType::from_str(&resource_at_tile) {
+                    Some(resource) => resource,
+                    None => return ActionResult::Failed,
+                };
+
+                if actual_resource != self.resource_type || !actual_resource.is_gatherable() {
+                    return ActionResult::Failed;
+                }
+
+                // Get harvest profile for this resource
+                let harvest_profile = match actual_resource.get_harvest_profile() {
+                    Some(profile) => profile,
+                    None => return ActionResult::Failed,
+                };
+
+                // Perform the harvest
+                if let Some(cell) = resource_grid.get_cell_mut(self.target_tile) {
+                    // Check if resource is ready for harvest (past regrowth delay)
+                    if tick < cell.regrowth_available_tick {
+                        return ActionResult::Failed;
+                    }
+
+                    // Apply harvest yield
+                    let harvested_amount = harvest_profile.harvest_yield.min(cell.total_biomass as u32);
+                    cell.total_biomass = (cell.total_biomass - harvested_amount as f32).max(0.0);
+
+                    // Apply regrowth delay for collectable resources
+                    cell.regrowth_available_tick = tick + harvest_profile.regrowth_delay_ticks;
+                    cell.last_update_tick = tick;
+
+                    info!(
+                        "🧺 Entity {:?} harvested {}x {} at tile {:?} (yield: {})",
+                        entity, harvested_amount, actual_resource.as_str(), self.target_tile, harvested_amount
+                    );
+
+                    ActionResult::Success
+                } else {
+                    ActionResult::Failed
+                }
+            }
+        );
+
+        if harvest_result == ActionResult::Success {
+            self.completed = true;
+        }
+
+        harvest_result
+    }
+
+    fn cancel(&mut self, _world: &mut World, _entity: Entity) {
+        // No special cleanup needed for harvest actions
+        debug!("🚫 Harvest action cancelled for resource {} at tile {:?}", self.resource_type.as_str(), self.target_tile);
+    }
+
+    fn name(&self) -> &'static str {
+        "Harvest"
+    }
+}
+
 // =============================================================================
 // ACTION FACTORY
 // =============================================================================
@@ -1234,5 +1369,9 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
             meeting_tile,
             duration_ticks,
         } => Box::new(MateAction::new(partner, meeting_tile, duration_ticks)),
+        ActionType::Harvest {
+            target_tile,
+            resource_type,
+        } => Box::new(HarvestAction::new(target_tile, resource_type)),
     }
 }

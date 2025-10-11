@@ -135,7 +135,7 @@ class LifeSimulatorApp {
             console.log('📊 APP: World info loaded:', worldInfoLoaded);
 
             if (worldInfoLoaded) {
-                // Load initial chunks
+                // Load initial chunks around center, and also expand to show full world
                 console.log('📦 APP: Requesting chunks around center:', this.centerCoord);
                 const chunkData = await this.chunkManager.requestChunks(this.centerCoord);
                 console.log('📦 APP: Chunk data received:', chunkData);

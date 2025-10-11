@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use rand;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
+use crate::resources::{ResourceType, HarvestProfile, RESOURCE_DEFINITIONS};
 
 /// Current simulation tick for event timing
 pub type CurrentTick = u64;
@@ -31,6 +32,9 @@ pub struct ResourceGrid {
 /// A single vegetation cell that can be grazed by herbivores
 #[derive(Debug, Clone)]
 pub struct GrazingCell {
+    /// Resource type at this location
+    pub resource_type: Option<ResourceType>,
+
     /// Total biomass available in this cell (0.0 to max_biomass)
     pub total_biomass: f32,
 
@@ -41,22 +45,62 @@ pub struct GrazingCell {
     /// Last tick when this cell was updated
     pub last_update_tick: u64,
 
-    /// Maximum biomass this cell can support (based on terrain)
+    /// Maximum biomass this cell can support (based on resource profile)
     pub max_biomass: f32,
 
-    /// Terrain-specific growth rate modifier
+    /// Growth rate modifier (from resource profile)
     pub growth_rate_modifier: f32,
+
+    /// Tick when this cell can regrow after harvest (for collectables)
+    pub regrowth_available_tick: u64,
 }
 
 impl GrazingCell {
-    /// Create a new grazing cell with initial biomass
-    pub fn new(initial_biomass: f32, max_biomass: f32, growth_rate_modifier: f32) -> Self {
+    /// Create a new grazing cell with resource type and initial biomass
+    pub fn new(
+        resource_type: Option<ResourceType>,
+        initial_biomass: f32,
+        max_biomass: f32,
+        growth_rate_modifier: f32,
+        current_tick: u64,
+    ) -> Self {
         Self {
+            resource_type,
             total_biomass: initial_biomass.clamp(0.0, max_biomass),
             consumption_pressure: 0.0,
-            last_update_tick: 0,
+            last_update_tick: current_tick,
             max_biomass,
             growth_rate_modifier,
+            regrowth_available_tick: current_tick,
+        }
+    }
+
+    /// Create a new grazing cell from a resource type
+    pub fn from_resource_type(resource_type: ResourceType, current_tick: u64) -> Option<Self> {
+        let profile = RESOURCE_DEFINITIONS.get(&resource_type)?;
+        Some(Self::new(
+            Some(resource_type),
+            profile.biomass_cap * 0.3, // Start at 30% of max biomass
+            profile.biomass_cap,
+            profile.growth_rate_multiplier,
+            current_tick,
+        ))
+    }
+
+    /// Get the harvest profile for this cell's resource type
+    pub fn get_profile(&self) -> Option<&'static HarvestProfile> {
+        self.resource_type.as_ref().and_then(|rt| RESOURCE_DEFINITIONS.get(rt))
+    }
+
+    /// Check if this cell is available for consumption based on regrowth delay
+    pub fn is_available_for_consumption(&self, current_tick: u64) -> bool {
+        current_tick >= self.regrowth_available_tick
+    }
+
+    /// Set regrowth delay after consumption
+    pub fn apply_regrowth_delay(&mut self, current_tick: u64) {
+        if let Some(profile) = self.get_profile() {
+            self.regrowth_available_tick = current_tick + profile.regrowth_delay_ticks;
         }
     }
 
@@ -76,7 +120,12 @@ impl GrazingCell {
 
     /// Apply regrowth to this cell based on logistic growth equation
     /// Returns the actual amount of biomass added
-    pub fn apply_regrowth(&mut self, delta_ticks: u64) -> f32 {
+    pub fn apply_regrowth(&mut self, delta_ticks: u64, current_tick: u64) -> f32 {
+        // Check if regrowth is available
+        if !self.is_available_for_consumption(current_tick) {
+            return 0.0;
+        }
+
         if self.total_biomass >= self.max_biomass {
             return 0.0;
         }
@@ -85,24 +134,44 @@ impl GrazingCell {
         let time_factor = (delta_ticks as f32) / 10.0;
 
         // Logistic growth: B(t+1) = B(t) + r * B(t) * (1 - B(t)/Bmax)
+        // Use growth rate from resource profile
         let base_growth_rate = 0.05 * self.growth_rate_modifier; // GROWTH_RATE from old system
         let growth =
             base_growth_rate * self.total_biomass * (1.0 - self.total_biomass / self.max_biomass);
         let actual_growth = (growth * time_factor).min(self.max_biomass - self.total_biomass);
 
         self.total_biomass += actual_growth;
+        self.last_update_tick = current_tick;
         actual_growth
     }
 
     /// Consume biomass from this cell
     /// Returns actual amount consumed
-    pub fn consume_biomass(&mut self, requested: f32, max_fraction: f32) -> f32 {
+    pub fn consume_biomass(&mut self, requested: f32, max_fraction: f32, current_tick: u64) -> f32 {
+        // Check if consumption is allowed
+        if !self.is_available_for_consumption(current_tick) {
+            return 0.0;
+        }
+
         // Apply consumption rules: min(requested, max_fraction * available)
         let max_by_fraction = self.total_biomass * max_fraction;
         let actual_consumed = requested.min(max_by_fraction);
 
-        self.total_biomass -= actual_consumed;
-        self.consumption_pressure = (self.consumption_pressure + actual_consumed).min(1.0);
+        if actual_consumed > 0.0 {
+            self.total_biomass -= actual_consumed;
+            self.consumption_pressure = (self.consumption_pressure + actual_consumed).min(1.0);
+            self.last_update_tick = current_tick;
+
+            // Apply regrowth delay for collectable resources
+            if let Some(profile) = self.get_profile() {
+                match profile.consumption_kind {
+                    crate::resources::ConsumptionKind::HumanGather => {
+                        self.apply_regrowth_delay(current_tick);
+                    }
+                    _ => {} // No delay for herbivore browsing
+                }
+            }
+        }
 
         actual_consumed
     }
@@ -352,11 +421,48 @@ impl ResourceGrid {
     ) -> &mut GrazingCell {
         if !self.cells.contains_key(&pos) {
             let initial_biomass = 5.0_f32.min(max_biomass); // INITIAL_BIOMASS from old system
-            let cell = GrazingCell::new(initial_biomass, max_biomass, growth_modifier);
+            let cell = GrazingCell::new(
+                None, // No resource type specified for backward compatibility
+                initial_biomass,
+                max_biomass,
+                growth_modifier,
+                self.current_tick,
+            );
             self.cells.insert(pos, cell);
             self.metrics.active_cells = self.cells.len();
         }
         self.cells.get_mut(&pos).unwrap()
+    }
+
+    /// Get or create a cell with a specific resource type
+    pub fn get_or_create_cell_with_resource(
+        &mut self,
+        pos: IVec2,
+        resource_type: ResourceType,
+    ) -> Option<&mut GrazingCell> {
+        if !self.cells.contains_key(&pos) {
+            let cell = GrazingCell::from_resource_type(resource_type, self.current_tick)?;
+            self.cells.insert(pos, cell);
+            self.metrics.active_cells = self.cells.len();
+        }
+        self.cells.get_mut(&pos)
+    }
+
+    /// Apply a resource profile to an existing cell
+    pub fn apply_profile(&mut self, pos: IVec2, resource_type: ResourceType) -> bool {
+        if let Some(profile) = RESOURCE_DEFINITIONS.get(&resource_type) {
+            let cell = self.get_or_create_cell(
+                pos,
+                profile.biomass_cap,
+                profile.growth_rate_multiplier,
+            );
+            cell.resource_type = Some(resource_type);
+            cell.max_biomass = profile.biomass_cap;
+            cell.growth_rate_modifier = profile.growth_rate_multiplier;
+            true
+        } else {
+            false
+        }
     }
 
     /// Consume biomass at a specific location
@@ -372,17 +478,24 @@ impl ResourceGrid {
         let consumed = requested.min(max_by_fraction);
 
         if consumed > 0.0 {
-            // Apply the consumption and update metrics
-            if let Some(cell) = self.get_cell_mut(pos) {
-                cell.total_biomass -= consumed;
-                cell.consumption_pressure = (cell.consumption_pressure + consumed).min(1.0);
-                cell.last_update_tick = current_tick;
-            }
+            // Apply the consumption using the cell's method
+            let actual_consumed = if let Some(cell) = self.get_cell_mut(pos) {
+                cell.consume_biomass(requested, max_fraction, current_tick)
+            } else {
+                0.0
+            };
 
-            self.metrics.biomass_consumed += consumed;
+            self.metrics.biomass_consumed += actual_consumed;
 
-            // Schedule regrowth event
-            let regrowth_delay = calculate_regrowth_delay(consumed, max_biomass);
+            // Schedule regrowth event based on resource profile
+            let regrowth_delay = if let Some(cell) = self.get_cell(pos) {
+                cell.get_profile()
+                    .map(|p| p.regrowth_delay_ticks)
+                    .unwrap_or(100) // Default delay
+            } else {
+                100
+            };
+
             self.event_scheduler.schedule(GrowthEvent::Regrow {
                 location: pos,
                 scheduled_tick: current_tick + regrowth_delay,
@@ -394,29 +507,24 @@ impl ResourceGrid {
 
     /// Process regrowth for a specific cell
     pub fn regrow_cell(&mut self, pos: IVec2) -> f32 {
-        // Collect needed data before any modifications
         let current_tick = self.current_tick;
-        let (last_update_tick, total_biomass, max_biomass, growth_rate_modifier) =
-            if let Some(cell) = self.get_cell(pos) {
-                (
-                    cell.last_update_tick,
-                    cell.total_biomass,
-                    cell.max_biomass,
-                    cell.growth_rate_modifier,
-                )
-            } else {
-                return 0.0;
-            };
+
+        // Collect cell data before borrowing
+        let (last_update_tick, total_biomass, max_biomass) = if let Some(cell) = self.get_cell(pos) {
+            (cell.last_update_tick, cell.total_biomass, cell.max_biomass)
+        } else {
+            return 0.0;
+        };
 
         // Skip if already at max capacity
         if total_biomass >= max_biomass {
             return 0.0;
         }
 
-        // Calculate growth using the same formula as GrazingCell::apply_regrowth
+        // Calculate growth
         let delta_ticks = current_tick.saturating_sub(last_update_tick);
-        let time_factor = (delta_ticks as f32) / 10.0; // Convert to seconds at 10 TPS
-        let base_growth_rate = 0.05 * growth_rate_modifier;
+        let time_factor = (delta_ticks as f32) / 10.0;
+        let base_growth_rate = 0.05; // Will be multiplied by cell's growth_rate_modifier
         let growth = base_growth_rate * total_biomass * (1.0 - total_biomass / max_biomass);
         let actual_growth = (growth * time_factor).min(max_biomass - total_biomass);
 
@@ -425,20 +533,19 @@ impl ResourceGrid {
             if let Some(cell) = self.get_cell_mut(pos) {
                 cell.total_biomass += actual_growth;
                 cell.last_update_tick = current_tick;
+
+                // Schedule next regrowth if not at max capacity
+                if cell.total_biomass < cell.max_biomass {
+                    let biomass_fraction = cell.biomass_fraction();
+                    let next_delay = calculate_regrowth_interval(biomass_fraction);
+                    self.event_scheduler.schedule(GrowthEvent::Regrow {
+                        location: pos,
+                        scheduled_tick: current_tick + next_delay,
+                    });
+                }
             }
 
             self.metrics.biomass_grown += actual_growth;
-
-            // Schedule next regrowth if not at max capacity
-            let new_total = total_biomass + actual_growth;
-            if new_total < max_biomass {
-                let biomass_fraction = new_total / max_biomass;
-                let next_delay = calculate_regrowth_interval(biomass_fraction);
-                self.event_scheduler.schedule(GrowthEvent::Regrow {
-                    location: pos,
-                    scheduled_tick: current_tick + next_delay,
-                });
-            }
         }
 
         actual_growth
@@ -584,11 +691,13 @@ impl Default for ResourceGrid {
 impl Default for GrazingCell {
     fn default() -> Self {
         Self {
+            resource_type: None,
             total_biomass: 0.0,
             consumption_pressure: 0.0,
             last_update_tick: 0,
             max_biomass: 100.0,
             growth_rate_modifier: 1.0,
+            regrowth_available_tick: 0,
         }
     }
 }
@@ -642,41 +751,42 @@ mod tests {
 
     #[test]
     fn test_grazing_cell_creation() {
-        let cell = GrazingCell::new(50.0, 100.0, 1.0);
+        let cell = GrazingCell::new(None, 50.0, 100.0, 1.0, 0);
         assert_eq!(cell.total_biomass, 50.0);
         assert_eq!(cell.max_biomass, 100.0);
         assert_eq!(cell.growth_rate_modifier, 1.0);
         assert_eq!(cell.consumption_pressure, 0.0);
         assert_eq!(cell.last_update_tick, 0);
+        assert_eq!(cell.regrowth_available_tick, 0);
     }
 
     #[test]
     fn test_grazing_cell_biomass_fraction() {
-        let cell = GrazingCell::new(50.0, 100.0, 1.0);
+        let cell = GrazingCell::new(None, 50.0, 100.0, 1.0, 0);
         assert_eq!(cell.biomass_fraction(), 0.5);
 
-        let empty_cell = GrazingCell::new(0.0, 100.0, 1.0);
+        let empty_cell = GrazingCell::new(None, 0.0, 100.0, 1.0, 0);
         assert_eq!(empty_cell.biomass_fraction(), 0.0);
 
-        let full_cell = GrazingCell::new(100.0, 100.0, 1.0);
+        let full_cell = GrazingCell::new(None, 100.0, 100.0, 1.0, 0);
         assert_eq!(full_cell.biomass_fraction(), 1.0);
     }
 
     #[test]
     fn test_grazing_cell_is_depleted() {
-        let depleted_cell = GrazingCell::new(5.0, 100.0, 1.0);
+        let depleted_cell = GrazingCell::new(None, 5.0, 100.0, 1.0, 0);
         assert!(depleted_cell.is_depleted());
 
-        let good_cell = GrazingCell::new(15.0, 100.0, 1.0);
+        let good_cell = GrazingCell::new(None, 15.0, 100.0, 1.0, 0);
         assert!(!good_cell.is_depleted());
     }
 
     #[test]
     fn test_grazing_cell_regrowth() {
-        let mut cell = GrazingCell::new(50.0, 100.0, 1.0);
+        let mut cell = GrazingCell::new(None, 50.0, 100.0, 1.0, 0);
         let initial_biomass = cell.total_biomass;
 
-        let growth = cell.apply_regrowth(10); // 1 second at 10 TPS
+        let growth = cell.apply_regrowth(10, 10); // 1 second at 10 TPS
         assert!(growth > 0.0);
         assert!(cell.total_biomass > initial_biomass);
         assert!(cell.total_biomass <= cell.max_biomass);
@@ -684,24 +794,24 @@ mod tests {
 
     #[test]
     fn test_grazing_cell_consumption() {
-        let mut cell = GrazingCell::new(80.0, 100.0, 1.0);
+        let mut cell = GrazingCell::new(None, 80.0, 100.0, 1.0, 0);
 
         // Test normal consumption
-        let consumed = cell.consume_biomass(20.0, 0.3);
+        let consumed = cell.consume_biomass(20.0, 0.3, 0);
         assert_eq!(consumed, 20.0);
         assert_eq!(cell.total_biomass, 60.0);
         assert!(cell.consumption_pressure > 0.0);
 
         // Test max fraction limit
-        let consumed_limited = cell.consume_biomass(50.0, 0.3); // 30% of 60 = 18
+        let consumed_limited = cell.consume_biomass(50.0, 0.3, 0); // 30% of 60 = 18
         assert_eq!(consumed_limited, 18.0);
         assert_eq!(cell.total_biomass, 42.0);
     }
 
     #[test]
     fn test_grazing_cell_pressure_decay() {
-        let mut cell = GrazingCell::new(80.0, 100.0, 1.0);
-        cell.consume_biomass(20.0, 1.0);
+        let mut cell = GrazingCell::new(None, 80.0, 100.0, 1.0, 0);
+        cell.consume_biomass(20.0, 1.0, 0);
         assert!(cell.consumption_pressure > 0.0);
 
         let initial_pressure = cell.consumption_pressure;
@@ -955,5 +1065,86 @@ mod tests {
         assert!(grid.get_cell(IVec2::new(1, 1)).is_none());
 
         // This demonstrates sparse storage - we don't store empty cells
+    }
+
+    #[test]
+    fn test_resource_cell_from_type() {
+        use crate::resources::ResourceType;
+
+        let cell = GrazingCell::from_resource_type(ResourceType::BerryBush, 1000).unwrap();
+
+        assert_eq!(cell.resource_type, Some(ResourceType::BerryBush));
+        assert!(cell.total_biomass > 0.0);
+        assert!(cell.max_biomass > 0.0);
+        assert_eq!(cell.last_update_tick, 1000);
+    }
+
+    #[test]
+    fn test_resource_cell_profile_access() {
+        use crate::resources::ResourceType;
+
+        let cell = GrazingCell::from_resource_type(ResourceType::MushroomPatch, 1000).unwrap();
+        let profile = cell.get_profile().unwrap();
+
+        assert_eq!(profile.category, crate::resources::ResourceCategory::Collectable);
+        assert_eq!(profile.consumption_kind, crate::resources::ConsumptionKind::HumanGather);
+        assert!(profile.biomass_cap > 0.0);
+    }
+
+    #[test]
+    fn test_resource_cell_consumption_with_delay() {
+        use crate::resources::ResourceType;
+
+        let mut cell = GrazingCell::from_resource_type(ResourceType::WildRoot, 1000).unwrap();
+        let initial_biomass = cell.total_biomass;
+
+        // Consume some biomass
+        let consumed = cell.consume_biomass(5.0, 0.5, 1000);
+        assert!(consumed > 0.0);
+        assert!(cell.total_biomass < initial_biomass);
+
+        // Check that regrowth delay was applied for collectable
+        assert!(cell.regrowth_available_tick > 1000);
+
+        // Try to consume again before regrowth is available
+        let consumed_again = cell.consume_biomass(5.0, 0.5, 1001);
+        assert_eq!(consumed_again, 0.0); // Should be blocked by regrowth delay
+    }
+
+    #[test]
+    fn test_resource_grid_with_resource_type() {
+        use crate::resources::ResourceType;
+
+        let mut grid = ResourceGrid::new();
+        let pos = IVec2::new(5, 10);
+
+        // Create a cell with a specific resource type
+        let cell = grid.get_or_create_cell_with_resource(pos, ResourceType::BerryBush);
+        assert!(cell.is_some());
+
+        let created_cell = cell.unwrap();
+        assert_eq!(created_cell.resource_type, Some(ResourceType::BerryBush));
+        assert!(created_cell.total_biomass > 0.0);
+    }
+
+    #[test]
+    fn test_apply_profile_to_existing_cell() {
+        use crate::resources::ResourceType;
+
+        let mut grid = ResourceGrid::new();
+        let pos = IVec2::new(5, 10);
+
+        // Create a basic cell first
+        let basic_cell = grid.get_or_create_cell(pos, 50.0, 1.0);
+        assert!(basic_cell.resource_type.is_none());
+
+        // Apply a resource profile
+        let applied = grid.apply_profile(pos, ResourceType::HazelShrub);
+        assert!(applied);
+
+        // Check that the cell now has the resource type
+        let updated_cell = grid.get_cell(pos).unwrap();
+        assert_eq!(updated_cell.resource_type, Some(ResourceType::HazelShrub));
+        assert!(updated_cell.max_biomass > 50.0); // Should be updated to profile value
     }
 }

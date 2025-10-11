@@ -326,41 +326,6 @@
                 </div>
             </div>
 
-            <div style="background: rgba(220, 165, 0, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(220, 220, 165, 0, 0.2);">
-                <h2>🧺 Collectables Debug</h2>
-                <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 1rem;">
-                    Visualize gatherable resources like mushrooms, berries, and roots in the world. Press 'C' to toggle overlay.
-                </div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                    <button id="toggle-collectables" style="flex: 1; padding: 0.5rem; background: rgba(220, 165, 0, 0.2); border: 1px solid rgba(220, 165, 0, 0.4); color: #daa520; border-radius: 4px; cursor: pointer;">
-                        🧺 Show Collectables
-                    </button>
-                </div>
-                <div style="margin-top: 1rem;">
-                    <label style="display: block; font-size: 0.8rem; margin-bottom: 0.5rem; opacity: 0.9;">
-                        Overlay Opacity: <span id="collectables-opacity-value">70%</span>
-                    </label>
-                    <input type="range" id="collectables-opacity" min="10" max="100" value="70"
-                           style="width: 100%; height: 4px; background: rgba(220, 165, 0, 0.3); outline: none; opacity: 0.8; border-radius: 2px;">
-                </div>
-                <div id="collectables-status" style="margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.7; text-align: center;">
-                    <span style="color: #fbbf24;">💡 Press 'C' to show collectable resources or use the button above</span>
-                </div>
-            </div>
-
-            <div style="background: rgba(100, 100, 100, 0.1); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1);">
-                <h2>⌨️ Keyboard Shortcuts</h2>
-                <div style="font-size: 0.8rem; opacity: 0.7; margin-bottom: 1rem;">
-                    Quick access to common functions
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.75rem; opacity: 0.8;">
-                    <div><kbd style="background: rgba(255,255,255,0.2); padding: 0.2rem 0.4rem; border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);">C</kbd> Toggle Collectables</div>
-                    <div><kbd style="background: rgba(255,255,255,0.2); padding: 0.2rem 0.4rem; border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);">G</kbd> Toggle Grass Density</div>
-                    <div><kbd style="background: rgba(255,255,255,0.2); padding: 0.2rem 0.4rem; border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);">R</kbd> Reset View</div>
-                    <div><kbd style="background: rgba(255,255,255,0.2); padding: 0.2rem 0.4rem; border-radius: 3px; border: 1px solid rgba(255,255,255,0.3);>+/-</kbd> Zoom In/Out</div>
-                </div>
-            </div>
-
             <div class="stats">
                 <div class="stat-card">
                     <div class="stat-value" id="total-tiles">0</div>
@@ -484,7 +449,6 @@
     <script type="module" src="js/network.js"></script>
     <script type="module" src="js/controls.js"></script>
     <script type="module" src="js/entity-stats.js"></script>
-    <script type="module" src="js/collectables-overlay.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

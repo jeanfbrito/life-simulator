@@ -3023,6 +3023,7 @@ dependencies = [
  "bevy",
  "clap",
  "futures-util",
+ "lazy_static",
  "rand",
  "rand_pcg",
  "ron",

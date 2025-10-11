@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head></head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>Minimal Map Viewer</title>
+    <style>
+        body {
+            margin</style>: 0;
+            padding: 20px;
+            font-family: monospace;
+            background: #1a1a1a;
+            color: white;
+        }
+        #canvas {
+            border: 2px solid #333;
+            background: #000;
+            cursor: crosshair;
+        }
+        #info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+        .error {
+            color: #f87171;
+        }
+        .success {
+            color: #4ade80;
+        }
+        .info {
+            color: #60a5fa;
+        }
+    </style>
+</head>
+<body>
+    <h</body>1>🗺️ Minimal Map Viewer</h1>
+    <div id="info">Loading...</div>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');</script>
+        const ctx = canvas.getContext('2d');
+        const info = document.getElementById('info');
+
+        // Terrain colors
+        const TERRAIN_COLORS = {
+            'DeepWater': '#003366',
+            'ShallowWater': '#4a7ba7',
+            'Sand': '#f4e4bc',
+            'Grass': '#33cc33',
+            'Forest': '#006600',
+            'Desert': '#cc9966',
+            'Dirt': '#8b4513',
+            'Mountains': '#666666',
+            'Snow': '#ffffff',
+            'Stone': '#999999',
+            'Swamps': '#4d6633'
+        };
+
+        const TILE_SIZE = 8;
+        let worldInfo = null;
+        let chunks = new Map();
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            info.innerHTML += `<div class="${type}">[${timestamp}] ${message}</div>`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        async function loadWorld() {
+            try {
+                log('Fetching world info...');
+                const response = await fetch('http://127.0.0.1:54321/api/world_info');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                worldInfo = await response.json();
+                log(`✅ Loaded world "${worldInfo.name}" with ${worldInfo.chunk_count} chunks`, 'success');
+                log(`   Bounds: ${JSON.stringify(worldInfo.bounds)}`, 'info');
+
+                await loadChunks();
+                renderMap();
+
+            } catch (error) {
+                log(`❌ Error loading world: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadChunks() {
+            const { bounds } = worldInfo;
+            const chunkPromises = [];
+
+            log('Loading chunks...');
+
+            // Load chunks in a 5x5 grid around center
+            for (let x = bounds.min.x; x <= bounds.max.x; x++) {
+                for (let y = bounds.min.y; y <= bounds.max.y; y++) {
+                    chunkPromises.push(loadChunk(x, y));
+                }
+            }
+
+            await Promise.all(chunkPromises);
+            log(`✅ Loaded ${chunks.size} chunks`, 'success');
+        }
+
+        async function loadChunk(chunkX, chunkY) {
+            try {
+                const response = await fetch(
+                    `http://127.0.0.1:54321/api/chunks?center_x=${chunkX}&center_y=${chunkY}&radius=0&layers=true`
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+
+                if (data.chunks && data.chunks.length > 0) {
+                    const chunk = data.chunks[0];
+                    chunks.set(`${chunkX},${chunkY}`, chunk);
+                }
+            } catch (error) {
+                log(`   ⚠️ Failed to load chunk (${chunkX}, ${chunkY}): ${error.message}`, 'error');
+            }
+        }
+
+        function renderMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let totalTiles = 0;
+            let renderedTiles = 0;
+
+            chunks.forEach((chunk, key) => {
+                const [chunkX, chunkY] = key.split(',').map(Number);
+
+                if (chunk.layers && chunk.layers.terrain) {
+                    const terrain = chunk.layers.terrain;
+
+                    for (let y = 0; y < terrain.length; y++) {
+                        for (let x = 0; x < terrain[y].length; x++) {
+                            totalTiles++;
+
+                            const terrainType = terrain[y][x];
+                            const color = TERRAIN_COLORS[terrainType] || '#ff00ff';
+
+                            // Convert chunk coordinates to world coordinates
+                            const worldX = (chunkX * 16 + x) * TILE_SIZE;
+                            const worldY = (chunkY * 16 + y) * TILE_SIZE;
+
+                            // Center the view
+                            const screenX = worldX + canvas.width / 2 - (worldInfo.bounds.max.x * 16 * TILE_SIZE) / 2;
+                            const screenY = worldY + canvas.height / 2 - (worldInfo.bounds.max.y * 16 * TILE_SIZE) / 2;
+
+                            ctx.fillStyle = color;
+                            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+                            renderedTiles++;
+                        }
+                    }
+                }
+            });
+
+            log(`🗺️ Rendered ${renderedTiles}/${totalTiles} tiles`, 'success');
+
+            // Draw entities
+            renderEntities();
+        }
+
+        async function renderEntities() {
+            try {
+                const response = await fetch('http://127.0.0.1:54321/api/entities');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+
+                log(`🎯 Rendering ${data.entities.length} entities`, 'info');
+
+                data.entities.forEach(entity => {
+                    const x = entity.position.x * TILE_SIZE + canvas.width / 2;
+                    const y = entity.position.y * TILE_SIZE + canvas.height / 2;
+
+                    // Draw entity as a circle
+                    ctx.fillStyle = '#ff0000';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Draw entity name
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '10px monospace';
+                    ctx.fillText(entity.name, x + 6, y + 3);
+                });
+
+            } catch (error) {
+                log(`   ⚠️ Failed to load entities: ${error.message}`, 'error');
+            }
+        }
+
+        // Handle mouse clicks
+        canvas.addEventListener('click', async (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Convert screen coordinates to world coordinates
+            const worldX = Math.floor((x - canvas.width / 2) / TILE_SIZE);
+            const worldY = Math.floor((y - canvas.height / 2) / TILE_SIZE);
+
+            log(`📍 Clicked at world coordinates: (${worldX}, ${worldY})`, 'info');
+
+            // Try to get chunk at this position
+            const chunkX = Math.floor(worldX / 16);
+            const chunkY = Math.floor(worldY / 16);
+            const chunkKey = `${chunkX},${chunkY}`;
+
+            if (chunks.has(chunkKey)) {
+                const chunk = chunks.get(chunkKey);
+                const localX = worldX - chunkX * 16;
+                const localY = worldY - chunkY * 16;
+
+                if (chunk.layers && chunk.layers.terrain && chunk.layers.terrain[localY] && chunk.layers.terrain[localY][localX]) {
+                    const terrain = chunk.layers.terrain[localY][localX];
+                    log(`   Terrain: ${terrain}`, 'info');
+
+                    if (chunk.layers.resources && chunk.layers.resources[localY] && chunk.layers.resources[localY][localX]) {
+                        const resource = chunk.layers.resources[localY][localX];
+                        if (resource && resource !== 'Empty') {
+                            log(`   Resource: ${resource}`, 'info');
+                        }
+                    }
+                }
+            } else {
+                log(`   No chunk data available`, 'error');
+            }
+        });
+
+        // Start loading
+        loadWorld();
+    </script>
+</body>
+</html>

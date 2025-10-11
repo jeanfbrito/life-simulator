@@ -7,19 +7,32 @@
 /// - Resource contention resolved through queue ordering
 pub mod action;
 pub mod behaviors;
+pub mod collectables;
 pub mod consideration;
+pub mod debug_collectables;
 pub mod event_driven_planner;
 pub mod herbivore_toolkit;
 pub mod planner;
 pub mod predator_toolkit;
 pub mod queue;
 pub mod replan_queue;
+pub mod test_collectable_pipeline;
 pub mod trigger_emitters;
 
 pub use action::{
     create_action, Action, ActionRequest, ActionResult, ActionType, DrinkWaterAction, GrazeAction,
-    RestAction,
+    HarvestAction, RestAction,
 };
+pub use collectables::{
+    CollectableInfo, CollectableSearchConfig, CollectableStats, debug_list_collectables,
+    get_collectable_stats, get_collectable_targets, get_all_collectable_types, is_collectable,
+};
+
+// Re-export web API functions for easier access
+pub use collectables::web_api::{
+    get_collectable_stats_json, debug_collectables_json, get_collectable_types_json,
+};
+pub use debug_collectables::CollectableDebugPlugin;
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;

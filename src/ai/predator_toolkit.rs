@@ -5,6 +5,7 @@
 use crate::ai::action::ActionType;
 use crate::ai::herbivore_toolkit;
 use crate::ai::planner::UtilityScore;
+use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::entities::entity_types::{Deer, Rabbit};
 use crate::entities::reproduction::Age;
 use crate::entities::stats::{Energy, Hunger, Thirst};
@@ -134,6 +135,8 @@ pub fn evaluate_bear_actions(
     deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
     vegetation: &ResourceGrid,
 ) -> Vec<UtilityScore> {
+    // Bears are omnivores - use generalist diet with grass preference
+    let diet = HerbivoreDiet::new(0.7, 0.4, 8.0);
     let mut actions = herbivore_toolkit::evaluate_core_actions(
         position,
         thirst,
@@ -143,6 +146,7 @@ pub fn evaluate_bear_actions(
         world_loader,
         vegetation,
         fear_state,
+        &diet,
     );
 
     let hunger_value = hunger_norm(hunger);
@@ -199,6 +203,8 @@ pub fn evaluate_fox_actions(
     rabbits: &Query<(Entity, &TilePosition, Option<&Age>), With<Rabbit>>,
     vegetation: &ResourceGrid,
 ) -> Vec<UtilityScore> {
+    // Foxes are carnivores but can eat some plant matter - use minimal plant diet
+    let diet = HerbivoreDiet::new(0.2, 0.1, 5.0);
     let mut actions = herbivore_toolkit::evaluate_core_actions(
         position,
         thirst,
@@ -208,6 +214,7 @@ pub fn evaluate_fox_actions(
         world_loader,
         vegetation,
         fear_state,
+        &diet,
     );
     // Predators shouldn't nibble grass; strip graze options inherited from core helper.
     filter_out_graze(&mut actions);
@@ -266,6 +273,8 @@ pub fn evaluate_wolf_actions(
     deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
     vegetation: &ResourceGrid,
 ) -> Vec<UtilityScore> {
+    // Wolves are obligate carnivores - use very minimal plant diet
+    let diet = HerbivoreDiet::new(0.1, 0.05, 3.0);
     let mut actions = herbivore_toolkit::evaluate_core_actions(
         position,
         thirst,
@@ -275,6 +284,7 @@ pub fn evaluate_wolf_actions(
         world_loader,
         vegetation,
         fear_state,
+        &diet,
     );
     // Wolves are obligate carnivores as well.
     filter_out_graze(&mut actions);

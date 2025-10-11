@@ -1780,13 +1780,22 @@ fn init_heatmap_storage(world_size_chunks: i32, tile_size: usize) {
 /// Phase 5: Get biomass heatmap data as JSON for web viewer from ResourceGrid
 /// Uses on-demand refresh with dirty flag for performance optimization
 pub fn get_biomass_heatmap_json() -> String {
+    // DIAGNOSTIC: Log biomass heatmap request
+    eprintln!("🔍 VEGETATION: get_biomass_heatmap_json() called");
+    
     // This function needs to access the ResourceGrid and ChunkLODManager, but they're Bevy resources
     // For now, we'll use a simplified approach that could be enhanced with proper resource access
 
     // Try to get a global snapshot if available, otherwise return current status
     unsafe {
+        eprintln!("🔍 VEGETATION: Checking global heatmap snapshot...");
         if let Some(heatmap_ref) = &VEGETATION_HEATMAP {
+            eprintln!("🔍 VEGETATION: Global heatmap reference exists");
             if let Ok(heatmap) = heatmap_ref.read() {
+                eprintln!("🔍 VEGETATION: Successfully read heatmap - size: {}x{}, updated_tick: {}",
+                    heatmap.heatmap.len(),
+                    if heatmap.heatmap.is_empty() { 0 } else { heatmap.heatmap[0].len() },
+                    heatmap.updated_tick);
                 return json!({
                     "heatmap": heatmap.heatmap,
                     "max_biomass": heatmap.max_biomass,
@@ -1801,11 +1810,16 @@ pub fn get_biomass_heatmap_json() -> String {
                         "note": "Using global heatmap snapshot. Consider implementing direct resource access for real-time data."
                     }
                 }).to_string();
+            } else {
+                eprintln!("🔍 VEGETATION: Failed to get read lock on heatmap");
             }
+        } else {
+            eprintln!("🔍 VEGETATION: No global heatmap snapshot available");
         }
     }
 
     // Fallback: Return status indicating no data available
+    eprintln!("🔍 VEGETATION: Returning fallback no-data response");
     json!({
         "heatmap": [],
         "max_biomass": MAX_BIOMASS,

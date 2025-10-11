@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page</title>
+</head>
+<body>
+    <h1>Testing Server</h1>
+    <div id="test"></div>
+
+    <script>
+        // Test basic connectivity
+        fetch('/api/world_info')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('test').innerHTML =
+                    'World: ' + data.name + '<br>' +
+                    'Chunks: ' + data.chunk_count;
+            })
+            .catch(error => {
+                document.getElementById('test').innerHTML = 'Error: ' + error;
+            });
+    </script>
+</body>
+</html>

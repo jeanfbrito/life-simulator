@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Viewer</title>
+</head>
+<body>
+    <h1>Debug Viewer</h1>
+    <div id="output"></div>
+    <script>
+        async function debugAPIs() {
+            const output = document.getElementById('output');
+
+            function log(msg) {
+                console.log(msg);
+                output.innerHTML += '<p>' + msg + '</p>';
+            }
+
+            log('Testing APIs...');
+
+            try {
+                // Test world info
+                const worldInfo = await fetch('http://127.0.0.1:54321/api/world_info').then(r => r.json());
+                log('✅ World Info: ' + JSON.stringify(worldInfo));
+
+                // Test chunks
+                const chunkData = await fetch('http://127.0.0.1:54321/api/chunks?coords=0,0&layers=true').then(r => r.json());
+                log('✅ Chunk Data: ' + JSON.stringify(chunkData).substring(0, 200) + '...');
+
+                // Test entities
+                const entities = await fetch('http://127.0.0.1:54321/api/entities').then(r => r.json());
+                log('✅ Entities: ' + entities.entities.length + ' entities');
+
+            } catch (error) {
+                log('❌ Error: ' + error.message);
+            }
+        }
+
+        debugAPIs();
+    </script>
+</body>
+</html>

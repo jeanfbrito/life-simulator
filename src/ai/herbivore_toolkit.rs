@@ -4,6 +4,7 @@ use crate::ai::action::ActionType;
 use crate::ai::behaviors::{
     evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_follow_behavior,
     evaluate_grazing_behavior, evaluate_resting_behavior,
+    eating::HerbivoreDiet,
 };
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
@@ -25,6 +26,7 @@ pub fn evaluate_core_actions(
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
     fear_state: Option<&FearState>,
+    diet: &HerbivoreDiet,
 ) -> Vec<UtilityScore> {
     let mut actions = Vec::new();
 
@@ -49,6 +51,7 @@ pub fn evaluate_core_actions(
         behavior_config.hunger_threshold,
         behavior_config.food_search_radius,
         behavior_config.foraging_strategy,
+        diet,
     ) {
         actions.push(eat);
     }

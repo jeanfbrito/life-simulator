@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 use crate::entities::reproduction::{
     Age, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
@@ -173,6 +174,16 @@ pub fn sync_entities_to_tracker(
         if let Ok(mut tracker) = tracker.write() {
             // Clear and rebuild (simple approach)
             tracker.entities.clear();
+            
+            // DIAGNOSTIC: Log sync operation
+            static mut LAST_SYNC_LOG: u64 = 0;
+            unsafe {
+                let current_tick = Instant::now().elapsed().as_secs();
+                if current_tick - LAST_SYNC_LOG >= 5 {
+                    eprintln!("🔍 ENTITY_TRACKER: Syncing entities - clearing tracker");
+                    LAST_SYNC_LOG = current_tick;
+                }
+            }
 
             for (
                 entity,
@@ -267,6 +278,16 @@ pub fn sync_entities_to_tracker(
                 };
                 tracker.update(entity.index(), data);
             }
+            
+            // DIAGNOSTIC: Log sync results
+            static mut LAST_SYNC_RESULT_LOG: u64 = 0;
+            unsafe {
+                let current_tick = Instant::now().elapsed().as_secs();
+                if current_tick - LAST_SYNC_RESULT_LOG >= 5 {
+                    eprintln!("🔍 ENTITY_TRACKER: Sync complete - {} entities tracked", tracker.entities.len());
+                    LAST_SYNC_RESULT_LOG = current_tick;
+                }
+            }
         }
     }
 }
@@ -275,6 +296,8 @@ pub fn sync_entities_to_tracker(
 pub fn init_entity_tracker() {
     EntityTracker::init();
     info!("Entity tracker initialized");
+    // DIAGNOSTIC: Verify tracker initialization
+    eprintln!("🔍 ENTITY_TRACKER: Initialized - global check: {}", EntityTracker::global().is_some());
 }
 
 // ============================================================================
@@ -283,11 +306,24 @@ pub fn init_entity_tracker() {
 
 /// Get entities as JSON string (for web server)
 pub fn get_entities_json() -> String {
+    // DIAGNOSTIC: Log entity JSON request
+    eprintln!("🔍 ENTITY_TRACKER: get_entities_json() called");
+    
     if let Some(tracker) = EntityTracker::global() {
+        eprintln!("🔍 ENTITY_TRACKER: Global tracker exists");
         if let Ok(tracker) = tracker.read() {
-            return tracker.to_json();
+            let entity_count = tracker.entities.len();
+            eprintln!("🔍 ENTITY_TRACKER: Successfully read tracker - {} entities", entity_count);
+            let json = tracker.to_json();
+            eprintln!("🔍 ENTITY_TRACKER: Generated JSON ({} chars)", json.len());
+            return json;
+        } else {
+            eprintln!("🔍 ENTITY_TRACKER: Failed to get read lock on tracker");
         }
+    } else {
+        eprintln!("🔍 ENTITY_TRACKER: No global tracker available");
     }
+    eprintln!("🔍 ENTITY_TRACKER: Returning empty entities response");
     r#"{"entities": []}"#.to_string()
 }
 

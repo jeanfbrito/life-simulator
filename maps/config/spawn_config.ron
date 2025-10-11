@@ -1,0 +1,80 @@
+(
+    spawn_groups: [
+        (
+            species: "Rabbit",
+            count: 5,
+            names: [
+                "Bugs",
+                "Roger",
+                "Thumper",
+                "Peter",
+                "Clover",
+            ],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 15,
+                max_attempts: 30,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🎯 LIFE_SIMULATOR: Spawning 5 rabbits for testing...",
+                success_template: "   ✅ Spawned rabbit #{index}: {name} 🐇 at {pos}",
+                completion_message: "✅ LIFE_SIMULATOR: Spawned {count} rabbits successfully!",
+            )),
+        ),
+        (
+            species: "Deer",
+            count: 2,
+            names: [
+                "Stag",
+                "Doe",
+            ],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 5,
+                max_attempts: 50,
+            ),
+            sex_sequence: Some([
+                male,
+                female,
+            ]),
+            messages: Some((
+                start_message: "🦌 Spawning deer pair near origin...",
+                success_template: "   🦌 Spawned deer {name} ({sex}) at {pos}",
+                completion_message: "🦌 Deer pair ready for testing ({count} spawned)",
+            )),
+        ),
+        (
+            species: "Raccoon",
+            count: 2,
+            names: [
+                "Bandit",
+                "Maple",
+            ],
+            spawn_area: (
+                center: (10, 10),
+                search_radius: 4,
+                max_attempts: 50,
+            ),
+            sex_sequence: Some([
+                male,
+                female,
+            ]),
+            messages: Some((
+                start_message: "🦝 Spawning raccoon pair near watering hole...",
+                success_template: "   🦝 Spawned raccoon {name} ({sex}) at {pos}",
+                completion_message: "🦝 Raccoon pair active near campsite ({count} spawned)",
+            )),
+        ),
+    ],
+    settings: (
+        verbose_logging: true,
+        enable_spawning: true,
+        completion_message: "🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html\n🌐 LIFE_SIMULATOR: Entity API at http://127.0.0.1:54321/api/entities",
+        post_spawn_messages: [
+            "📊 Rabbits will only move when thirsty/hungry (no wandering)",
+            "🧠 Behavior: Drinks at 15% thirst, grazes at 3-8 tile range",
+            "🦌 Example: Deer follow their mothers while idle",
+        ],
+    ),
+)

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal Viewer Test</title>
+    <style>
+        canvas { border: 1px solid black; image-rendering: pixelated; }
+        body { font-family: monospace; background: #222; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Minimal Viewer Test</h1>
+    <canvas id="canvas" width="400" height="300"></canvas>
+    <div id="status">Loading...</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+
+        const TILE_SIZE = 10;
+        const TERRAIN_COLORS = {
+            'Grass': '#33cc33',
+            'Forest': '#006600',
+            'Water': '#0066cc',
+            'DeepWater': '#003366',
+            'Sand': '#cccccc'
+        };
+
+        async function loadAndRender() {
+            try {
+                status.textContent = 'Loading chunk data...';
+
+                // Load chunk data
+                const response = await fetch('http://127.0.0.1:54321/api/chunks?coords=0,0&layers=true');
+                const data = await response.json();
+
+                status.textContent = `Loaded ${Object.keys(data.chunk_data).length} chunks`;
+
+                // Clear canvas
+                ctx.fillStyle = '#003366';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Render chunk 0,0
+                const chunk = data.chunk_data['0,0'];
+                if (chunk && chunk.terrain) {
+                    for (let y = 0; y < 16; y++) {
+                        for (let x = 0; x < 16; x++) {
+                            const terrain = chunk.terrain[y][x];
+                            const color = TERRAIN_COLORS[terrain] || '#ff00ff';
+
+                            ctx.fillStyle = color;
+                            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                        }
+                    }
+                    status.textContent += ' - Rendered chunk 0,0';
+                } else {
+                    status.textContent += ' - No terrain data found';
+                }
+
+                // Load entities
+                const entityResponse = await fetch('http://127.0.0.1:54321/api/entities');
+                const entityData = await entityResponse.json();
+
+                // Draw entities
+                ctx.font = '12px Arial';
+                entityData.entities.slice(0, 5).forEach(entity => {
+                    if (entity.position.x >= 0 && entity.position.x < 16 &&
+                        entity.position.y >= 0 && entity.position.y < 16) {
+
+                        const emoji = entity.entity_type === 'Rabbit' ? '🐇' :
+                                     entity.entity_type === 'Wolf' ? '🐺' :
+                                     entity.entity_type === 'Fox' ? '🦊' : '🧍';
+
+                        ctx.fillText(emoji,
+                                   entity.position.x * TILE_SIZE,
+                                   entity.position.y * TILE_SIZE + TILE_SIZE);
+                    }
+                });
+
+                status.textContent += ` - Drew ${entityData.entities.length} entities`;
+
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                console.error(error);
+            }
+        }
+
+        loadAndRender();
+    </script>
+</body>
+</html>

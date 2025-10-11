@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Module Test</title>
+</head>
+<body>
+    <h1>Testing Module Loading</h1>
+    <div id="test"></div>
+
+    <script type="module">
+        import { CONFIG } from './js/config.js';
+        document.getElementById('test').innerHTML = '✅ Module loaded successfully! CONFIG.TILE_SIZE = ' + CONFIG.TILE_SIZE;
+    </script>
+</body>
+</html>

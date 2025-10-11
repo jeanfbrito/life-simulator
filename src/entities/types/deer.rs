@@ -5,6 +5,7 @@ use super::BehaviorConfig;
 use bevy::prelude::*;
 
 use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types;
@@ -94,6 +95,9 @@ impl DeerBehavior {
         vegetation_grid: &crate::vegetation::resource_grid::ResourceGrid,
         fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
+        // Use deer-specific diet preferences
+        let diet = HerbivoreDiet::deer();
+
         crate::ai::herbivore_toolkit::evaluate_core_actions(
             position,
             thirst,
@@ -103,6 +107,7 @@ impl DeerBehavior {
             world_loader,
             vegetation_grid,
             fear_state,
+            &diet,
         )
     }
 }
