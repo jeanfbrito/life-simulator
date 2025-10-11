@@ -1,16 +1,21 @@
-# WARP.md
+# CLAUDE.md
 
-This file provides guidance to WARP (warp.dev) when working with code in this repository.
+This file provides guidance to AI assistants when working with code in this repository.
 
 ## Project Overview
 
 Life Simulator is a headless life simulation game built with Bevy 0.16 that features a **separated architecture** where world generation is completely independent from the running simulation engine. Maps are generated as a separate CLI step, and the life simulator loads pre-generated worlds for consistent, reproducible simulations.
 
+The project includes **two visualization clients**:
+- **Web Viewer**: Browser-based HTML5 canvas renderer (orthogonal view)
+- **Godot Viewer**: Native desktop application with hardware-accelerated isometric rendering
+
 ## Prerequisites
 
 - Rust 1.70+ (recommended to use [rustup](https://rustup.rs/))
 - Git
-- A modern web browser
+- A modern web browser (for web viewer)
+- Godot 4.3+ (for Godot viewer) - [Download](https://godotengine.org/)
 
 ## Common Commands
 
@@ -62,7 +67,9 @@ cargo test module_name::
 cargo test terrain
 ```
 
-### Web Viewer
+### Visualization Clients
+
+#### Web Viewer (Browser-Based)
 ```bash
 # Start the simulator (web server starts automatically on port 54321)
 cargo run --bin life-simulator
@@ -71,11 +78,35 @@ cargo run --bin life-simulator
 # Open http://127.0.0.1:54321/viewer.html in your browser
 ```
 
-#### Web Viewer Features
+**Web Viewer Features:**
 - **Interactive Map**: Click and drag to pan around the island
 - **Zoom**: Mouse wheel to zoom in/out
 - **Terrain Display**: 12 different terrain types with distinct colors
+- **Resource Rendering**: Trees, bushes, flowers, rocks
+- **Entity Display**: Live animals with behavior labels
 - **Dark Theme**: Optimized for comfortable viewing
+
+#### Godot Viewer (Native Desktop)
+```bash
+# Terminal 1: Start the backend simulator
+cargo run --bin life-simulator
+
+# Terminal 2: Launch Godot viewer
+cd godot-viewer
+/Applications/Godot.app/Contents/MacOS/Godot --path .
+# Press F5 to run (or use Play button in Godot Editor)
+```
+
+**Godot Viewer Features:**
+- **Isometric Rendering**: Beautiful diamond-shaped tiles (128×64 pixels)
+- **Advanced Camera**: Mouse wheel zoom, middle-click pan, edge scrolling, WASD movement
+- **Resource Display**: Emoji-based rendering with Y-sorting for depth
+- **Entity Rendering**: Live animals with scaling and action labels
+- **Real-time Statistics**: HUD with world info, entity counts, performance metrics
+- **Hardware Acceleration**: Native OpenGL rendering for smooth performance
+- **Professional UI**: Toggle-able controls overlay and statistics panel
+
+**For detailed Godot viewer documentation, see:** `godot-viewer/CLAUDE.md`
 
 ### API Testing
 ```bash
@@ -119,8 +150,12 @@ This separation ensures:
 
 #### World Data Flow
 ```
-map_generator → RON files (maps/) → WorldLoader → CachedWorld (in-memory) → web_server_simple → Web Viewer
+map_generator → RON files (maps/) → WorldLoader → CachedWorld (in-memory) → web_server_simple → Visualization Clients
+                                                                                                    ├→ Web Viewer (HTML/Canvas)
+                                                                                                    └→ Godot Viewer (GDScript/Isometric)
 ```
+
+Both viewers connect to the same HTTP API on port 54321 and receive identical chunk data.
 
 #### Multi-Layer System
 Worlds are stored with multiple layers in a single structure:
@@ -176,10 +211,22 @@ Located in `tilemap/world_generator.rs`, implements:
 #### Resources System
 - **`src/resources.rs`**: Resource type definitions and generation logic for resources layer
 
-#### Web Components
+#### Visualization Components
+
+**Backend API:**
 - **`src/web_server_simple.rs`**: HTTP server with multi-threaded request handling
+
+**Web Viewer (Browser):**
 - **`web-viewer/viewer.html`**: Interactive map viewer with pan/zoom
 - **`web-viewer/js/`**: Modular JavaScript for rendering, networking, controls
+- **`web-viewer/js/entity-manager.js`**: Entity polling and management (200ms interval)
+
+**Godot Viewer (Native Desktop):**
+- **`godot-viewer/`**: Complete Godot 4.3+ project
+- **`godot-viewer/scenes/World.tscn`**: Main scene with isometric rendering
+- **`godot-viewer/scripts/`**: GDScript modules for rendering, networking, camera
+- **`godot-viewer/CLAUDE.md`**: Comprehensive Godot-specific documentation
+- **`godot-viewer/docs/`**: Detailed guides on coordinate systems, camera positioning
 
 ### Data Persistence
 
@@ -235,9 +282,11 @@ When parsing chunk keys from strings (format `"x,y"`), always handle the comma s
 - **Release**: `lto = "thin"` for link-time optimization (maximum performance)
 - **Dev Dependencies**: Bevy with `dynamic_linking` feature for faster compilation during development
 
-## Web Viewer Architecture
+## Visualization Architecture
 
-The viewer is built with modular JavaScript:
+### Web Viewer Architecture (Browser-Based)
+
+The web viewer is built with modular JavaScript:
 - **`js/config.js`**: Terrain colors, tile size constants
 - **`js/network.js`**: API communication and chunk fetching
 - **`js/chunk-manager.js`**: Chunk caching and loading logic
@@ -246,7 +295,29 @@ The viewer is built with modular JavaScript:
 - **`js/app.js`**: Main application initialization
 - **`js/entity-manager.js`**: Entity polling and management (200ms interval)
 
-Rendering pattern: Fetch chunks in batches → Cache locally → Render visible area to canvas
+**Rendering pattern:** Fetch chunks in batches → Cache locally → Render visible area to canvas
+
+### Godot Viewer Architecture (Native Desktop)
+
+The Godot viewer is built with GDScript and Godot's scene system:
+
+**Core Systems:**
+- **`WorldRenderer.gd`**: Main renderer, camera management, chunk orchestration
+- **`TerrainTileMap.gd`**: Isometric TileMap rendering with dynamic colored sources
+- **`ChunkManager.gd`**: HTTP chunk loading (autoload singleton)
+- **`WorldDataCache.gd`**: Client-side chunk caching (autoload singleton)
+- **`Config.gd`**: Terrain colors, resource emojis, API endpoints (autoload singleton)
+
+**Advanced Features:**
+- **`CameraController.gd`**: Multi-input camera system (mouse, keyboard, edge scrolling)
+- **`ResourceManager.gd`**: Resource sprite rendering with Y-sorting
+- **`EntityManager.gd`**: Entity polling and display (200ms interval)
+- **`StatisticsHUD.gd`**: Real-time performance and world statistics overlay
+- **`ControlsOverlay.gd`**: Toggle-able help panel
+
+**Rendering pattern:** Load chunks via HTTP → Build TileMap sources → Paint isometric tiles → Update resources/entities
+
+**Key Design Principle:** Camera positioning MUST use `map_to_local()` to convert tile coordinates to pixel space. See `godot-viewer/docs/CAMERA_COORDINATES.md` for critical coordinate system information.
 
 ### Entity Rendering Standards
 
@@ -296,12 +367,27 @@ To add new layers:
 4. Add rendering logic in `web-viewer/js/renderer.js`
 
 ### Common Pitfalls
+
+**Backend:**
 - **Missing world files**: Always run map_generator before simulator
 - **Port conflicts**: Web server runs on 54321, ensure it's available
-- **URL length limits**: Large chunk requests need batching (handled by viewer)
+- **URL length limits**: Large chunk requests need batching (handled automatically by viewers)
 - **Chunk key format**: Always use "x,y" string format, not "(x,y)" or other variants
 - **Layer access**: Use multi-layer methods when working with resources or future layers
 - **❌ CRITICAL: Entity spawning**: NEVER manually spawn entities with component tuples. ALWAYS use spawn helper functions (`spawn_rabbit()`, `spawn_human()`, etc.) to ensure `BehaviorConfig` is attached. Missing `BehaviorConfig` = AI won't work. See "Entity System and AI Configuration" section below.
+
+**Web Viewer:**
+- **Entity Y offset**: Always render entities with -0.2Y offset to keep feet in tile
+- **Polling rate**: 200ms entity polling is a balance between freshness and server load
+- **Canvas performance**: Large worlds may require viewport culling
+
+**Godot Viewer:**
+- **❌ CRITICAL: Camera positioning**: Camera.position MUST use pixel coordinates from `map_to_local()`, NEVER tile coordinates directly. Tile (0,0) is NOT at pixel (0,0)!
+- **TileMap painting**: `set_cell()` expects tile coordinates directly - do NOT use `local_to_map()` conversion
+- **Chunk tracking**: Only mark chunks as rendered AFTER actual painting, not before
+- **Layer configuration**: Godot 4.x requires explicit layer setup with `add_layer()` and `set_layer_enabled()`
+- **Coordinate confusion**: Four coordinate systems (world tiles, chunks, local chunk, pixels) - see `godot-viewer/docs/CAMERA_COORDINATES.md`
+- **Missing Godot**: Viewer requires Godot 4.3+ - [Download here](https://godotengine.org/)
 
 ## Terrain Types & Features
 
@@ -371,48 +457,146 @@ cargo run --bin map_generator -- --name "test_world" --preview
 
 ## Testing Checklist
 
-Before considering map viewer functionality complete, verify:
-
-### Basic Functionality
+### Backend & API
 - [ ] Server starts successfully on `http://127.0.0.1:54321`
-- [ ] Web viewer loads at `http://127.0.0.1:54321/viewer.html`
 - [ ] World info API returns correct center chunk and size
+- [ ] Multi-layer chunk endpoint works with `layers=true` parameter
+- [ ] Entity API endpoint returns live entity data
 
-### Terrain Display
+### Web Viewer Testing
+**Basic Functionality:**
+- [ ] Web viewer loads at `http://127.0.0.1:54321/viewer.html`
 - [ ] Complete 7×7 grid loads correctly (49 chunks total)
 - [ ] Both terrain and resources layers display properly
+- [ ] Entities appear and update every 200ms
+
+**Visual Quality:**
 - [ ] Chunk boundaries render without artifacts
 - [ ] Terrain colors match expected types (water, sand, grass, forest, etc.)
+- [ ] Resources display with correct sprites/emojis
+- [ ] Entities render with -0.2Y offset (feet inside tile)
 
-### Performance and Reliability
-- [ ] Batched requests work without connection reset errors
-- [ ] Map loads within reasonable time (< 5 seconds)
-- [ ] No JavaScript console errors during map loading
-- [ ] Edge chunks (outside saved world) show deep water correctly
-
-### Interactive Features
+**Interactivity:**
 - [ ] Pan functionality works (click and drag)
 - [ ] Zoom functionality works (mouse wheel)
-- [ ] Layer toggle (if implemented) works correctly
-- [ ] Coordinate display updates correctly during navigation
+- [ ] No JavaScript console errors during operation
 
-### Data Integrity
+**Performance:**
+- [ ] Batched requests work without connection reset errors
+- [ ] Map loads within reasonable time (< 5 seconds)
+- [ ] 60 FPS rendering maintained
+
+### Godot Viewer Testing
+**Basic Functionality:**
+- [ ] Godot project opens without errors
+- [ ] Scene runs (F5) and connects to backend
+- [ ] All 49 chunks load and paint correctly
+- [ ] Isometric rendering displays properly
+
+**Camera Controls:**
+- [ ] Mouse wheel zoom (0.2x - 5.0x range)
+- [ ] Middle mouse drag panning
+- [ ] Edge scrolling (50px margin)
+- [ ] Keyboard movement (WASD + Arrow keys)
+- [ ] +/- keys for zoom
+- [ ] Camera positioned correctly on tile (0,0)
+
+**Visual Features:**
+- [ ] Terrain tiles render in isometric projection (128×64 diamonds)
+- [ ] Resources display with emoji symbols
+- [ ] Entities appear with proper scaling and labels
+- [ ] Y-sorting works correctly for depth
+
+**UI Overlays:**
+- [ ] Controls overlay visible and toggle-able (H key)
+- [ ] Statistics HUD displays correctly (Tab key)
+- [ ] Real-time statistics update every second
+- [ ] FPS and memory metrics show correctly
+
+**Validation:**
+- [ ] Camera controls validation passes (8/8 tests)
+- [ ] Statistics HUD validation passes (7/7 tests)
+- [ ] No Godot errors in output console
+
+### Data Integrity (Both Viewers)
 - [ ] Saved world data matches displayed terrain
-- [ ] Resources layer data loads correctly when `layers=true` parameter is used
-- [ ] Chunk coordinates are calculated correctly from center point
-- [ ] No missing or corrupted chunks in the displayed area
+- [ ] Resources layer data matches between viewers
+- [ ] Entity positions match between viewers (accounting for polling delay)
+- [ ] Chunk coordinates calculated correctly from center point
+- [ ] No missing or corrupted chunks in displayed area
 
 ## References and Inspiration
 
-- [Bevy Game Engine](https://bevyengine.org/) - The game engine powering this project
+**Core Engine:**
+- [Bevy Game Engine](https://bevyengine.org/) - The game engine powering the simulation backend
+
+**Visualization:**
+- **`godot-viewer/`** - Native desktop isometric viewer (Godot 4.3+)
+  - See `godot-viewer/CLAUDE.md` for comprehensive documentation
+  - See `godot-viewer/docs/CAMERA_COORDINATES.md` for coordinate system deep dive
+- **`web-viewer/`** - Browser-based orthogonal viewer (HTML5 Canvas)
+
+**Terrain & World Generation:**
 - `/Users/jean/Github/world-simulator` - Terrain generation inspiration
+- Procedural content generation techniques for realistic island formation
+
+**AI & Behavior:**
 - `/Users/jean/Github/dogoap` - AI and behavior tree reference
 - `/Users/jean/Github/big-brain` - AI planning and decision-making reference
+
+**Pathfinding:**
 - `/Users/jean/Github/bevy_entitiles` - Tile-based entity system and **pathfinding algorithm** reference
   - Key file: `src/algorithm/pathfinding.rs` - Original A* implementation
   - Our implementation simplified for single-threaded discrete tick simulation
   - Max steps increased to 5000 (vs original 1000) due to resource-fragmented terrain
-- Procedural content generation techniques for realistic island formation
+
+## Viewer Comparison & Selection Guide
+
+### When to Use Web Viewer
+**Best for:**
+- ✅ Universal accessibility (no installation required)
+- ✅ Quick testing and debugging
+- ✅ Remote access scenarios
+- ✅ Platform-independent deployment
+- ✅ Lightweight solution
+
+**Limitations:**
+- ⚠️ Limited by browser Canvas performance
+- ⚠️ Orthogonal view only (no isometric)
+- ⚠️ Basic camera controls
+- ⚠️ No real-time statistics overlay
+
+### When to Use Godot Viewer
+**Best for:**
+- ✅ Native desktop experience
+- ✅ Hardware-accelerated performance
+- ✅ Beautiful isometric rendering
+- ✅ Advanced camera controls (pan, zoom, edge scrolling)
+- ✅ Professional UI with statistics overlay
+- ✅ Local development and testing
+
+**Limitations:**
+- ⚠️ Requires Godot 4.3+ installation
+- ⚠️ Platform-specific builds for distribution
+- ⚠️ Larger initial setup
+
+### Feature Parity Matrix
+
+| Feature | Web Viewer | Godot Viewer |
+|---------|------------|--------------|
+| Terrain Rendering | ✅ Orthogonal | ✅ Isometric (128×64) |
+| Resource Display | ✅ Basic | ✅ Emoji with Y-sort |
+| Entity Rendering | ✅ Basic | ✅ Scaling + labels |
+| Camera Pan | ✅ Drag | ✅ Drag + WASD + Edge |
+| Camera Zoom | ✅ Wheel | ✅ Wheel + Keys (0.2-5x) |
+| Statistics Overlay | ❌ | ✅ Real-time HUD |
+| Performance Metrics | ❌ | ✅ FPS + Memory |
+| Installation | None | Godot 4.3+ |
+| Platform Support | Universal Browser | Desktop (exportable) |
+
+**Recommendation:** Use Godot viewer for development and rich visualization. Use web viewer for quick checks and universal access.
+
+See `godot-viewer/VIEWER_COMPARISON_REPORT.md` for detailed feature analysis.
 
 ## Future Development Ideas
 
@@ -422,6 +606,7 @@ This project serves as a foundation for:
 - Complex ecosystem interactions
 - Multi-user web-based simulation
 - Real-time terrain modification
+- Godot web export (combining native performance with browser accessibility)
 
 ## Pathfinding and Movement System
 
