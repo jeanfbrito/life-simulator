@@ -43,8 +43,8 @@ func paint_resources(chunk_key: String, resource_data: Array):
 
 			# Get resource config for sizing and offset
 			var config = Config.get_resource_config(resource_type)
-			label.add_theme_font_size_override("font_size",
-				int(Config.TILE_SIZE * config.size_multiplier))
+			var label_size = int(Config.TILE_SIZE * config.size_multiplier)
+			label.add_theme_font_size_override("font_size", label_size)
 
 			# Position at tile location (convert to pixel space)
 			var tile_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
@@ -54,10 +54,11 @@ func paint_resources(chunk_key: String, resource_data: Array):
 			pixel_pos.x += Config.TILE_SIZE * config.offset_x
 			pixel_pos.y += Config.TILE_SIZE * config.offset_y
 
-			# Center the emoji on the position
-			label.position = Vector2(0, 0)
+			# Center the emoji on the position by offsetting by half the label size
+			label.position = Vector2(-label_size / 2.0, -label_size / 2.0)
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			label.custom_minimum_size = Vector2(label_size, label_size)
 
 			container.add_child(label)
 			container.position = pixel_pos

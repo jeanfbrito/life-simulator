@@ -97,14 +97,16 @@ func _create_entity(entity_id: int, data: Dictionary):
 	# Get entity configuration
 	var entity_type = data.get("entity_type", "default")
 	var config = Config.get_entity_config(entity_type)
-	
+
 	# Apply juvenile scaling if applicable
 	var size_multiplier = config.size_multiplier
 	if data.get("is_juvenile", false) and Config.juvenile_scales.has(entity_type):
 		size_multiplier *= Config.juvenile_scales[entity_type]
 
+	var label_size = int(Config.TILE_SIZE * size_multiplier)
+
 	label.text = config.emoji
-	label.add_theme_font_size_override("font_size", int(Config.TILE_SIZE * size_multiplier))
+	label.add_theme_font_size_override("font_size", label_size)
 
 	# Set label color to white for visibility
 	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
@@ -113,8 +115,8 @@ func _create_entity(entity_id: int, data: Dictionary):
 	label.add_theme_constant_override("shadow_offset_y", 1)
 
 	# Set label size explicitly so it renders
-	label.custom_minimum_size = Vector2(Config.TILE_SIZE * size_multiplier, Config.TILE_SIZE * size_multiplier)
-	label.size = Vector2(Config.TILE_SIZE * size_multiplier, Config.TILE_SIZE * size_multiplier)
+	label.custom_minimum_size = Vector2(label_size, label_size)
+	label.size = Vector2(label_size, label_size)
 
 	# Position entity (with -0.2 Y offset to keep feet in grid!)
 	var pos = data.position
@@ -122,7 +124,8 @@ func _create_entity(entity_id: int, data: Dictionary):
 	var pixel_pos = get_parent().map_to_local(tile_pos)
 	pixel_pos.y += Config.TILE_SIZE * config.offset_y  # Apply -0.2 offset
 
-	label.position = Vector2(0, 0)
+	# Center the emoji on the position by offsetting by half the label size
+	label.position = Vector2(-label_size / 2.0, -label_size / 2.0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
