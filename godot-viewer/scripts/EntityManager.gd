@@ -108,6 +108,10 @@ func _create_entity(entity_id: int, data: Dictionary):
 	label.add_theme_constant_override("shadow_offset_x", 1)
 	label.add_theme_constant_override("shadow_offset_y", 1)
 
+	# Set label size explicitly so it renders
+	label.custom_minimum_size = Vector2(Config.TILE_SIZE * size_multiplier, Config.TILE_SIZE * size_multiplier)
+	label.size = Vector2(Config.TILE_SIZE * size_multiplier, Config.TILE_SIZE * size_multiplier)
+
 	# Position entity (with -0.2 Y offset to keep feet in grid!)
 	var pos = data.position
 	var tile_pos = Vector2i(pos.x, pos.y)
@@ -120,7 +124,11 @@ func _create_entity(entity_id: int, data: Dictionary):
 
 	container.add_child(label)
 	container.position = pixel_pos
-	container.z_index = 2  # Above resources
+	container.z_index = 10  # Way above everything else for visibility
+
+	# Make container visible for debugging
+	container.modulate = Color(1, 1, 1, 1)
+	container.visible = true
 
 	# Y-sort uses Y position for depth (handled automatically by y_sort_enabled)
 
