@@ -177,6 +177,10 @@ var DEFAULT_CENTER_CHUNK: Vector2i = Vector2i(0, 0)
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	print("Config singleton initialized")
+
+	# Load species configuration from backend API
+	await load_species_config()
+
 	configuration_loaded.emit()
 
 # Update tile size based on zoom scale
@@ -213,48 +217,56 @@ func load_species_config() -> void:
 	var error = http_request.request(api_base_url + "/api/species")
 	if error != OK:
 		print("⚠️ Failed to start species config request: ", error)
+		http_request.queue_free()
 		return
 
 	# Wait for request to complete
-	await http_request.request_completed
+	var result = await http_request.request_completed
 
-	if http_request.get_response_code() == 200:
-		var json = JSON.new()
-		var parse_result = json.parse(http_request.get_body().get_string_from_utf8())
-		if parse_result == OK:
-			var data = json.data
-			print("✅ Species configuration loaded from API")
+	# result is [result, response_code, headers, body]
+	if result[0] != HTTPRequest.RESULT_SUCCESS or result[1] != 200:
+		print("⚠️ Failed to load species configuration, result: ", result[0], " code: ", result[1])
+		http_request.queue_free()
+		return
 
-			# Update entity config from API data
-			if data.has("default_entity"):
-				var default_data = data["default_entity"]
-				entity_config["default"] = {
-					"emoji": default_data.get("emoji", "❓"),
-					"size_multiplier": default_data.get("sizeMultiplier", 1.0),
-					"offset_x": default_data.get("offsetX", 0.0),
-					"offset_y": default_data.get("offsetY", -0.2)
-				}
+	var body = result[3]
+	var json = JSON.new()
+	var parse_result = json.parse(body.get_string_from_utf8())
 
-			# Set species-specific configs
-			if data.has("species"):
-				for species_name in data["species"]:
-					var species_data = data["species"][species_name]
-					entity_config[species_name] = {
-						"emoji": species_data.get("emoji", "❓"),
-						"size_multiplier": species_data.get("viewer_scale", 1.0),
-						"offset_x": 0.0,
-						"offset_y": -0.2
-					}
+	if parse_result != OK:
+		print("⚠️ Failed to parse species config JSON")
+		http_request.queue_free()
+		return
 
-			# Set juvenile scales
-			if data.has("juvenile_scales"):
-				juvenile_scales = data["juvenile_scales"]
+	var data = json.data
+	print("✅ Species configuration loaded from API")
 
-			print("Species loaded: ", entity_config.keys())
-		else:
-			print("⚠️ Failed to parse species config JSON")
-	else:
-		print("⚠️ Failed to load species configuration, response code: ", http_request.get_response_code())
+	# Update entity config from API data
+	if data.has("default_entity"):
+		var default_data = data["default_entity"]
+		entity_config["default"] = {
+			"emoji": default_data.get("emoji", "❓"),
+			"size_multiplier": default_data.get("sizeMultiplier", 1.0),
+			"offset_x": default_data.get("offsetX", 0.0),
+			"offset_y": default_data.get("offsetY", -0.2)
+		}
+
+	# Set species-specific configs
+	if data.has("species"):
+		for species_name in data["species"]:
+			var species_data = data["species"][species_name]
+			entity_config[species_name] = {
+				"emoji": species_data.get("emoji", "❓"),
+				"size_multiplier": species_data.get("viewer_scale", 1.0),
+				"offset_x": 0.0,
+				"offset_y": -0.2
+			}
+
+	# Set juvenile scales
+	if data.has("juvenile_scales"):
+		juvenile_scales = data["juvenile_scales"]
+
+	print("Species loaded: ", entity_config.keys())
 
 	# Clean up
 	http_request.queue_free()

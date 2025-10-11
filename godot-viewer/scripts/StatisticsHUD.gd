@@ -20,9 +20,9 @@ var last_chunk_count: int = 0
 var last_resource_count: int = 0
 
 func _ready() -> void:
-	# Get references to global systems
-	world_data_cache = WorldDataCache.get_instance()
-	chunk_manager = ChunkManager.get_instance()
+	# Get references to global systems (singletons are accessed directly)
+	world_data_cache = WorldDataCache
+	chunk_manager = ChunkManager
 	
 	# Setup UI
 	stats_panel.position = Vector2(10, 10)
