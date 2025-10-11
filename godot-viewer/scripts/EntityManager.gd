@@ -102,6 +102,12 @@ func _create_entity(entity_id: int, data: Dictionary):
 	label.text = config.emoji
 	label.add_theme_font_size_override("font_size", int(Config.TILE_SIZE * size_multiplier))
 
+	# Set label color to white for visibility
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+
 	# Position entity (with -0.2 Y offset to keep feet in grid!)
 	var pos = data.position
 	var tile_pos = Vector2i(pos.x, pos.y)
@@ -124,8 +130,8 @@ func _create_entity(entity_id: int, data: Dictionary):
 
 	add_child(container)
 	entities[entity_id] = container
-	
-	print("🐇 Spawned entity ", entity_id, " (", entity_type, ") at ", tile_pos)
+
+	print("🐇 Spawned entity ", entity_id, " (", entity_type, ") at tile ", tile_pos, " → pixel ", pixel_pos, " (emoji: ", config.emoji, ", size: ", int(Config.TILE_SIZE * size_multiplier), "px)")
 
 # Update existing entity position
 func _update_entity_position(entity_id: int, data: Dictionary):
