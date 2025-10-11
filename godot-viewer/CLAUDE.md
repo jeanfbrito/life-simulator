@@ -30,10 +30,10 @@ camera.position = center_pixel  # Now camera sees tile (0,0)
 ### Why This Matters
 
 **Isometric tiles have non-obvious pixel positions:**
-- Tile size: 128×64 pixels
+- Tile size: 64×32 pixels
 - Tile (0, 0) → Pixel (0, 0)
-- Tile (-48, -48) → Pixel (-6016, -1504) ⚠️
-- Tile (10, 10) → Pixel (1280, 320)
+- Tile (-48, -48) → Pixel (-3008, -752) ⚠️
+- Tile (10, 10) → Pixel (640, 160)
 
 **Formula for isometric projection:**
 ```
@@ -41,18 +41,18 @@ pixel_x = (tile_x - tile_y) × (tile_width / 2)
 pixel_y = (tile_x + tile_y) × (tile_height / 2)
 ```
 
-For 128×64 tiles:
+For 64×32 tiles:
 ```
-pixel_x = (tile_x - tile_y) × 64
-pixel_y = (tile_x + tile_y) × 32
+pixel_x = (tile_x - tile_y) × 32
+pixel_y = (tile_x + tile_y) × 16
 ```
 
 ### Camera Zoom for Isometric Tiles
 
 **Default zoom levels:**
-- `zoom = 0.5`: Good for viewing full island (128×64 tiles)
-- `zoom = 1.0`: Standard view (tiles appear large)
-- `zoom = 2.0`: Close-up (good for orthogonal 32×32 tiles, TOO close for isometric)
+- `zoom = 0.5`: Good for viewing full island (64×32 tiles)
+- `zoom = 1.0`: Standard view (tiles appear medium)
+- `zoom = 2.0`: Close-up view (good detail level for 64×32 isometric tiles)
 
 **Rule of thumb:** Larger tiles need smaller zoom values.
 
@@ -148,12 +148,12 @@ func _update_visible_chunks():
 var tileset = TileSet.new()
 tileset.tile_shape = TileSet.TILE_SHAPE_ISOMETRIC  # Shape: 1
 tileset.tile_layout = TileSet.TILE_LAYOUT_STACKED   # Layout: 1
-tileset.tile_size = Vector2i(128, 64)  # Isometric diamond
+tileset.tile_size = Vector2i(64, 32)  # Isometric diamond
 
 # Create atlas source with diamond texture
 var source = TileSetAtlasSource.new()
 source.texture = create_diamond_texture()
-source.texture_region_size = Vector2i(128, 64)
+source.texture_region_size = Vector2i(64, 32)
 source.create_tile(Vector2i(0, 0))
 
 var source_id = tileset.add_source(source)
@@ -176,7 +176,7 @@ func _get_or_create_terrain_source(terrain_type: String, color: Color) -> int:
     # Create new colored source
     var source = TileSetAtlasSource.new()
     source.texture = create_colored_diamond_texture(color)
-    source.texture_region_size = Vector2i(128, 64)
+    source.texture_region_size = Vector2i(64, 32)
     source.create_tile(Vector2i(0, 0))
 
     var source_id = self.tile_set.add_source(source)
@@ -414,7 +414,7 @@ print("Chunk 0,0 size: ", chunk_data.size())
 
 - Use cached colored sources (don't recreate textures)
 - Layer 0 only (single rendering layer)
-- Diamond textures: 128×64 pixels = 8KB each
+- Diamond textures: 64×32 pixels = 2KB each
 
 ### Memory Usage
 
