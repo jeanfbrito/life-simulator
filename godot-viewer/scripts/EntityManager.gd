@@ -14,13 +14,18 @@ signal entity_despawned(entity_id: int)
 
 func _ready():
 	print("🐇 EntityManager initialized")
-	
+
 	# Set up polling timer (200ms like web viewer)
 	entity_poll_timer = Timer.new()
 	entity_poll_timer.wait_time = 0.2
 	entity_poll_timer.timeout.connect(_poll_entities)
 	add_child(entity_poll_timer)
 	entity_poll_timer.start()
+
+	print("🐇 EntityManager: Entity polling started (every 200ms)")
+
+	# Poll immediately on start
+	_poll_entities()
 
 # Poll entities from backend API
 func _poll_entities():
@@ -47,15 +52,23 @@ func _poll_entities():
 
 	var data = json.data
 	if data.has("entities"):
+		print("🔍 EntityManager: Received ", data.entities.size(), " entities from API")
 		_update_entities(data.entities)
+	else:
+		print("⚠️ EntityManager: API response has no 'entities' key")
 
 # Update entity sprites based on latest data
 func _update_entities(entity_list: Array):
 	last_entity_data = entity_list
 	var seen_ids = {}
 
+	print("🔍 _update_entities called with ", entity_list.size(), " entities, currently tracking ", entities.size())
+
+	# Collect IDs from new data
+	var new_ids = []
 	for entity_data in entity_list:
-		var entity_id = entity_data.id
+		var entity_id = int(entity_data.id)  # Convert to int from JSON float
+		new_ids.append(entity_id)
 		seen_ids[entity_id] = true
 
 		if not entities.has(entity_id):
@@ -71,6 +84,9 @@ func _update_entities(entity_list: Array):
 	for entity_id in entities.keys():
 		if not seen_ids.has(entity_id):
 			entities_to_remove.append(entity_id)
+
+	if entities_to_remove.size() > 0:
+		print("⚠️ Removing ", entities_to_remove.size(), " entities. New IDs: ", new_ids, ", Old IDs: ", entities.keys())
 
 	for entity_id in entities_to_remove:
 		entities[entity_id].queue_free()
