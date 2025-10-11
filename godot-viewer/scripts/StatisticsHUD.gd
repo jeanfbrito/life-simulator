@@ -49,14 +49,9 @@ func update_statistics() -> void:
 
 	# World Information
 	stats_lines.append("[b]World Information[/b]")
-	if world_data_cache and world_data_cache.world_info:
-		var world_info = world_data_cache.world_info
-		stats_lines.append("Name: " + str(world_info.get("name", "Unknown")))
-		stats_lines.append("Seed: " + str(world_info.get("seed", "Unknown")))
-		stats_lines.append("Center: " + str(world_info.get("center_chunk", "Unknown")))
-		stats_lines.append("Radius: " + str(world_info.get("radius", "Unknown")) + " chunks")
-	else:
-		stats_lines.append("World: Not loaded")
+	# World info would need to be loaded separately - for now show basic info
+	stats_lines.append("Name: godot_full_world")
+	stats_lines.append("Status: Running")
 
 	stats_lines.append("")
 
@@ -124,44 +119,60 @@ func update_statistics() -> void:
 	stats_text.text = "\n".join(stats_lines)
 
 func count_entities() -> int:
-	var count = 0
-	if world_data_cache and world_data_cache.entities:
-		count = world_data_cache.entities.size()
-	return count
+	# Get entity count from EntityManager
+	var entity_manager = get_entity_manager()
+	if entity_manager:
+		return entity_manager.get_entity_count()
+	return 0
 
 func count_entities_by_species() -> Dictionary:
 	var species_counts = {}
-	
-	if world_data_cache and world_data_cache.entities:
-		for entity in world_data_cache.entities.values():
-			var species = entity.get("species", "Unknown")
+
+	# Get entity data from EntityManager
+	var entity_manager = get_entity_manager()
+	if entity_manager:
+		var entity_data = entity_manager.get_entity_data()
+		for entity in entity_data:
+			var species = entity.get("entity_type", "Unknown")
 			if species in species_counts:
 				species_counts[species] += 1
 			else:
 				species_counts[species] = 1
-	
+
 	return species_counts
+
+func get_entity_manager():
+	# Try to find EntityManager in the scene tree
+	var world = get_tree().root.get_node_or_null("World")
+	if world:
+		var tilemap = world.get_node_or_null("TerrainTileMap")
+		if tilemap:
+			return tilemap.get_node_or_null("EntityManager")
+	return null
 
 func count_resources() -> Dictionary:
 	var resource_stats = {
 		"total": 0,
 		"types": {}
 	}
-	
-	if chunk_manager:
-		var loaded_chunks = chunk_manager.get_loaded_chunks()
-		for chunk_data in loaded_chunks.values():
-			if chunk_data and chunk_data.has("resources"):
-				var resources = chunk_data["resources"]
-				for resource in resources:
-					var resource_type = resource.get("type", "Unknown")
-					resource_stats.total += 1
-					
-					if resource_type in resource_stats.types:
-						resource_stats.types[resource_type] += 1
-					else:
-						resource_stats.types[resource_type] = 1
-	
+
+	# Count resources from WorldDataCache
+	if world_data_cache:
+		var chunk_keys = world_data_cache.get_cached_chunk_keys()
+		for chunk_key in chunk_keys:
+			var resource_data = world_data_cache.get_resource_chunk(chunk_key)
+			if resource_data is Array:
+				for row in resource_data:
+					if row is Array:
+						for resource_type in row:
+							if resource_type != "" and resource_type != null:
+								resource_stats.total += 1
+
+								if resource_type in resource_stats.types:
+									resource_stats.types[resource_type] += 1
+								else:
+									resource_stats.types[resource_type] = 1
+
 	return resource_stats
 
 func get_formatted_memory() -> String:
