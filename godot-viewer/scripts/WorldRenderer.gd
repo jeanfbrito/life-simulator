@@ -20,9 +20,20 @@ func _ready():
 	ChunkManager.connection_status_changed.connect(_on_connection_status_changed)
 	print("📡 Connected to ChunkManager signals")
 
-	# Initialize camera position
-	camera.position = Vector2(0, 0)
-	print("📹 Camera positioned at origin")
+	# Initialize camera position - center on island area (tile 0,0)
+	# Convert tile (0,0) to pixel coordinates in isometric space
+	var center_tile = Vector2i(0, 0)
+	var center_pixel = terrain_tilemap.map_to_local(center_tile)
+	camera.position = center_pixel
+	camera.zoom = Vector2(0.5, 0.5)  # Zoom out to see isometric tiles (128x64 tiles are large)
+	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 0.5x")
+
+	# Print camera and tilemap info
+	print("📹 Camera actual position: ", camera.position, " zoom: ", camera.zoom)
+	print("📹 TileMap tile_set: ", "Loaded" if terrain_tilemap.tile_set != null else "NULL")
+	if terrain_tilemap.tile_set:
+		print("📹 TileSet tile_shape: ", terrain_tilemap.tile_set.tile_shape)
+		print("📹 TileSet tile_size: ", terrain_tilemap.tile_set.tile_size)
 
 	# Start world loading immediately for testing
 	print("🚀 Starting world loading immediately (timer bypassed)")
@@ -43,8 +54,9 @@ func _load_world_info():
 	if success:
 		print("✅ World info loading completed successfully")
 		# Since ChunkManager.load_world_info returns bool, we proceed to load chunks
-		_load_chunks_around_position(Vector2i(0, 0))
+		await _load_chunks_around_position(Vector2i(0, 0))
 		world_loaded = true
+		print("✅ World loading completed - viewer should show terrain")
 	else:
 		print("❌ Failed to load world info")
 
@@ -56,15 +68,17 @@ func _load_chunks_around_position(center_chunk: Vector2i):
 	loading_chunks = true
 	print("📍 Loading chunks around: ", center_chunk, " (radius: ", chunk_load_radius, ")")
 
-	# Calculate which chunks to load
+	# Calculate which chunks to load (respect world bounds)
 	var chunks_to_load: Array[String] = []
 	for x in range(center_chunk.x - chunk_load_radius, center_chunk.x + chunk_load_radius + 1):
 		for y in range(center_chunk.y - chunk_load_radius, center_chunk.y + chunk_load_radius + 1):
-			var chunk_key = "%d,%d" % [x, y]
-			if not current_chunk_keys.has(chunk_key):
-				chunks_to_load.append(chunk_key)
+			# Only load chunks within world bounds (-3,-3 to 3,3)
+			if x >= -3 and x <= 3 and y >= -3 and y <= 3:
+				var chunk_key = "%d,%d" % [x, y]
+				if not current_chunk_keys.has(chunk_key):
+					chunks_to_load.append(chunk_key)
 
-	print("📦 Chunks to load: ", chunks_to_load.size())
+	print("📦 Chunks to load: ", chunks_to_load.size(), " (", chunks_to_load, ")")
 
 	if chunks_to_load.size() > 0:
 		# Load chunks in batches
@@ -113,11 +127,28 @@ func _update_visible_chunks():
 	# Remove chunks that are no longer visible
 	_remove_invisible_chunks(visible_chunks)
 
-	# Add newly visible chunks
-	_add_visible_chunks(visible_chunks)
+	# Add newly visible chunks (returns list of actually painted chunks)
+	var newly_painted = _add_visible_chunks(visible_chunks)
 
-	current_chunk_keys = visible_chunks
-	print("📊 Total rendered chunks: ", current_chunk_keys.size())
+	# Only add chunks that were actually painted to current_chunk_keys
+	for chunk_key in newly_painted:
+		if not current_chunk_keys.has(chunk_key):
+			current_chunk_keys.append(chunk_key)
+
+	print("📊 Total rendered chunks: ", current_chunk_keys.size(), " / ", visible_chunks.size(), " visible")
+
+	# Debug: Print TileMap state
+	print("📊 TileMap stats:")
+	print("   - Total cells rendered: ", terrain_tilemap.get_used_cells(0).size())
+	print("   - TileSet exists: ", terrain_tilemap.tile_set != null)
+	print("   - Visible: ", terrain_tilemap.visible)
+	print("   - Modulate: ", terrain_tilemap.modulate)
+	if terrain_tilemap.get_used_cells(0).size() > 0:
+		var sample_cells = terrain_tilemap.get_used_cells(0).slice(0, min(5, terrain_tilemap.get_used_cells(0).size()))
+		print("   - Sample cells: ", sample_cells)
+		for cell_pos in sample_cells:
+			var pixel_pos = terrain_tilemap.map_to_local(cell_pos)
+			print("     Cell ", cell_pos, " -> Pixel ", pixel_pos)
 
 # Get chunks currently visible to the camera
 func _get_visible_chunks() -> Array[String]:
@@ -129,8 +160,10 @@ func _get_visible_chunks() -> Array[String]:
 
 	for x in range(center_chunk.x - view_radius, center_chunk.x + view_radius + 1):
 		for y in range(center_chunk.y - view_radius, center_chunk.y + view_radius + 1):
-			var chunk_key = "%d,%d" % [x, y]
-			visible_chunks.append(chunk_key)
+			# Only include chunks within world bounds (-3,-3 to 3,3)
+			if x >= -3 and x <= 3 and y >= -3 and y <= 3:
+				var chunk_key = "%d,%d" % [x, y]
+				visible_chunks.append(chunk_key)
 
 	return visible_chunks
 
@@ -141,14 +174,20 @@ func _remove_invisible_chunks(visible_chunks: Array[String]):
 			terrain_tilemap.clear_chunk(chunk_key)
 			print("🗑️ Cleared chunk: ", chunk_key)
 
-# Add newly visible chunks
-func _add_visible_chunks(visible_chunks: Array[String]):
+# Add newly visible chunks - returns array of actually painted chunk keys
+func _add_visible_chunks(visible_chunks: Array[String]) -> Array[String]:
+	var painted_chunks: Array[String] = []
 	for chunk_key in visible_chunks:
-		if not current_chunk_keys.has(chunk_key):
-			var terrain_data = WorldDataCache.get_terrain_chunk(chunk_key)
-			if terrain_data.size() > 0:
-				terrain_tilemap.paint_chunk(chunk_key, terrain_data)
-				print("🎨 Painted chunk: ", chunk_key)
+		# Always try to paint if chunk data exists in cache
+		var terrain_data = WorldDataCache.get_terrain_chunk(chunk_key)
+		if terrain_data.size() > 0 and not current_chunk_keys.has(chunk_key):
+			terrain_tilemap.paint_chunk(chunk_key, terrain_data)
+			painted_chunks.append(chunk_key)
+
+	if painted_chunks.size() > 0:
+		print("🎨 Painted ", painted_chunks.size(), " new chunks (total visible: ", visible_chunks.size(), ")")
+
+	return painted_chunks
 
 # Convert world position to chunk coordinates
 func _world_to_chunk(world_pos: Vector2) -> Vector2i:
