@@ -6,7 +6,7 @@ extends Node
 signal configuration_loaded
 
 # Display configuration
-var TILE_SIZE: int = 8  # Dynamic tile size base (will be adjusted by zoom)
+var TILE_SIZE: int = 32  # Dynamic tile size base (will be adjusted by zoom) - larger for visibility
 var render_scale: float = 1.0  # Scale factor for rendering
 var VIEW_SIZE_X: int = 100  # Dynamic view width based on container
 var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container

@@ -5,6 +5,7 @@ extends Node
 
 signal chunks_loaded(chunk_data)
 signal world_info_loaded(world_info)
+signal entities_loaded(entities)
 signal connection_status_changed(connected)
 
 # Chunk tracking
@@ -78,74 +79,66 @@ func request_chunks_in_area(center_x: int, center_y: int, radius: int) -> Dictio
 
 	return all_loaded_data
 
-# Load a batch of chunks via HTTP
+# Load chunks individually (workaround for backend batch issue)
 func load_chunk_batch(batch: Array[String]) -> Dictionary:
-	var coords_query = ""
-	for i in range(batch.size()):
-		if i > 0:
-			coords_query += "&"
-		coords_query += "coords=" + batch[i].uri_encode()
-
-	var endpoint = "/api/chunks?%s&layers=true" % coords_query
-	print("📦 CHUNK_MANAGER: Loading batch via endpoint: ", endpoint)
-
-	var http_request = HTTPRequest.new()
-	add_child(http_request)
-
-	var request_id = http_request.request(Config.api_base_url + endpoint)
-	active_requests[request_id] = {
-		"http_request": http_request,
-		"batch": batch
-	}
-
-	# Wait for request to complete
-	var result = await http_request.request_completed
-
-	# Clean up
-	var request_data = active_requests.get(request_id)
-	if request_data:
-		request_data.http_request.queue_free()
-		active_requests.erase(request_id)
-
-	if result[0] != HTTPRequest.RESULT_SUCCESS:
-		print("❌ CHUNK_MANAGER: HTTP request failed: ", result[0])
-		# Remove from loading set on error
-		for chunk_key in batch:
-			loading_chunks.erase(chunk_key)
-		update_connection_status(false)
-		return {}
-
-	var response_code = result[1]
-	if response_code != 200:
-		print("❌ CHUNK_MANAGER: Bad response code: ", response_code)
-		# Remove from loading set on error
-		for chunk_key in batch:
-			loading_chunks.erase(chunk_key)
-		update_connection_status(false)
-		return {}
-
-	var body = result[3]
-	var json = JSON.new()
-	var parse_result = json.parse(body.get_string_from_utf8())
-
-	if parse_result != OK:
-		print("❌ CHUNK_MANAGER: Failed to parse JSON response")
-		# Remove from loading set on error
-		for chunk_key in batch:
-			loading_chunks.erase(chunk_key)
-		update_connection_status(false)
-		return {}
-
-	var data = json.data
-	print("📦 CHUNK_MANAGER: Received data, chunk_data keys: ", data.chunk_data.keys() if data.has("chunk_data") else "none")
+	print("📦 CHUNK_MANAGER: Loading ", batch.size(), " chunks individually")
 
 	var new_world_data: Dictionary = {
 		"chunks": {},
 		"resources": {}
 	}
 
-	if data.has("chunk_data"):
-		for chunk_key in data.chunk_data:
+	for chunk_key in batch:
+		print("📦 Loading individual chunk: ", chunk_key)
+		# NOTE: Don't URL-encode coords because backend has a bug with URL-encoded commas
+		var endpoint = "/api/chunks?coords=" + chunk_key + "&layers=true"
+		var full_url = Config.api_base_url + endpoint
+
+		# Add small delay to avoid backend concurrency issues
+		await get_tree().create_timer(0.1).timeout
+
+		var http_request = HTTPRequest.new()
+		add_child(http_request)
+
+		var error = http_request.request(full_url)
+
+		if error != OK:
+			print("❌ Failed to start request for chunk ", chunk_key)
+			loading_chunks.erase(chunk_key)
+			http_request.queue_free()
+			continue
+
+		# Wait for request to complete
+		var result = await http_request.request_completed
+		http_request.queue_free()
+
+		if result[0] != HTTPRequest.RESULT_SUCCESS:
+			print("❌ HTTP request failed for chunk ", chunk_key, ": ", result[0])
+			loading_chunks.erase(chunk_key)
+			continue
+
+		var response_code = result[1]
+		if response_code != 200:
+			print("❌ Bad response code for chunk ", chunk_key, ": ", response_code)
+			loading_chunks.erase(chunk_key)
+			continue
+
+		var body = result[3]
+		var json = JSON.new()
+		var parse_result = json.parse(body.get_string_from_utf8())
+
+		if parse_result != OK:
+			print("❌ Failed to parse JSON for chunk ", chunk_key)
+			loading_chunks.erase(chunk_key)
+			continue
+
+		var data = json.data
+
+		# Debug only for one specific chunk to see what's happening
+		if chunk_key == "1,1":
+			print("🔍 DEBUG 1,1: Response = ", data)
+
+		if data.has("chunk_data") and data.chunk_data.has(chunk_key):
 			var chunk_data = data.chunk_data[chunk_key]
 
 			# Store the chunk data
@@ -158,10 +151,11 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 			loaded_chunks[chunk_key] = true
 			loading_chunks.erase(chunk_key)
 
-		print("📦 CHUNK_MANAGER: Loaded chunks: ", new_world_data.chunks.keys())
-	else:
-		print("❌ CHUNK_MANAGER: No chunk_data in response")
+			print("✅ Loaded chunk: ", chunk_key)
+		else:
+			print("❌ No data for chunk ", chunk_key)
 
+	print("📦 CHUNK_MANAGER: Total loaded chunks: ", new_world_data.chunks.keys())
 	update_connection_status(true)
 	return new_world_data
 
