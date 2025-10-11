@@ -1,0 +1,19 @@
+# Godot ignores
+import/
+export_presets.cfg
+
+# Mono specific
+.mono/
+.data/
+
+# System ignores
+.DS_Store
+Thumbs.db
+
+# IDE ignores
+.vscode/
+.idea/
+
+# Build artifacts
+*.log
+*.tmp
