@@ -1,0 +1,20 @@
+[gd_scene load_steps=4 format=3 uid="uid://dv8xqkl7y7k5"]
+
+[ext_resource type="Script" path="res://scripts/TerrainTileMap.gd" id="1_terrain_tilemap"]
+[ext_resource type="Script" path="res://scripts/TerrainTileMapTest.gd" id="2_terrain_tilemap_test"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.2, 0.2, 0.2, 1.0)
+
+[node name="TerrainTileMapTest" type="Node2D"]
+script = ExtResource("2_terrain_tilemap_test")
+
+[node name="TerrainTileMap" type="TileMap" parent="."]
+tile_set = null
+modulate = Color(1, 1, 1, 1)
+script = ExtResource("1_terrain_tilemap")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+zoom = Vector2(1, 1)

@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://fw8xqkl7y7k7"]
+
+[ext_resource type="Script" path="res://scripts/WorldTest.gd" id="1_world_test"]
+
+[node name="WorldTest" type="Node"]
+script = ExtResource("1_world_test")
+
+[node name="Timer" type="Timer" parent="."]
+wait_time = 5.0
+one_shot = true
+
+[connection signal="timeout" from="Timer" to="." method="_on_timer_timeout"]

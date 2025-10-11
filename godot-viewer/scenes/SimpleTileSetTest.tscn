@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://cr8xqkl7y7k4"]
+
+[ext_resource type="Script" path="res://scripts/SimpleTileSetTest.gd" id="1_simple_tileset_test"]
+
+[node name="SimpleTileSetTest" type="Node"]
+script = ExtResource("1_simple_tileset_test")

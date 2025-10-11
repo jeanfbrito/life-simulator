@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Life Simulator Viewer"
 config/description="Isometric viewer for the Life Simulator world"
-run/main_scene="res://scenes/Main.tscn"
+run/main_scene="res://scenes/World.tscn"
 config/features=PackedStringArray("4.5", "Forward Plus")
 
 [autoload]
