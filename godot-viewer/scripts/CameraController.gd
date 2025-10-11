@@ -86,9 +86,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mouse_event.is_pressed():
 			match mouse_event.button_index:
 				MOUSE_BUTTON_WHEEL_UP:
-					_zoom_at_mouse_position(-zoom_sensitivity)
+					_zoom_at_screen_center(-zoom_sensitivity)
 				MOUSE_BUTTON_WHEEL_DOWN:
-					_zoom_at_mouse_position(zoom_sensitivity)
+					_zoom_at_screen_center(zoom_sensitivity)
 				MOUSE_BUTTON_MIDDLE:
 					# Start middle mouse drag
 					is_dragging = true
