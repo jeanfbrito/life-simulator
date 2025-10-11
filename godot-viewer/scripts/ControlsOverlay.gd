@@ -36,6 +36,7 @@ func update_controls_text() -> void:
 [b]Display Controls[/b]
 
 ⌨️ [b]G[/b] - Toggle grid overlay
+⌨️ [b]T[/b] - Toggle tooltip (tile info)
 ⌨️ [b]H[/b] - Toggle this help
 ⌨️ [b]Tab[/b] - Toggle detailed statistics
 

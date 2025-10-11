@@ -11,6 +11,9 @@ extends Node2D
 # Grid overlay (will be created dynamically)
 var grid_overlay: Node2D = null
 
+# Tooltip overlay (will be created dynamically)
+var tooltip_overlay: Control = null
+
 # UI References
 var top_bar: CanvasLayer = null
 var statistics_hud: Control = null
@@ -37,6 +40,9 @@ func _ready():
 
 	# Create and initialize grid overlay
 	_initialize_grid_overlay()
+
+	# Create and initialize tooltip overlay
+	_initialize_tooltip_overlay()
 
 	# Initialize UI references (wait one frame for UI nodes to be ready)
 	await get_tree().process_frame
@@ -273,6 +279,10 @@ func _unhandled_input(event):
 					# Toggle grid overlay
 					if grid_overlay != null:
 						grid_overlay.toggle_grid()
+				KEY_T:
+					# Toggle tooltip
+					if tooltip_overlay != null:
+						tooltip_overlay.toggle_tooltip()
 				KEY_ESCAPE:
 					get_tree().quit()
 
@@ -301,6 +311,24 @@ func _initialize_grid_overlay():
 	terrain_tilemap.add_child(grid_overlay)
 
 	print("✅ Grid overlay initialized (Press 'G' to toggle)")
+
+# Initialize tooltip overlay
+func _initialize_tooltip_overlay():
+	# Load the TooltipOverlay script
+	var TooltipOverlay = load("res://scripts/TooltipOverlay.gd")
+	if TooltipOverlay == null:
+		print("⚠️ Failed to load TooltipOverlay script")
+		return
+
+	# Create tooltip overlay instance
+	tooltip_overlay = TooltipOverlay.new()
+	tooltip_overlay.set_tilemap(terrain_tilemap)
+	tooltip_overlay.set_camera(camera)
+
+	# Add as child of root World node to be in screen space (not world space)
+	add_child(tooltip_overlay)
+
+	print("✅ Tooltip overlay initialized (Press 'T' to toggle)")
 
 # Initialize UI component references
 func _initialize_ui_references():
