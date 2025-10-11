@@ -4,6 +4,9 @@
 [ext_resource type="Script" path="res://scripts/WorldRenderer.gd" id="2_world_renderer"]
 [ext_resource type="Script" path="res://scripts/ResourceManager.gd" id="3_resource_manager"]
 [ext_resource type="Script" path="res://scripts/EntityManager.gd" id="4_entity_manager"]
+[ext_resource type="Script" path="res://scripts/CameraController.gd" id="5_camera_controller"]
+[ext_resource type="PackedScene" uid="uid://bvn8xqkl7y7k6" path="res://scenes/ControlsOverlay.tscn" id="6_controls_overlay"]
+[ext_resource type="PackedScene" uid="uid://cwn8xqkl7y7k6" path="res://scenes/StatisticsHUD.tscn" id="7_statistics_hud"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -20,12 +23,19 @@ script = ExtResource("1_terrain_tilemap")
 [node name="Camera2D" type="Camera2D" parent="TerrainTileMap"]
 position = Vector2(0, 0)
 zoom = Vector2(1, 1)
+script = ExtResource("5_camera_controller")
 
 [node name="ResourceManager" type="Node2D" parent="TerrainTileMap"]
 script = ExtResource("3_resource_manager")
 
 [node name="EntityManager" type="Node2D" parent="TerrainTileMap"]
 script = ExtResource("4_entity_manager")
+
+[node name="ControlsOverlay" parent="."]
+instance = ExtResource("6_controls_overlay")
+
+[node name="StatisticsHUD" parent="."]
+instance = ExtResource("7_statistics_hud")
 
 [node name="StartupTimer" type="Timer" parent="."]
 wait_time = 0.5

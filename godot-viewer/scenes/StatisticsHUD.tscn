@@ -1,0 +1,53 @@
+[gd_scene load_steps=3 format=3 uid="uid://cwn8xqkl7y7k6"]
+
+[ext_resource type="Script" path="res://scripts/StatisticsHUD.gd" id="1_statistics_hud"]
+
+[sub_resource type="Theme" id="Theme_1"]
+Panel/styles/panel = SubResource("StyleBoxFlat_1")
+Button/colors/font_color = Color(1, 1, 1, 1)
+Button/colors/font_hover_color = Color(0.8, 0.8, 0.8, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1"]
+bg_color = Color(0.1, 0.1, 0.1, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="StatisticsHUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_statistics_hud")
+
+[node name="StatsPanel" type="Panel" parent="."]
+layout_mode = 1
+size = Vector2(350, 400)
+theme = SubResource("Theme_1")
+
+[node name="StatsText" type="RichTextLabel" parent="StatsPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+theme_override_font_sizes/normal_font_size = 11
+bbcode_enabled = true
+text = "[b]World Information[/b]
+Loading..."
+fit_content = true
+
+[node name="ToggleButton" type="Button" parent="."]
+layout_mode = 1
+size = Vector2(120, 30)
+theme = SubResource("Theme_1")
+text = "Hide Stats (Tab)"
