@@ -52,7 +52,6 @@ func _poll_entities():
 
 	var data = json.data
 	if data.has("entities"):
-		print("🔍 EntityManager: Received ", data.entities.size(), " entities from API")
 		_update_entities(data.entities)
 	else:
 		print("⚠️ EntityManager: API response has no 'entities' key")
@@ -62,13 +61,9 @@ func _update_entities(entity_list: Array):
 	last_entity_data = entity_list
 	var seen_ids = {}
 
-	print("🔍 _update_entities called with ", entity_list.size(), " entities, currently tracking ", entities.size())
-
 	# Collect IDs from new data
-	var new_ids = []
 	for entity_data in entity_list:
 		var entity_id = int(entity_data.id)  # Convert to int from JSON float
-		new_ids.append(entity_id)
 		seen_ids[entity_id] = true
 
 		if not entities.has(entity_id):
@@ -85,17 +80,10 @@ func _update_entities(entity_list: Array):
 		if not seen_ids.has(entity_id):
 			entities_to_remove.append(entity_id)
 
-	if entities_to_remove.size() > 0:
-		print("⚠️ Removing ", entities_to_remove.size(), " entities. New IDs: ", new_ids, ", Old IDs: ", entities.keys())
-
 	for entity_id in entities_to_remove:
 		entities[entity_id].queue_free()
 		entities.erase(entity_id)
 		entity_despawned.emit(entity_id)
-		print("🗑️ Removed entity ", entity_id)
-
-	if entities_to_remove.size() > 0:
-		print("🐇 EntityManager: ", entities.size(), " entities active")
 
 	entities_updated.emit(entity_list)
 
