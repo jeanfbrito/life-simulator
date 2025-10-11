@@ -22,7 +22,7 @@ var keyboard_speed: float = 400.0
 var keyboard_zoom_speed: float = 0.5
 
 # Edge scrolling
-var edge_scroll_enabled: bool = true
+var edge_scroll_enabled: bool = false
 var edge_scroll_margin: float = 50.0
 var edge_scroll_speed: float = 800.0
 

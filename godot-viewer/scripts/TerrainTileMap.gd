@@ -11,6 +11,11 @@ var terrain_tile_ids: Dictionary = {}
 func _ready():
 	print("🗺️ TerrainTileMap initialized")
 
+	# Disable grid lines and debug visualizations
+	navigation_visibility_mode = TileMap.VISIBILITY_MODE_FORCE_HIDE
+	rendering_quadrant_size = 16  # Match chunk size for optimal rendering
+	print("🔧 Grid visualization disabled")
+
 	# Ensure we have at least one rendering layer
 	if get_layers_count() == 0:
 		print("⚠️ No layers configured, adding layer 0")
@@ -91,15 +96,17 @@ func create_diamond_texture() -> ImageTexture:
 	image.fill(Color.TRANSPARENT)
 
 	# Draw diamond shape
+	# Use slightly expanded bounds to prevent gaps between tiles
 	for y in range(64):
 		for x in range(128):
 			# Diamond shape calculation
-			var center_x = 64
-			var center_y = 32
+			var center_x = 64.0
+			var center_y = 32.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
-			if dx / 64.0 + dy / 32.0 <= 1.0:
+			# Slightly expand the diamond boundary to eliminate gaps (1.01 instead of 1.0)
+			if dx / 64.0 + dy / 32.0 <= 1.01:
 				image.set_pixel(x, y, Color.WHITE)
 
 	return ImageTexture.create_from_image(image)
@@ -110,15 +117,17 @@ func create_colored_diamond_texture(color: Color) -> ImageTexture:
 	image.fill(Color.TRANSPARENT)
 
 	# Draw diamond shape with terrain color
+	# Use slightly expanded bounds to prevent gaps between tiles
 	for y in range(64):
 		for x in range(128):
 			# Diamond shape calculation
-			var center_x = 64
-			var center_y = 32
+			var center_x = 64.0
+			var center_y = 32.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
-			if dx / 64.0 + dy / 32.0 <= 1.0:
+			# Slightly expand the diamond boundary to eliminate gaps (1.01 instead of 1.0)
+			if dx / 64.0 + dy / 32.0 <= 1.01:
 				image.set_pixel(x, y, color)
 
 	return ImageTexture.create_from_image(image)

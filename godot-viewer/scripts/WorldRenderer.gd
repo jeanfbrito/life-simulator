@@ -8,6 +8,9 @@ extends Node2D
 @onready var resource_manager: Node2D = $TerrainTileMap/ResourceManager
 @onready var entity_manager: Node2D = $TerrainTileMap/EntityManager
 
+# Grid overlay (will be created dynamically)
+var grid_overlay: Node2D = null
+
 # World state
 var world_loaded: bool = false
 var current_chunk_keys: Array[String] = []
@@ -26,6 +29,9 @@ func _ready():
 	print("🧪 Testing visualization components...")
 	print("  ResourceManager available: ", resource_manager != null)
 	print("  EntityManager available: ", entity_manager != null)
+
+	# Create and initialize grid overlay
+	_initialize_grid_overlay()
 
 	# Initialize camera position - center on island area (tile 0,0)
 	# Convert tile (0,0) to pixel coordinates in isometric space
@@ -254,6 +260,10 @@ func _unhandled_input(event):
 					camera.zoom *= 0.8
 				KEY_MINUS:
 					camera.zoom *= 1.2
+				KEY_G:
+					# Toggle grid overlay
+					if grid_overlay != null:
+						grid_overlay.toggle_grid()
 				KEY_ESCAPE:
 					get_tree().quit()
 
@@ -264,6 +274,24 @@ func _on_timer_timeout():
 		start_world_loading()
 	else:
 		print("ℹ️ World already loaded")
+
+# Initialize grid overlay
+func _initialize_grid_overlay():
+	# Load the GridOverlay script
+	var GridOverlay = load("res://scripts/GridOverlay.gd")
+	if GridOverlay == null:
+		print("⚠️ Failed to load GridOverlay script")
+		return
+
+	# Create grid overlay instance
+	grid_overlay = GridOverlay.new()
+	grid_overlay.set_tilemap(terrain_tilemap)
+	grid_overlay.set_camera(camera)
+
+	# Add as child of TerrainTileMap so it inherits transformations
+	terrain_tilemap.add_child(grid_overlay)
+
+	print("✅ Grid overlay initialized (Press 'G' to toggle)")
 
 # Debug information
 func debug_print_status():
