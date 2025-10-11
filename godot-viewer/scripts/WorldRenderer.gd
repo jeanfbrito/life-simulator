@@ -5,6 +5,8 @@ extends Node2D
 
 @onready var terrain_tilemap: TileMap = $TerrainTileMap
 @onready var camera: Camera2D = $TerrainTileMap/Camera2D
+@onready var resource_manager: Node2D = $TerrainTileMap/ResourceManager
+@onready var entity_manager: Node2D = $TerrainTileMap/EntityManager
 
 # World state
 var world_loaded: bool = false
@@ -19,6 +21,11 @@ func _ready():
 	ChunkManager.chunks_loaded.connect(_on_chunks_loaded)
 	ChunkManager.connection_status_changed.connect(_on_connection_status_changed)
 	print("📡 Connected to ChunkManager signals")
+	
+	# Test ResourceManager and EntityManager
+	print("🧪 Testing visualization components...")
+	print("  ResourceManager available: ", resource_manager != null)
+	print("  EntityManager available: ", entity_manager != null)
 
 	# Initialize camera position - center on island area (tile 0,0)
 	# Convert tile (0,0) to pixel coordinates in isometric space
@@ -172,6 +179,7 @@ func _remove_invisible_chunks(visible_chunks: Array[String]):
 	for chunk_key in current_chunk_keys:
 		if not visible_chunks.has(chunk_key):
 			terrain_tilemap.clear_chunk(chunk_key)
+			resource_manager.clear_resources(chunk_key)
 			print("🗑️ Cleared chunk: ", chunk_key)
 
 # Add newly visible chunks - returns array of actually painted chunk keys
@@ -182,6 +190,12 @@ func _add_visible_chunks(visible_chunks: Array[String]) -> Array[String]:
 		var terrain_data = WorldDataCache.get_terrain_chunk(chunk_key)
 		if terrain_data.size() > 0 and not current_chunk_keys.has(chunk_key):
 			terrain_tilemap.paint_chunk(chunk_key, terrain_data)
+			
+			# Paint resources too!
+			var resource_data = WorldDataCache.get_resource_chunk(chunk_key)
+			if resource_data.size() > 0:
+				resource_manager.paint_resources(chunk_key, resource_data)
+			
 			painted_chunks.append(chunk_key)
 
 	if painted_chunks.size() > 0:

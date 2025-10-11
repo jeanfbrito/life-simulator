@@ -3,7 +3,7 @@
 
 extends TileMap
 
-@export var tileset_path: String = "res://resources/SimpleTerrainTileSet.tres"
+@export var tileset_path: String = "res://resources/TerrainTileSet.tres"
 
 # Terrain mapping to tile IDs
 var terrain_tile_ids: Dictionary = {}

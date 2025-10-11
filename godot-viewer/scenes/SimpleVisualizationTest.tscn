@@ -1,0 +1,24 @@
+[gd_scene load_steps=3 format=3 uid="uid://cvx8qkl7y7k6"]
+
+[ext_resource type="Script" path="res://scripts/SimpleVisualizationTest.gd" id="1_simple_test"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.2, 0.2, 0.2, 1.0)
+
+[node name="SimpleVisualizationTest" type="Node2D"]
+script = ExtResource("1_simple_test")
+
+[node name="TerrainTileMap" type="TileMap" parent="."]
+tile_set = null
+modulate = Color(1, 1, 1, 1)
+
+[node name="ResourceManager" type="Node2D" parent="TerrainTileMap"]
+script = preload("res://scripts/ResourceManager.gd")
+
+[node name="EntityManager" type="Node2D" parent="TerrainTileMap"]
+script = preload("res://scripts/EntityManager.gd")
+
+[node name="Camera2D" type="Camera2D" parent="TerrainTileMap"]
+position = Vector2(0, 0)
+zoom = Vector2(1, 1)

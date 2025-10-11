@@ -71,7 +71,15 @@ var resource_symbols: Dictionary = {
 	"TreeBirch": "🪾",
 	"Rock": "🪨",
 	"Bush": "🌳",
-	"Flower": "🌸"
+	"Flower": "🌸",
+	"HazelShrub": "🌳",
+	"OakTree": "🌳",
+	"PineTree": "🌲",
+	"BirchTree": "🪾",
+	"Stone": "🪨",
+	"BerryBush": "🫐",
+	"MushroomPatch": "🍄",
+	"WildRoot": "🥜"
 }
 
 # Resource rendering configuration
@@ -105,10 +113,50 @@ var resource_config: Dictionary = {
 		"size_multiplier": 0.4,
 		"offset_x": 0.0,
 		"offset_y": 0.0
+	},
+	"HazelShrub": {
+		"size_multiplier": 0.8,
+		"offset_x": 0.0,
+		"offset_y": 0.1
+	},
+	"OakTree": {
+		"size_multiplier": 1.4,
+		"offset_x": 0.0,
+		"offset_y": -0.3
+	},
+	"PineTree": {
+		"size_multiplier": 1.6,
+		"offset_x": 0.0,
+		"offset_y": -0.5
+	},
+	"BirchTree": {
+		"size_multiplier": 1.4,
+		"offset_x": 0.0,
+		"offset_y": -0.3
+	},
+	"Stone": {
+		"size_multiplier": 0.6,
+		"offset_x": 0.0,
+		"offset_y": 0.1
+	},
+	"BerryBush": {
+		"size_multiplier": 0.7,
+		"offset_x": 0.0,
+		"offset_y": 0.1
+	},
+	"MushroomPatch": {
+		"size_multiplier": 0.5,
+		"offset_x": 0.0,
+		"offset_y": 0.0
+	},
+	"WildRoot": {
+		"size_multiplier": 0.4,
+		"offset_x": 0.0,
+		"offset_y": 0.0
 	}
 }
 
-# Entity configuration (will be loaded from API)
+# Entity configuration (loaded from API)
 var entity_config: Dictionary = {
 	"default": {
 		"emoji": "❓",
@@ -179,7 +227,13 @@ func load_species_config() -> void:
 
 			# Update entity config from API data
 			if data.has("default_entity"):
-				entity_config["default"] = data["default_entity"]
+				var default_data = data["default_entity"]
+				entity_config["default"] = {
+					"emoji": default_data.get("emoji", "❓"),
+					"size_multiplier": default_data.get("sizeMultiplier", 1.0),
+					"offset_x": default_data.get("offsetX", 0.0),
+					"offset_y": default_data.get("offsetY", -0.2)
+				}
 
 			# Set species-specific configs
 			if data.has("species"):
