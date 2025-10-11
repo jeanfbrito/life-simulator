@@ -122,6 +122,11 @@ func _create_entity(entity_id: int, data: Dictionary):
 	var pos = data.position
 	var tile_pos = Vector2i(pos.x, pos.y)
 	var pixel_pos = get_parent().map_to_local(tile_pos)
+
+	# For isometric tiles, map_to_local() returns the top point of the diamond
+	# We need to offset down by half the tile height to center vertically
+	pixel_pos.y += 16  # Half of 32 (tile height)
+
 	pixel_pos.y += Config.TILE_SIZE * config.offset_y  # Apply -0.2 offset
 
 	# Center the emoji on the position by offsetting by half the label size
@@ -158,6 +163,9 @@ func _update_entity_position(entity_id: int, data: Dictionary):
 	var pos = data.position
 	var tile_pos = Vector2i(pos.x, pos.y)
 	var pixel_pos = get_parent().map_to_local(tile_pos)
+
+	# For isometric tiles, map_to_local() returns the top point of the diamond
+	pixel_pos.y += 16  # Half of 32 (tile height)
 
 	var entity_type = data.get("entity_type", "default")
 	var config = Config.get_entity_config(entity_type)

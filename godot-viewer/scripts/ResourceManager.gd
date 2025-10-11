@@ -50,6 +50,10 @@ func paint_resources(chunk_key: String, resource_data: Array):
 			var tile_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
 			var pixel_pos = get_parent().map_to_local(tile_pos)
 
+			# For isometric tiles, map_to_local() returns the top point of the diamond
+			# We need to offset down by half the tile height to center vertically
+			pixel_pos.y += 16  # Half of 32 (tile height)
+
 			# Apply resource offset
 			pixel_pos.x += Config.TILE_SIZE * config.offset_x
 			pixel_pos.y += Config.TILE_SIZE * config.offset_y
