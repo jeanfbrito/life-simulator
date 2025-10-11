@@ -16,6 +16,8 @@ var grid_max: Vector2i = Vector2i(100, 100)
 func _ready():
 	# Set high z-index to draw on top of everything
 	z_index = 100
+	# Ensure GridOverlay is at origin (no position offset)
+	position = Vector2(0, 0)
 	print("🔲 GridOverlay initialized - Press 'G' to toggle")
 
 func set_tilemap(p_tilemap: TileMap):
@@ -43,19 +45,24 @@ func _draw():
 			_draw_tile_border(Vector2i(tile_x, tile_y))
 
 func _draw_tile_border(tile_pos: Vector2i):
-	# Get the four corners of the isometric tile
+	# Get the isometric tile center position
 	var center = tilemap.map_to_local(tile_pos)
 	var tile_size = tilemap.tile_set.tile_size
 
-	# For isometric tiles (128x64), the corners form a diamond
-	var half_width = tile_size.x / 2.0
-	var half_height = tile_size.y / 2.0
+	# For isometric tiles (64x32), the corners form a diamond
+	# In Godot's isometric layout, map_to_local() returns the TOP corner of the diamond
+	# We need to offset by half_height to get the actual center
+	var half_width = tile_size.x / 2.0  # 64 / 2 = 32
+	var half_height = tile_size.y / 2.0  # 32 / 2 = 16
 
-	# Diamond corners: top, right, bottom, left
-	var top = center + Vector2(0, -half_height)
-	var right = center + Vector2(half_width, 0)
-	var bottom = center + Vector2(0, half_height)
-	var left = center + Vector2(-half_width, 0)
+	# Adjust center: map_to_local() gives the top point, move to visual center
+	var visual_center = center + Vector2(0, half_height)
+
+	# Diamond corners: top, right, bottom, left (relative to visual center)
+	var top = visual_center + Vector2(0, -half_height)
+	var right = visual_center + Vector2(half_width, 0)
+	var bottom = visual_center + Vector2(0, half_height)
+	var left = visual_center + Vector2(-half_width, 0)
 
 	# Draw the four edges of the diamond
 	draw_line(top, right, grid_color, grid_thickness)
@@ -82,23 +89,25 @@ func _get_visible_tile_range() -> Dictionary:
 	var camera_pos = camera.get_screen_center_position()
 	var zoom = camera.zoom.x
 
-	# Calculate world space bounds (with padding for off-screen tiles)
+	# Calculate world space bounds
 	var half_width = (viewport_size.x / zoom) / 2.0
 	var half_height = (viewport_size.y / zoom) / 2.0
-	var padding = 2.0  # Extra tiles beyond viewport
 
-	var top_left = camera_pos + Vector2(-half_width, -half_height) * padding
-	var bottom_right = camera_pos + Vector2(half_width, half_height) * padding
+	var top_left = camera_pos + Vector2(-half_width, -half_height)
+	var bottom_right = camera_pos + Vector2(half_width, half_height)
 
 	# Convert to tile coordinates
 	var min_tile = tilemap.local_to_map(top_left)
 	var max_tile = tilemap.local_to_map(bottom_right)
 
-	# Ensure min is less than max
-	var actual_min_x = min(min_tile.x, max_tile.x)
-	var actual_max_x = max(min_tile.x, max_tile.x)
-	var actual_min_y = min(min_tile.y, max_tile.y)
-	var actual_max_y = max(min_tile.y, max_tile.y)
+	# Add padding in tile space (extra tiles beyond viewport)
+	var padding_tiles = 2
+
+	# Ensure min is less than max and add padding
+	var actual_min_x = min(min_tile.x, max_tile.x) - padding_tiles
+	var actual_max_x = max(min_tile.x, max_tile.x) + padding_tiles
+	var actual_min_y = min(min_tile.y, max_tile.y) - padding_tiles
+	var actual_max_y = max(min_tile.y, max_tile.y) + padding_tiles
 
 	# Clamp to reasonable bounds
 	return {
