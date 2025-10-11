@@ -11,6 +11,11 @@ extends Node2D
 # Grid overlay (will be created dynamically)
 var grid_overlay: Node2D = null
 
+# UI References
+var top_bar: CanvasLayer = null
+var statistics_hud: Control = null
+var controls_overlay: Control = null
+
 # World state
 var world_loaded: bool = false
 var current_chunk_keys: Array[String] = []
@@ -24,7 +29,7 @@ func _ready():
 	ChunkManager.chunks_loaded.connect(_on_chunks_loaded)
 	ChunkManager.connection_status_changed.connect(_on_connection_status_changed)
 	print("📡 Connected to ChunkManager signals")
-	
+
 	# Test ResourceManager and EntityManager
 	print("🧪 Testing visualization components...")
 	print("  ResourceManager available: ", resource_manager != null)
@@ -32,6 +37,10 @@ func _ready():
 
 	# Create and initialize grid overlay
 	_initialize_grid_overlay()
+
+	# Initialize UI references (wait one frame for UI nodes to be ready)
+	await get_tree().process_frame
+	_initialize_ui_references()
 
 	# Initialize camera position - center on island area (tile 0,0)
 	# Convert tile (0,0) to pixel coordinates in isometric space
@@ -292,6 +301,67 @@ func _initialize_grid_overlay():
 	terrain_tilemap.add_child(grid_overlay)
 
 	print("✅ Grid overlay initialized (Press 'G' to toggle)")
+
+# Initialize UI component references
+func _initialize_ui_references():
+	# Wait additional frame to ensure all nodes are in scene tree
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# Get references from parent World node - try multiple times
+	for attempt in range(5):
+		var world_node = get_tree().root.get_node_or_null("World")
+		if not world_node:
+			world_node = get_parent()
+
+		if world_node:
+			top_bar = world_node.get_node_or_null("TopBar")
+			statistics_hud = world_node.get_node_or_null("StatisticsHUD")
+			controls_overlay = world_node.get_node_or_null("ControlsOverlay")
+
+			if top_bar and statistics_hud and controls_overlay:
+				set_ui_references(top_bar, statistics_hud, controls_overlay)
+				print("✅ All UI components found on attempt ", attempt + 1)
+				return
+			elif attempt == 4:
+				print("⚠️ Some UI components not found after 5 attempts:")
+				print("  TopBar: ", top_bar != null)
+				print("  StatisticsHUD: ", statistics_hud != null)
+				print("  ControlsOverlay: ", controls_overlay != null)
+		else:
+			print("⚠️ Could not get World node")
+
+		# Wait before retrying
+		await get_tree().create_timer(0.1).timeout
+
+# Set UI component references (called from World node)
+func set_ui_references(p_top_bar: CanvasLayer, p_statistics_hud: Control, p_controls_overlay: Control):
+	top_bar = p_top_bar
+	statistics_hud = p_statistics_hud
+	controls_overlay = p_controls_overlay
+
+	# Pass references to TopBar
+	if top_bar:
+		top_bar.set_world_renderer(self)
+		top_bar.set_statistics_hud(statistics_hud)
+		top_bar.set_controls_overlay(controls_overlay)
+		print("✅ UI references set in WorldRenderer and TopBar")
+
+# Reset camera to origin (0,0) with default zoom
+func reset_camera_to_origin():
+	if camera and terrain_tilemap:
+		var center_tile = Vector2i(0, 0)
+		var center_pixel = terrain_tilemap.map_to_local(center_tile)
+		camera.position = center_pixel
+		camera.zoom = Vector2(0.5, 0.5)
+		print("📹 Camera reset to origin (0,0)")
+		_update_visible_chunks()
+
+# Force refresh all visible chunks
+func force_refresh_chunks():
+	print("🔄 Forcing chunk refresh...")
+	_update_visible_chunks()
+	print("✅ Chunks refreshed")
 
 # Debug information
 func debug_print_status():

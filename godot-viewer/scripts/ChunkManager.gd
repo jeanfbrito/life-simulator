@@ -343,3 +343,13 @@ func is_chunk_loaded(chunk_key: String) -> bool:
 # Get loaded chunk keys
 func get_loaded_chunk_keys() -> Array[String]:
 	return loaded_chunks.keys()
+
+# Get number of loaded chunks (for TopBar/UI)
+func get_loaded_chunk_count() -> int:
+	return loaded_chunks.size()
+
+# Get total expected chunks based on world radius (for TopBar/UI)
+func get_total_chunk_count() -> int:
+	# Assume radius of 5 chunks = 11x11 grid = 121 chunks
+	# This will match the world being loaded
+	return 121

@@ -20,6 +20,10 @@ func _ready() -> void:
 
 func update_controls_text() -> void:
 	var controls = """
+[b]Top Bar[/b]
+• Real-time statistics display
+• Quick action buttons available
+
 [b]Camera Controls[/b]
 
 🖱️ [b]Mouse Wheel[/b] - Zoom in/out
@@ -27,16 +31,17 @@ func update_controls_text() -> void:
 
 ⌨️ [b]Arrow Keys / WASD[/b] - Move camera
 ⌨️ [+/- Keys[/b] - Zoom in/out
+⌨️ [b]R[/b] - Reset camera to origin
 
 [b]Display Controls[/b]
 
 ⌨️ [b]G[/b] - Toggle grid overlay
 ⌨️ [b]H[/b] - Toggle this help
-⌨️ [b]Tab[/b] - Toggle statistics
+⌨️ [b]Tab[/b] - Toggle detailed statistics
 
 [b]Settings[/b]
 • Zoom Range: 0.2x - 5.0x
-• Grid: Enabled (toggle with G)
+• Grid: Toggle-able
 • Smooth Transitions: Yes
 """
 	controls_text.text = controls

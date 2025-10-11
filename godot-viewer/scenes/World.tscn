@@ -1,41 +1,34 @@
-[gd_scene load_steps=7 format=3 uid="uid://ew8xqkl7y7k6"]
+[gd_scene load_steps=8 format=3 uid="uid://ew8xqkl7y7k6"]
 
-[ext_resource type="Script" path="res://scripts/TerrainTileMap.gd" id="1_terrain_tilemap"]
-[ext_resource type="Script" path="res://scripts/WorldRenderer.gd" id="2_world_renderer"]
-[ext_resource type="Script" path="res://scripts/ResourceManager.gd" id="3_resource_manager"]
-[ext_resource type="Script" path="res://scripts/EntityManager.gd" id="4_entity_manager"]
-[ext_resource type="Script" path="res://scripts/CameraController.gd" id="5_camera_controller"]
-[ext_resource type="PackedScene" uid="uid://bvn8xqkl7y7k6" path="res://scenes/ControlsOverlay.tscn" id="6_controls_overlay"]
-[ext_resource type="PackedScene" uid="uid://cwn8xqkl7y7k6" path="res://scenes/StatisticsHUD.tscn" id="7_statistics_hud"]
-
-[sub_resource type="Environment" id="Environment_1"]
-background_mode = 1
-background_color = Color(0.2, 0.2, 0.2, 1.0)
+[ext_resource type="Script" path="res://scripts/WorldRenderer.gd" id="1_world_renderer"]
+[ext_resource type="Script" path="res://scripts/TerrainTileMap.gd" id="2_terrain_tilemap"]
+[ext_resource type="Script" path="res://scripts/CameraController.gd" id="3_camera_controller"]
+[ext_resource type="Script" path="res://scripts/ResourceManager.gd" id="4_resource_manager"]
+[ext_resource type="Script" path="res://scripts/EntityManager.gd" id="5_entity_manager"]
+[ext_resource type="PackedScene" uid="uid://dwn8xqkl7y7k6" path="res://scenes/TopBar.tscn" id="6_topbar"]
+[ext_resource type="PackedScene" uid="uid://bvn8xqkl7y7k6" path="res://scenes/ControlsOverlay.tscn" id="7_controls_overlay"]
+[ext_resource type="PackedScene" uid="uid://cwn8xqkl7y7k6" path="res://scenes/StatisticsHUD.tscn" id="8_statistics_hud"]
 
 [node name="World" type="Node2D"]
-script = ExtResource("2_world_renderer")
+script = ExtResource("1_world_renderer")
 
 [node name="TerrainTileMap" type="TileMap" parent="."]
-tile_set = null
-modulate = Color(1, 1, 1, 1)
-script = ExtResource("1_terrain_tilemap")
+script = ExtResource("2_terrain_tilemap")
 
 [node name="Camera2D" type="Camera2D" parent="TerrainTileMap"]
-position = Vector2(0, 0)
-zoom = Vector2(1, 1)
-script = ExtResource("5_camera_controller")
+script = ExtResource("3_camera_controller")
 
 [node name="ResourceManager" type="Node2D" parent="TerrainTileMap"]
-script = ExtResource("3_resource_manager")
+script = ExtResource("4_resource_manager")
 
 [node name="EntityManager" type="Node2D" parent="TerrainTileMap"]
-script = ExtResource("4_entity_manager")
+script = ExtResource("5_entity_manager")
 
-[node name="ControlsOverlay" parent="."]
-instance = ExtResource("6_controls_overlay")
+[node name="TopBar" parent="." instance=ExtResource("6_topbar")]
 
-[node name="StatisticsHUD" parent="."]
-instance = ExtResource("7_statistics_hud")
+[node name="ControlsOverlay" parent="." instance=ExtResource("7_controls_overlay")]
+
+[node name="StatisticsHUD" parent="." instance=ExtResource("8_statistics_hud")]
 
 [node name="StartupTimer" type="Timer" parent="."]
 wait_time = 0.5

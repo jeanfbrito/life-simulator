@@ -42,7 +42,11 @@ func _process(delta: float) -> void:
 
 func update_statistics() -> void:
 	var stats_lines = []
-	
+
+	# Get current counts for delta calculations
+	var current_loaded_chunks = 0
+	var current_entity_count = 0
+
 	# World Information
 	stats_lines.append("[b]World Information[/b]")
 	if world_data_cache and world_data_cache.world_info:
@@ -53,39 +57,35 @@ func update_statistics() -> void:
 		stats_lines.append("Radius: " + str(world_info.get("radius", "Unknown")) + " chunks")
 	else:
 		stats_lines.append("World: Not loaded")
-	
+
 	stats_lines.append("")
-	
+
 	# Chunk Statistics
 	stats_lines.append("[b]Chunk Statistics[/b]")
 	if chunk_manager:
-		var loaded_chunks = chunk_manager.get_loaded_chunk_count()
+		current_loaded_chunks = chunk_manager.get_loaded_chunk_count()
 		var total_chunks = chunk_manager.get_total_chunk_count()
-		stats_lines.append("Loaded: " + str(loaded_chunks) + " / " + str(total_chunks))
-		
+		stats_lines.append("Loaded: " + str(current_loaded_chunks) + " / " + str(total_chunks))
+
 		# Calculate loading percentage
 		var loading_percentage = 0.0
 		if total_chunks > 0:
-			loading_percentage = (float(loaded_chunks) / float(total_chunks)) * 100.0
+			loading_percentage = (float(current_loaded_chunks) / float(total_chunks)) * 100.0
 		stats_lines.append("Progress: " + str("%.1f" % loading_percentage) + "%")
-		
-		last_chunk_count = loaded_chunks
 	else:
 		stats_lines.append("Chunk Manager: Not available")
-	
+
 	stats_lines.append("")
-	
+
 	# Entity Statistics
 	stats_lines.append("[b]Entity Statistics[/b]")
-	var entity_count = count_entities()
-	stats_lines.append("Total Entities: " + str(entity_count))
+	current_entity_count = count_entities()
+	stats_lines.append("Total Entities: " + str(current_entity_count))
 	
 	# Count by species
 	var species_counts = count_entities_by_species()
 	for species in species_counts:
 		stats_lines.append("  " + species + ": " + str(species_counts[species]))
-	
-	last_entity_count = entity_count
 	
 	stats_lines.append("")
 	
@@ -105,13 +105,21 @@ func update_statistics() -> void:
 	stats_lines.append("[b]Performance[/b]")
 	stats_lines.append("FPS: " + str(Engine.get_frames_per_second()))
 	stats_lines.append("Memory: " + get_formatted_memory())
-	
+
 	# Changes since last update
 	if last_entity_count > 0:
-		stats_lines.append("Entity Δ: " + str(entity_count - last_entity_count))
+		var entity_delta = current_entity_count - last_entity_count
+		if entity_delta != 0:
+			stats_lines.append("Entity Δ: " + str(entity_delta))
 	if last_chunk_count > 0:
-		stats_lines.append("Chunk Δ: " + str(last_chunk_count - loaded_chunks))
-	
+		var chunk_delta = current_loaded_chunks - last_chunk_count
+		if chunk_delta != 0:
+			stats_lines.append("Chunk Δ: " + str(chunk_delta))
+
+	# Update last values for next delta calculation
+	last_entity_count = current_entity_count
+	last_chunk_count = current_loaded_chunks
+
 	# Update display
 	stats_text.text = "\n".join(stats_lines)
 
@@ -157,15 +165,11 @@ func count_resources() -> Dictionary:
 	return resource_stats
 
 func get_formatted_memory() -> String:
-	var memory_bytes = OS.get_static_memory_usage_by_type()
-	var total_memory = 0
-	
-	# Sum up all memory types
-	for memory_type in memory_bytes:
-		total_memory += memory_bytes[memory_type]
-	
+	# Get static memory usage (Godot 4.x)
+	var memory_bytes = OS.get_static_memory_usage()
+
 	# Convert to MB
-	var memory_mb = float(total_memory) / (1024.0 * 1024.0)
+	var memory_mb = float(memory_bytes) / (1024.0 * 1024.0)
 	return str("%.1f" % memory_mb) + " MB"
 
 func _on_toggle_pressed() -> void:

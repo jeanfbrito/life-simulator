@@ -1,0 +1,136 @@
+[gd_scene load_steps=3 format=3 uid="uid://dwn8xqkl7y7k6"]
+
+[ext_resource type="Script" path="res://scripts/TopBar.gd" id="1_topbar"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_TopBar"]
+bg_color = Color(0.1, 0.1, 0.1, 0.85)
+border_width_bottom = 2
+border_color = Color(0.3, 0.3, 0.3, 1)
+
+[node name="TopBar" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_topbar")
+
+[node name="Container" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 45.0
+grow_horizontal = 2
+mouse_filter = 0
+z_index = 100
+
+[node name="Background" type="Panel" parent="Container"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 45.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_TopBar")
+
+[node name="StatsContainer" type="HBoxContainer" parent="Container"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 15.0
+offset_top = -12.0
+offset_right = 600.0
+offset_bottom = 12.0
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="WorldNameLabel" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "🌍 Loading..."
+vertical_alignment = 1
+
+[node name="Separator1" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 12
+text = "|"
+vertical_alignment = 1
+
+[node name="FPSLabel" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "FPS: 60"
+vertical_alignment = 1
+
+[node name="Separator2" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 12
+text = "|"
+vertical_alignment = 1
+
+[node name="EntityLabel" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "🐾 0"
+vertical_alignment = 1
+
+[node name="Separator3" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.5, 0.5, 1)
+theme_override_font_sizes/font_size = 12
+text = "|"
+vertical_alignment = 1
+
+[node name="ChunkLabel" type="Label" parent="Container/StatsContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "📦 0/0"
+vertical_alignment = 1
+
+[node name="ActionsContainer" type="HBoxContainer" parent="Container"]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -290.0
+offset_top = -16.0
+offset_right = -15.0
+offset_bottom = 16.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_constants/separation = 8
+
+[node name="GridButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Toggle Grid (G)"
+theme_override_font_sizes/font_size = 16
+text = "🔲"
+
+[node name="CameraButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Reset Camera (R)"
+theme_override_font_sizes/font_size = 16
+text = "📹"
+
+[node name="StatsButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Toggle Statistics (Tab)"
+theme_override_font_sizes/font_size = 16
+text = "📊"
+
+[node name="HelpButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Toggle Help (H)"
+theme_override_font_sizes/font_size = 16
+text = "❓"
+
+[node name="RefreshButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Refresh Chunks"
+theme_override_font_sizes/font_size = 16
+text = "🔄"
