@@ -89,28 +89,11 @@ func _update_tooltip(screen_pos: Vector2):
 	var chunk_y = floori(float(tile_pos.y) / 16.0)
 	var chunk_key = "%d,%d" % [chunk_x, chunk_y]
 
-	# Get terrain type from cache
-	var terrain_type = "Unknown"
-	var resource_type = ""
+	# Get terrain type from cache using WorldDataCache's built-in method
+	var terrain_type = WorldDataCache.get_terrain_at(tile_pos.x, tile_pos.y)
 
-	if WorldDataCache.has_terrain_chunk(chunk_key):
-		var chunk_data = WorldDataCache.get_terrain_chunk(chunk_key)
-		var local_x = ((tile_pos.x % 16) + 16) % 16
-		var local_y = ((tile_pos.y % 16) + 16) % 16
-
-		if local_y < chunk_data.size() and local_x < chunk_data[local_y].size():
-			terrain_type = chunk_data[local_y][local_x]
-
-	# Get resource type from cache
-	if WorldDataCache.has_resource_chunk(chunk_key):
-		var chunk_data = WorldDataCache.get_resource_chunk(chunk_key)
-		var local_x = ((tile_pos.x % 16) + 16) % 16
-		var local_y = ((tile_pos.y % 16) + 16) % 16
-
-		if local_y < chunk_data.size() and local_x < chunk_data[local_y].size():
-			var res = chunk_data[local_y][local_x]
-			if res != "":
-				resource_type = res
+	# Get resource type from cache using WorldDataCache's built-in method
+	var resource_type = WorldDataCache.get_resource_at(tile_pos.x, tile_pos.y)
 
 	# Build tooltip text
 	var text = "World: (%d, %d)\n" % [tile_pos.x, tile_pos.y]
