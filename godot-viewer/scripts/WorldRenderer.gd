@@ -12,7 +12,7 @@ extends Node2D
 var grid_overlay: Node2D = null
 
 # Tooltip overlay (will be created dynamically)
-var tooltip_overlay: Control = null
+var tooltip_overlay: CanvasLayer = null
 
 # UI References
 var top_bar: CanvasLayer = null
