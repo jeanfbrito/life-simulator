@@ -8,8 +8,21 @@ extends TileMap
 # Terrain mapping to tile IDs
 var terrain_tile_ids: Dictionary = {}
 
+# Grass texture manager for stone-kingdoms grass textures
+var grass_manager = null
+
 func _ready():
 	print("🗺️ TerrainTileMap initialized")
+
+	# Initialize grass texture manager
+	var GrassManager = load("res://scripts/GrassTextureManager.gd")
+	grass_manager = GrassManager.new()
+	add_child(grass_manager)
+	print("🌿 GrassTextureManager initialized")
+
+	# Set texture filtering to NEAREST for pixel art (no blurring)
+	texture_filter = TEXTURE_FILTER_NEAREST
+	print("🎨 Texture filter set to NEAREST (pixel-perfect rendering)")
 
 	# Disable grid lines and debug visualizations
 	navigation_visibility_mode = TileMap.VISIBILITY_MODE_FORCE_HIDE
@@ -60,15 +73,15 @@ func create_basic_tileset():
 	var tileset = TileSet.new()
 	tileset.tile_shape = 1  # ISOMETRIC
 	tileset.tile_layout = 1  # STACKED
-	tileset.tile_size = Vector2i(128, 64)  # Isometric tiles are wider
-	print("   📐 TileSet configured: isometric, 128x64")
+	tileset.tile_size = Vector2i(32, 16)  # Match stone-kingdoms tile size
+	print("   📐 TileSet configured: isometric, 32x16 (stone-kingdoms size)")
 
 	# Create a single white diamond texture that we'll color with materials
 	var source = TileSetAtlasSource.new()
 	var white_texture = create_diamond_texture()
 	source.texture = white_texture
-	source.texture_region_size = Vector2i(128, 64)  # Diamond shape for isometric
-	print("   🖼️ White diamond texture created (128x64)")
+	source.texture_region_size = Vector2i(32, 16)  # Match stone-kingdoms tile size
+	print("   🖼️ White diamond texture created (32x16)")
 
 	# Create just one tile at (0,0)
 	source.create_tile(Vector2i(0, 0))
@@ -90,44 +103,44 @@ func create_basic_tileset():
 
 	print("🎨 Terrain mapping configured for ", available_terrains.size(), " terrain types")
 
-# Create a diamond texture for isometric tiles
+# Create a diamond texture for isometric tiles (32×16 to match stone-kingdoms)
 func create_diamond_texture() -> ImageTexture:
-	var image = Image.create(128, 64, false, Image.FORMAT_RGBA8)
+	var image = Image.create(32, 16, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 
-	# Draw diamond shape
+	# Draw diamond shape matching stone-kingdoms tile size
 	# Use slightly expanded bounds to prevent gaps between tiles
-	for y in range(64):
-		for x in range(128):
+	for y in range(16):
+		for x in range(32):
 			# Diamond shape calculation
-			var center_x = 64.0
-			var center_y = 32.0
+			var center_x = 16.0
+			var center_y = 8.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
 			# Slightly expand the diamond boundary to eliminate gaps (1.01 instead of 1.0)
-			if dx / 64.0 + dy / 32.0 <= 1.01:
+			if dx / 16.0 + dy / 8.0 <= 1.01:
 				image.set_pixel(x, y, Color.WHITE)
 
 	return ImageTexture.create_from_image(image)
 
-# Create a colored diamond texture for specific terrain
+# Create a colored diamond texture for specific terrain (32×16 to match stone-kingdoms)
 func create_colored_diamond_texture(color: Color) -> ImageTexture:
-	var image = Image.create(128, 64, false, Image.FORMAT_RGBA8)
+	var image = Image.create(32, 16, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 
-	# Draw diamond shape with terrain color
+	# Draw diamond shape with terrain color matching stone-kingdoms size
 	# Use slightly expanded bounds to prevent gaps between tiles
-	for y in range(64):
-		for x in range(128):
+	for y in range(16):
+		for x in range(32):
 			# Diamond shape calculation
-			var center_x = 64.0
-			var center_y = 32.0
+			var center_x = 16.0
+			var center_y = 8.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
 			# Slightly expand the diamond boundary to eliminate gaps (1.01 instead of 1.0)
-			if dx / 64.0 + dy / 32.0 <= 1.01:
+			if dx / 16.0 + dy / 8.0 <= 1.01:
 				image.set_pixel(x, y, color)
 
 	return ImageTexture.create_from_image(image)
@@ -146,13 +159,62 @@ func _get_or_create_terrain_source(terrain_type: String, color: Color) -> int:
 	# Create new source for this terrain type
 	var source = TileSetAtlasSource.new()
 	source.texture = create_colored_diamond_texture(color)
-	source.texture_region_size = Vector2i(128, 64)  # Isometric diamond tiles
+	source.texture_region_size = Vector2i(32, 16)  # Match stone-kingdoms tile size
 	source.create_tile(Vector2i(0, 0))
 
 	var source_id = self.tile_set.add_source(source)
 	sources[terrain_type] = source_id
 
 	print("🔧 Created new terrain source for ", terrain_type, " with ID ", source_id)
+	return source_id
+
+# Get or create a TileSet source for a specific texture
+func _get_or_create_texture_source(texture: Texture2D) -> int:
+	if not texture:
+		push_error("❌ Cannot create texture source: texture is null")
+		return -1
+
+	if not has_meta("texture_sources"):
+		set_meta("texture_sources", {})
+
+	var sources = get_meta("texture_sources")
+
+	# Use texture size as key since resource_path may be empty for runtime textures
+	var texture_size = texture.get_size()
+	var texture_key = str(texture_size.x) + "x" + str(texture_size.y) + "_" + str(texture.get_rid().get_id())
+
+	# Return existing source ID if we already have one for this texture
+	if sources.has(texture_key):
+		return sources[texture_key]
+
+	# Validate texture size
+	if texture_size.x == 0 or texture_size.y == 0:
+		push_error("❌ Cannot create texture source: texture has invalid size " + str(texture_size))
+		return -1
+
+	# Create new source for this texture
+	var source = TileSetAtlasSource.new()
+	source.texture = texture
+	# IMPORTANT: Use the actual texture size, not our desired tile size!
+	source.texture_region_size = Vector2i(int(texture_size.x), int(texture_size.y))
+	source.create_tile(Vector2i(0, 0))
+
+	# Apply texture offset like stone-kingdoms does for grass tiles
+	# For 1×1 grass: lOffsetY = 16 - lh + 1 (where lh is texture height)
+	# For 30×18 texture on 32×16 tile: Y offset = 16 - 18 + 1 = -1
+	var tile_height = int(texture_size.y)
+	var offset_y = 16 - tile_height + 1  # Match stone-kingdoms offset calculation
+	var offset_x = 0
+
+	# Set texture offset on the tile data
+	var tile_data = source.get_tile_data(Vector2i(0, 0), 0)
+	if tile_data:
+		tile_data.texture_origin = Vector2i(offset_x, offset_y)
+
+	var source_id = self.tile_set.add_source(source)
+	sources[texture_key] = source_id
+
+	print("🔧 Created new texture source (size: %dx%d, offset: %d,%d) with ID %d" % [texture_size.x, texture_size.y, offset_x, offset_y, source_id])
 	return source_id
 
 # Setup terrain to tile ID mapping
@@ -207,6 +269,39 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String):
 	# world_pos is already in tile coordinates - use it directly!
 	# The isometric TileMap will handle the projection automatically
 
+	# Check if this is a grass terrain and we have grass textures loaded
+	if _should_use_grass_texture(terrain_type) and grass_manager and grass_manager.has_textures():
+		_paint_grass_tile(world_pos, terrain_type)
+	else:
+		# Use colored diamond for non-grass terrain
+		_paint_colored_tile(world_pos, terrain_type)
+
+func _should_use_grass_texture(terrain_type: String) -> bool:
+	"""Check if this terrain type should use grass textures."""
+	return terrain_type in ["Grass", "Forest"]
+
+func _paint_grass_tile(world_pos: Vector2i, terrain_type: String):
+	"""Paint a tile using grass texture from stone-kingdoms."""
+	# Get a random grass texture
+	var grass_texture = grass_manager.get_random_grass_texture()
+	if not grass_texture:
+		# Fallback to colored tile if texture loading failed
+		_paint_colored_tile(world_pos, terrain_type)
+		return
+
+	# Get or create a source for this specific grass texture
+	var source_id = _get_or_create_texture_source(grass_texture)
+
+	# Set the cell with the grass texture
+	set_cell(0, world_pos, source_id, Vector2i(0, 0))
+
+	# Only print for first few tiles to avoid spam
+	if get_used_cells(0).size() <= 10:
+		var pixel_pos = map_to_local(world_pos)
+		print("🌿 Painted grass tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
+
+func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
+	"""Paint a tile using colored diamond (original method)."""
 	# Get terrain color from config
 	var terrain_color = Config.terrain_colors.get(terrain_type, Color.WHITE)
 
