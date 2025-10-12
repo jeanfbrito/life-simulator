@@ -11,6 +11,10 @@ var camera: Camera2D = null
 var tooltip_panel: PanelContainer = null
 var tooltip_label: Label = null
 
+# Debug visualization
+var debug_tile_overlay: Node2D = null
+var debug_enabled: bool = true
+
 # Visibility state
 var tooltip_visible: bool = true
 
@@ -63,6 +67,13 @@ func _ready():
 
 func set_tilemap(p_tilemap: TileMap):
 	tilemap = p_tilemap
+
+	# Create debug overlay for tile visualization
+	if debug_enabled:
+		debug_tile_overlay = Node2D.new()
+		debug_tile_overlay.z_index = 200  # Above grid overlay
+		tilemap.add_child(debug_tile_overlay)
+		print("🔍 Tooltip debug visualization enabled")
 
 func set_camera(p_camera: Camera2D):
 	camera = p_camera
@@ -121,3 +132,81 @@ func _update_tooltip(screen_pos: Vector2):
 	# Position immediately (CanvasLayer is in screen space)
 	var pos = screen_pos + CURSOR_OFFSET
 	tooltip_panel.position = pos
+
+	# Update debug visualization
+	if debug_enabled and debug_tile_overlay != null:
+		_draw_debug_tile(tile_pos)
+
+func _draw_debug_tile(tile_pos: Vector2i):
+	# Clear previous drawing
+	for child in debug_tile_overlay.get_children():
+		child.queue_free()
+
+	# Get the isometric position for this tile
+	var center = tilemap.map_to_local(tile_pos)
+	var tile_size = tilemap.tile_set.tile_size
+
+	# Calculate diamond corners (same as GridOverlay but in red)
+	var half_width = tile_size.x / 2.0  # 32
+	var half_height = tile_size.y / 2.0  # 16
+
+	# Adjust center: map_to_local() gives the top point, move to visual center
+	var visual_center = center + Vector2(0, half_height)
+
+	# Diamond corners: top, right, bottom, left
+	var top = visual_center + Vector2(0, -half_height)
+	var right = visual_center + Vector2(half_width, 0)
+	var bottom = visual_center + Vector2(0, half_height)
+	var left = visual_center + Vector2(-half_width, 0)
+
+	# Create Line2D nodes for the diamond
+	var color = Color(1.0, 0.0, 0.0, 1.0)  # Bright red
+	var width = 3.0  # Thicker for visibility
+
+	# Top to right
+	var line1 = Line2D.new()
+	line1.add_point(top)
+	line1.add_point(right)
+	line1.default_color = color
+	line1.width = width
+	debug_tile_overlay.add_child(line1)
+
+	# Right to bottom
+	var line2 = Line2D.new()
+	line2.add_point(right)
+	line2.add_point(bottom)
+	line2.default_color = color
+	line2.width = width
+	debug_tile_overlay.add_child(line2)
+
+	# Bottom to left
+	var line3 = Line2D.new()
+	line3.add_point(bottom)
+	line3.add_point(left)
+	line3.default_color = color
+	line3.width = width
+	debug_tile_overlay.add_child(line3)
+
+	# Left to top
+	var line4 = Line2D.new()
+	line4.add_point(left)
+	line4.add_point(top)
+	line4.default_color = color
+	line4.width = width
+	debug_tile_overlay.add_child(line4)
+
+	# Add a cross at the center point
+	var cross_size = 10.0
+	var h_line = Line2D.new()
+	h_line.add_point(visual_center + Vector2(-cross_size, 0))
+	h_line.add_point(visual_center + Vector2(cross_size, 0))
+	h_line.default_color = color
+	h_line.width = 2.0
+	debug_tile_overlay.add_child(h_line)
+
+	var v_line = Line2D.new()
+	v_line.add_point(visual_center + Vector2(0, -cross_size))
+	v_line.add_point(visual_center + Vector2(0, cross_size))
+	v_line.default_color = color
+	v_line.width = 2.0
+	debug_tile_overlay.add_child(v_line)
