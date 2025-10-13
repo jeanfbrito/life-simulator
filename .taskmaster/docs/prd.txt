@@ -797,8 +797,11 @@ EcologicalMetrics {
 ## Phase 4: Godot Viewer Enhancement 🎨 (HIGH PRIORITY - Track A)
 **Goal:** Make the Godot viewer absolutely shine with professional features and polish
 
-### 4.1 Advanced Biome Rendering
+### 4.1 Advanced Biome Rendering with Height Visualization
 **Track A - Godot Viewer**
+**Approach:** OpenRCT2-style 2D isometric tiles with height-based rendering
+
+**Core Implementation:**
 - Implement dynamic TileMap source creation for biome types
 - Add smooth biome color transitions at edges
 - Create distinct visual styles for each biome:
@@ -809,8 +812,22 @@ EcologicalMetrics {
   - Riparian: Lush green near water
   - Rocky: Gray/brown tones
 - Add subtle terrain texture variations
-- Implement elevation shading (darker at higher elevations)
-- Test: Visual appeal and clarity of different biomes
+
+**Height-Based Rendering (OpenRCT2 Style):**
+- Implement elevation shading using color modulation:
+  - Low elevation (valleys): Darker shading (0.6 brightness)
+  - Medium elevation (plains): Normal brightness (0.8-1.0)
+  - High elevation (peaks): Lighter shading (1.2 brightness with white tint)
+- Add optional contour line overlay (every 20 height units)
+- Display height value on tile hover/tooltip
+- Create height gradient legend in HUD
+- Test: Clear visual distinction between elevations
+
+**Advanced (Optional - Phase 4.6+):**
+- Generate slope tile variations (N-up, E-up, valleys) like OpenRCT2
+- Auto-select slope tiles based on neighbor heights
+- Creates "3D terrain look" without actual 3D rendering
+- Test: Visual appeal and clarity of different biomes and elevations
 
 ### 4.2 Enhanced Flora Rendering
 **Track A - Godot Viewer**
@@ -1458,12 +1475,13 @@ biome = select_biome(moisture, temperature, elevation)
 - Educational labels and info panels
 - Classroom-ready presentations
 
-### Advanced Visualization
-- 3D rendering option (Bevy renderer mode)
-- VR support for immersive observation
+### Advanced Visualization (2D Isometric Focus)
+- Advanced height-based tile shading (OpenRCT2 style)
+- Slope tile variations (flat, N-up, E-up, valleys, ridges)
+- Dynamic contour line overlays
 - Time-lapse video generation
 - Custom camera paths for cinematics
-- Drone-like free camera mode
+- Cinematic camera modes (follow entity, auto-tour)
 
 ---
 
