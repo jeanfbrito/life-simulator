@@ -12,7 +12,7 @@ var VIEW_SIZE_X: int = 100  # Dynamic view width based on container
 var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container
 
 # Debug flags
-var debug_show_position_markers: bool = true  # Show red cross at entity/resource origin
+var debug_show_position_markers: bool = false  # Show red cross at entity/resource origin
 
 # Performance settings
 var target_fps: int = 60

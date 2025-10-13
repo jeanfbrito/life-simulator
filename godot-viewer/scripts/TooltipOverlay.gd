@@ -96,9 +96,10 @@ func _update_tooltip(screen_pos: Vector2):
 	if tilemap == null or camera == null:
 		return
 
-	# Convert screen position to world position
-	var viewport_size = get_viewport().get_visible_rect().size
-	var world_pos = camera.get_screen_center_position() + (screen_pos - viewport_size / 2) / camera.zoom
+	# Convert screen position to world position using canvas transform
+	# This properly accounts for camera position, zoom, and all transformations
+	var canvas_transform = get_viewport().get_canvas_transform()
+	var world_pos = canvas_transform.affine_inverse() * screen_pos
 
 	# Convert world position to tile coordinates using isometric conversion
 	var tile_pos = tilemap.local_to_map(world_pos)
