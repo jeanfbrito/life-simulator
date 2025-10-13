@@ -10,10 +10,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 dev-debug.log
+
 # Dependency directories
 node_modules/
+
 # Environment variables
 .env
+
 # Editor directories and files
 .idea
 .vscode
@@ -22,9 +25,40 @@ node_modules/
 *.njsproj
 *.sln
 *.sw?
+
 # OS specific
 .DS_Store
 
-# Task files
-# tasks.json
-# tasks/ 
+# Godot 4.x
+.godot/
+*.uid
+
+# Godot 3.x (legacy support)
+.import/
+*.import
+
+# Godot exports
+export_presets.cfg
+*.apple
+*.exe
+*.x86_64
+*.wasm
+*.pck
+
+# Godot C# (Mono)
+.mono/
+data_*/
+mono_crash.*.json
+
+# Godot debug
+.godot-debug/
+
+# Claude Code settings (local only)
+.claude/settings.local.json
+
+# OpenCode (editor-specific)
+opencode.json
+
+# Task Master (uncomment if you want to ignore)
+# .taskmaster/tasks/
+# .taskmaster/state.json 
