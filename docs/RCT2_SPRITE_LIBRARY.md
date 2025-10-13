@@ -100,17 +100,43 @@ Each terrain type has 19 slope variations:
 
 ## Current Project Usage
 
-### Implemented
-- ✅ **Grass terrain - Clumps** (2200-2218)
-  - Location: `godot-viewer/assets/tiles/terrain/openrct2_placeholder/grass/`
-  - Atlas: `grass_atlas.png` (640×128, 64×64 tiles)
-  - Textured grass with detail and natural appearance
-  - Status: Ready for integration
+### ✅ All Terrain Types Extracted (13 total)
 
-### Planned
-- ⏳ Sand terrain (beach areas)
-- ⏳ Dirt terrain (paths)
-- ⏳ Stone terrain (mountains)
+All terrains include:
+- 19 slope variations (slope_00 to slope_18)
+- Individual PNG sprites
+- 640×128 atlas (64×64 cells, 10×2 grid)
+
+| # | Terrain | Sprites | Atlas | Status |
+|---|---------|---------|-------|--------|
+| 1 | **grass** | 1915-1933 | grass_atlas.png | ✅ **Primary** |
+| 2 | sand | 1972-1990 | sand_atlas.png | ✅ Ready |
+| 3 | sand_red | 2029-2047 | sand_red_atlas.png | ✅ Ready |
+| 4 | sand_yellow | 2086-2104 | sand_yellow_atlas.png | ✅ Ready |
+| 5 | ice | 2143-2161 | ice_atlas.png | ✅ Ready |
+| 6 | grass_clumps | 2200-2218 | grass_clumps_atlas.png | ✅ Ready |
+| 7 | martian | 2314-2332 | martian_atlas.png | ✅ Ready |
+| 8 | checkerboard | 2371-2389 | checkerboard_atlas.png | ✅ Ready |
+| 9 | checkerboard_inverted | 2428-2446 | checkerboard_inverted_atlas.png | ✅ Ready |
+| 10 | dirt | 2485-2503 | dirt_atlas.png | ✅ Ready |
+| 11 | rock | 2542-2560 | rock_atlas.png | ✅ Ready |
+| 12 | grass_mowed | 2663-2681 | grass_mowed_atlas.png | ✅ Ready |
+| 13 | grass_mowed_90 | 2701-2719 | grass_mowed_90_atlas.png | ✅ Ready |
+
+**Location:** `godot-viewer/assets/tiles/terrain/openrct2_placeholder/<terrain>/`
+
+**Total Assets:**
+- 247 individual sprites (13 × 19)
+- 13 atlases ready for Godot integration
+
+### Complete Extraction Guide
+
+For full details on how these were extracted and organized, see:
+- **[OPENRCT2_TERRAIN_EXTRACTION.md](OPENRCT2_TERRAIN_EXTRACTION.md)** - Complete extraction process
+- Includes Windows extraction steps
+- Finding correct sprite indices from OpenRCT2 source
+- Automated extraction and atlas generation scripts
+- Lessons learned and best practices
 
 ## Object Sprites (Future)
 
@@ -131,8 +157,8 @@ Beyond terrain, the library includes:
 - `extract_palette_from_g1.py` - Palette extraction (reference)
 
 ### Atlas Creation
-- `create_grass_atlas.py` - Creates 640×128 atlas from 19 slope sprites
-- Can be adapted for other terrain types
+- `create_terrain_atlases.py` - Creates 640×128 atlases for ALL terrain types
+- `create_grass_atlas.py` - Legacy single-terrain script (superseded)
 
 ### Sprite Library Maintenance
 - Location: `~/RCT2-Sprites/`
@@ -149,7 +175,7 @@ Beyond terrain, the library includes:
 
 ## See Also
 
+- **[OPENRCT2_TERRAIN_EXTRACTION.md](OPENRCT2_TERRAIN_EXTRACTION.md)** - Complete extraction guide
 - OpenRCT2 docs: https://github.com/OpenRCT2/OpenRCT2
 - `godot-viewer/assets/tiles/terrain/README.md` - Terrain asset organization
-- `docs/OPENRCT2_SPRITE_EXTRACTION_GUIDE.md` - Original extraction guide
 - `~/RCT2-Sprites/README.md` - Full sprite library documentation
