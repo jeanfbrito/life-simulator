@@ -28,7 +28,7 @@ This guide implements OpenRCT2-style slope-based terrain rendering in Godot 4.3+
 - ✅ Receives height data from Rust backend (0-255 per tile)
 - ✅ Calculates slope indices (0-18) based on corner height differences
 - ✅ Selects appropriate slope sprite from atlas
-- ✅ Renders isometric tiles (128×64 pixels)
+- ✅ Renders isometric tiles (32×16 pixels - OpenRCT2 original size)
 - ✅ Supports all terrain types with 19 slope variations each
 - ✅ Integrates with existing chunk-based rendering
 
@@ -331,10 +331,10 @@ Row 1: Slopes 10-18 (EW-valley, NEW-up, SW-up, NWS-up, ESW-up, All-up, Diag-NE-S
 ```
 
 **Atlas Configuration:**
-- Tile Size: 128×64 pixels
+- Tile Size: 32×16 pixels (OpenRCT2 original size)
 - Separation: 0px
 - Margins: 0px
-- Texture Region: 1280×128 pixels (10 columns × 2 rows)
+- Texture Region: 320×32 pixels (10 columns × 2 rows)
 
 ### TileSet Configuration
 
@@ -346,11 +346,11 @@ Row 1: Slopes 10-18 (EW-valley, NEW-up, SW-up, NWS-up, ESW-up, All-up, Diag-NE-S
 # Physics Layer 0: Tile-based terrain (for future collision)
 #
 # Terrain Type 0: "Grass"
-#   - Source: grass_atlas.png (1280×128)
+#   - Source: grass_atlas.png (320×32)
 #   - Alternative Tiles: 0-18 (auto-generated)
 #
 # Terrain Type 1: "Sand"
-#   - Source: sand_atlas.png (1280×128)
+#   - Source: sand_atlas.png (320×32)
 #   - Alternative Tiles: 0-18
 #
 # ... (repeat for all terrain types)
@@ -371,7 +371,7 @@ extends TileMap
 
 # EXISTING CONSTANTS (keep these)
 const CHUNK_SIZE = 16
-const TILE_SIZE = 128  # Isometric tile width
+const TILE_SIZE = 32  # Isometric tile width (OpenRCT2 original size)
 
 # NEW: Slope atlas mapping
 const SLOPE_TO_ATLAS = {
@@ -623,8 +623,8 @@ func _process(_delta):
 
     # Convert camera position to tile coordinate
     var tile_pos = Vector2i(
-        int(camera_pos.x / 128),
-        int(camera_pos.y / 64)
+        int(camera_pos.x / 32),
+        int(camera_pos.y / 16)
     )
 
     # Get chunk coordinate
@@ -957,7 +957,7 @@ func test_chunk_boundary_slope():
 **Solution:**
 - Check neighbor heights with debug overlay (F3)
 - Verify atlas coordinates match actual sprite positions
-- Ensure atlas tile size is exactly 128×64
+- Ensure atlas tile size is exactly 32×16 (OpenRCT2 original size)
 
 ### Problem: Slopes look wrong at chunk boundaries
 

@@ -67,23 +67,19 @@ extracted_sprites/
     ...
 ```
 
-### Step 2: Scale and Organize Sprites
+### Step 2: Organize Sprites (No Scaling Needed!)
 
-Godot uses 128×64 isometric tiles (4× larger than OpenRCT2's 32×16).
+**We use OpenRCT2 sprites at their original 32×16 size - no scaling!**
 
-**Scaling script:**
+**Direct copy workflow:**
 
 ```bash
-# Install ImageMagick (if not already installed)
-# macOS: brew install imagemagick
-# Linux: sudo apt install imagemagick
-
-# Scale sprites (run from extracted_sprites directory)
+# Rename and copy sprites (run from extracted_sprites directory)
 cd extracted_sprites/grass
 
-# Scale all grass sprites to 128×64
+# Rename to our convention (slope_00.png format)
 for i in {00..18}; do
-  convert grass_$i.png -scale 400% -interpolate Nearest slope_$i.png
+  cp grass_$i.png slope_$i.png
 done
 
 # Copy to Godot project
@@ -92,12 +88,12 @@ cp slope_*.png ../../godot-viewer/assets/tiles/terrain/openrct2_placeholder/gras
 # Repeat for other terrain types
 cd ../sand
 for i in {00..18}; do
-  convert sand_$i.png -scale 400% -interpolate Nearest slope_$i.png
+  cp sand_$i.png slope_$i.png
 done
 cp slope_*.png ../../godot-viewer/assets/tiles/terrain/openrct2_placeholder/sand/
 ```
 
-**Important:** Use `-interpolate Nearest` to preserve pixel art crisp edges!
+**That's it!** Original OpenRCT2 sprites work perfectly at 32×16 pixels.
 
 ### Step 3: Create Terrain Atlases
 
@@ -109,18 +105,18 @@ cd godot-viewer/assets/tiles/terrain/openrct2_placeholder/grass
 # Create row 0 (slopes 0-9)
 montage slope_{00..09}.png \
   -tile 10x1 \
-  -geometry 128x64+0+0 \
+  -geometry 32x16+0+0 \
   -background transparent \
   grass_atlas_row0.png
 
 # Create row 1 (slopes 10-18)
 montage slope_{10..18}.png \
   -tile 9x1 \
-  -geometry 128x64+0+0 \
+  -geometry 32x16+0+0 \
   -background transparent \
   grass_atlas_row1.png
 
-# Combine rows into final atlas (1280×128 pixels)
+# Combine rows into final atlas (320×32 pixels)
 convert grass_atlas_row0.png grass_atlas_row1.png \
   -append \
   grass_atlas.png
@@ -132,7 +128,7 @@ rm grass_atlas_row0.png grass_atlas_row1.png
 ```
 
 **Expected result:**
-- `grass_atlas.png` - 1280×128 pixels (10 columns × 2 rows)
+- `grass_atlas.png` - 320×32 pixels (10 columns × 2 rows)
 - `sand_atlas.png` - Same layout
 - `stone_atlas.png` - Same layout
 - etc.
@@ -157,7 +153,7 @@ cd godot-viewer
 
 - Click "+ Add Atlas"
 - **Texture:** Select `assets/tiles/terrain/openrct2_placeholder/grass/grass_atlas.png`
-- **Tile Size:** 128×64
+- **Tile Size:** 32×16 (OpenRCT2 original size)
 - **Separation:** 0px
 - **Margin:** 0px
 - **ID:** 0 (Grass), 1 (Sand), 2 (Stone), etc.
@@ -296,16 +292,6 @@ If E neighbor shows as same height despite visual difference:
 ---
 
 ## Troubleshooting
-
-### Problem: Sprites appear stretched or distorted
-
-**Cause:** Wrong scaling filter used
-
-**Solution:**
-```bash
-# Re-scale with Nearest neighbor filter
-convert original.png -scale 400% -interpolate Nearest output.png
-```
 
 ### Problem: All tiles render as flat (slope 0)
 

@@ -54,14 +54,13 @@ slope_18.png    # Center peak
 
 ## Sprite Specifications
 
-**Original OpenRCT2 format:**
-- Base size: 32×16 pixels
+**OpenRCT2 format (used directly, no scaling):**
+- Size: 32×16 pixels
 - Isometric diamond shape
-
-**Godot scaled format:**
-- Size: 128×64 pixels (4× scale)
 - Format: PNG with transparency
 - Color depth: 32-bit RGBA
+
+**No scaling needed!** We use the exact same size as OpenRCT2.
 
 ## Atlas Configuration
 
@@ -69,14 +68,15 @@ Each terrain type will be loaded as a separate TileSet atlas:
 - Layout: 10×2 grid (10 columns, 2 rows)
 - Row 0: Slopes 0-9
 - Row 1: Slopes 10-18
-- Total atlas size: 1280×128 pixels
+- Total atlas size: 320×32 pixels
 
 To create atlas from individual sprites:
 ```bash
 # Use ImageMagick to combine sprites into atlas
-montage slope_{00..09}.png -tile 10x1 -geometry 128x64+0+0 row_0.png
-montage slope_{10..18}.png -tile 9x1 -geometry 128x64+0+0 row_1.png
+montage slope_{00..09}.png -tile 10x1 -geometry 32x16+0+0 row_0.png
+montage slope_{10..18}.png -tile 9x1 -geometry 32x16+0+0 row_1.png
 # Then combine rows vertically
+convert row_0.png row_1.png -append terrain_atlas.png
 ```
 
 ## Workflow

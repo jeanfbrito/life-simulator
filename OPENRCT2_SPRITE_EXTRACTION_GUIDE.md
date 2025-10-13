@@ -113,8 +113,8 @@ Actual OpenRCT2 dimensions:
 - With height: 32×32 (allows up to 16px height variation)
 ```
 
-**Your Current Godot Tiles:** 128×64 pixels (4x scale)
-- Perfect! Just scale RCT2 sprites 4x
+**Your Current Godot Tiles:** 32×16 pixels (OpenRCT2 original size)
+- Perfect! Use RCT2 sprites directly, no scaling needed
 
 ### Color Palette
 
@@ -164,18 +164,7 @@ terrain_sand_03.png     # Sand NE-up
 ...
 ```
 
-### Step 3: Scale to Godot Size
-
-```bash
-# Scale from RCT2's 32×16 to Godot's 128×64
-# Using ImageMagick or similar
-
-for file in terrain_*.png; do
-    convert "$file" -scale 400% "scaled_$file"
-done
-```
-
-### Step 4: Organize in Godot Project
+### Step 3: Organize in Godot Project (No Scaling Needed!)
 
 ```
 godot-viewer/
@@ -303,7 +292,7 @@ func render_tile_with_slope(pos: Vector2i, terrain: String, height: int):
 - **Krita** - Free, brush-focused
 
 **Process:**
-1. Create 128×64 canvas (your Godot size)
+1. Create 32×16 canvas (OpenRCT2 original size)
 2. Draw isometric diamond shape
 3. Fill with terrain texture
 4. Add shading (NW light source)
@@ -387,7 +376,7 @@ func get_slope_sprite_path(terrain_type: String, slope_index: int) -> String:
 
 **Tasks:**
 1. Extract 19 slope sprites for Grass terrain from OpenRCT2
-2. Scale to 128×64
+2. Copy directly to Godot (no scaling - use 32×16 original size)
 3. Organize in `openrct2_placeholder/grass/` folder
 4. Implement slope calculation in Godot
 5. Render single terrain type with all slopes
@@ -542,10 +531,10 @@ West  │       \     East
 Before replacing a placeholder, check:
 
 ### Technical Quality
-- [ ] Correct dimensions (128×64 or appropriate size)
+- [ ] Correct dimensions (32×16 - OpenRCT2 original size)
 - [ ] Transparent background (if needed)
 - [ ] PNG format, indexed color or RGB+Alpha
-- [ ] File size reasonable (<50KB per tile)
+- [ ] File size reasonable (<10KB per tile)
 - [ ] Filename matches convention exactly
 
 ### Visual Quality
@@ -692,7 +681,7 @@ All final game art will be original work licensed under [Your License].
 **5-Minute Setup:**
 
 1. **Find OpenRCT2 grass sprites** (flat + slopes)
-2. **Scale to 128×64** (4x)
+2. **Copy directly** (no scaling - use 32×16 original size)
 3. **Save as:** `godot-viewer/assets/tiles/terrain/openrct2_placeholder/grass/slope_00.png` (etc.)
 4. **Update TerrainTileMap.gd** to load sprites based on slope
 5. **Test in-game** - should see sloped terrain!
