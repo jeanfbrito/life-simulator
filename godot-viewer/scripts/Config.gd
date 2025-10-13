@@ -6,13 +6,13 @@ extends Node
 signal configuration_loaded
 
 # Display configuration
-var TILE_SIZE: int = 64  # Tile width - matches TileSet tile_size width (64×32)
+var TILE_SIZE: int = 32  # Tile width - matches TileSet tile_size width (32×16) from stone-kingdoms
 var render_scale: float = 1.0  # Scale factor for rendering
 var VIEW_SIZE_X: int = 100  # Dynamic view width based on container
 var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container
 
 # Debug flags
-var debug_show_position_markers: bool = true  # Show red cross at entity/resource origin
+var debug_show_position_markers: bool = false  # Show red cross at entity/resource origin
 
 # Performance settings
 var target_fps: int = 60
