@@ -514,60 +514,283 @@ ResourceType enum: {
 ---
 
 ## Phase 3: Advanced World Generation 🗺️ (HIGH PRIORITY - Track B)
-**Goal:** Create beautiful, ecologically-sound worlds with biomes, rivers, and natural features
+**Goal:** Create beautiful, ecologically-sound worlds with height-driven terrain, rivers, biomes, and natural features
 
-### 3.1 Biome System Foundation
+**🎯 Foundation Principle:** Height maps are the BASE LAYER that drives everything else. Elevation determines where water flows, which biomes form, and how animals move through the landscape.
+
+---
+
+### 3.1 Height Map System (CRITICAL FOUNDATION) ⛰️
 **Track B - Map Generator**
-- Design biome type enum (TemperateForest, Woodland, Grassland, etc.)
-- Implement noise-based biome placement using moisture + temperature
-- Add elevation influence on biome selection
-- Create biome transition zones (forest edges, ecotones)
+**Reference:** `HEIGHT_MAP_ANALYSIS.md` for complete OpenRCT2-inspired design
+
+**Core Implementation:**
+- Add `heights: Vec<Vec<u8>>` to SerializedChunk (0-255 height range, 1 byte per tile)
+- Implement HeightMapGenerator using simplex noise (noise-rs crate)
+- Configure noise parameters: base frequency, octaves, lacunarity, persistence
+- Generate seamless heights across chunk boundaries (continuous world-space noise)
+- Apply box blur smoothing (3×3 kernel, configurable passes 2-7)
+- Normalize heights to full 0-255 range for maximum variation
+- Support configurable height ranges (min_height, max_height, water_level)
+- Test: Generate world with realistic hills, valleys, and peaks
+
+**Advanced Features:**
+- Implement super-sampling (2x density) for smoother results before downsampling
+- Add height-based terrain type override (low=water, high=mountains)
+- Create slope calculation from corner height differences
+- Add PNG import/export for artistic height map editing
+- Implement height gradient analysis (steep vs gentle slopes)
+- Test: Verify no cliffs, smooth transitions between chunks
+
+**Configuration Options:**
+```rust
+HeightMapConfig {
+    min_height: 20,           // Lowest point (deep ocean floor)
+    max_height: 200,          // Highest point (mountain peaks)
+    water_level: 50,          // Sea level dividing line
+    frequency: 1.5,           // Base noise frequency (higher = more variation)
+    octaves: 6,               // Layers of detail (more = more complexity)
+    lacunarity: 2.0,          // Frequency multiplier per octave
+    persistence: 0.5,         // Amplitude reduction per octave
+    smoothing_passes: 3,      // Box blur iterations
+    beach_range: 5,           // Height units for beach zone above water
+    mountain_threshold: 180,  // Height for mountain terrain
+    hill_threshold: 150,      // Height for hilly terrain
+}
+```
+
+**Success Criteria:**
+- ✅ Height data stored efficiently (1 byte per tile = ~2.5KB per chunk)
+- ✅ Seamless heights across chunk boundaries (no visible seams)
+- ✅ Natural-looking elevation with hills, valleys, and peaks
+- ✅ Configurable parameters produce different landscapes
+- ✅ No vertical cliffs or impossible terrain
+- ✅ Performance: <100ms to generate height for 11×11 chunks (121 chunks)
+
+---
+
+### 3.2 River Generation System 🌊
+**Track B - Map Generator**
+**Depends On:** 3.1 (Height Maps) - Rivers flow downhill!
+
+**Core Implementation:**
+- Implement RiverGenerator using height map for downhill flow
+- Find high elevation source points (height > mountain_threshold - 20)
+- Use pathfinding to trace downhill path (always pick lowest neighbor)
+- Create RiverPath data structure with tile coordinates
+- Mark river tiles as ShallowWater or DeepWater based on flow
+- Add river width calculation based on accumulated flow (tributaries merge)
+- Implement tributary branching from multiple high sources
+- Ensure rivers terminate at ocean (water_level) or lakes
+- Test: Generate world with realistic dendritic river networks
+
+**Advanced Features:**
+- Calculate flow accumulation (how much water passes through each tile)
+- Wider rivers where flow is high (main channels)
+- Narrow streams in headwaters (mountain sources)
+- Meandering in flat areas (add randomness when slope is gentle)
+- Oxbow lakes and deltas at river mouths (future)
+- Rapids and waterfalls at steep elevation changes (future)
+- Test: Rivers connect highlands to lowlands naturally
+
+**River Configuration:**
+```rust
+RiverConfig {
+    num_sources: 10,              // Number of river starting points
+    min_source_height: 160,       // Must start high in mountains
+    min_flow_for_wide: 100,       // Tiles of accumulated flow = wide river
+    meandering_threshold: 3,      // Slope below this = add meander curves
+    terminate_at_water_level: true, // Stop at ocean
+}
+```
+
+**Success Criteria:**
+- ✅ Rivers always flow downhill (never uphill)
+- ✅ Multiple rivers from different mountain sources
+- ✅ Tributaries merge into larger rivers
+- ✅ Rivers reach ocean or form lakes in valleys
+- ✅ Natural-looking patterns (dendritic or braided)
+- ✅ Performance: <500ms to generate 10 river systems
+
+---
+
+### 3.3 Biome System Foundation 🌲
+**Track B - Map Generator**
+**Depends On:** 3.1 (Height Maps) + 3.2 (Rivers) - Elevation and moisture determine biomes!
+
+**Core Implementation:**
+- Design BiomeType enum (TemperateForest, Woodland, Grassland, Alpine, Riparian, etc.)
+- Implement biome selection using THREE factors:
+  1. **Elevation** (from height map)
+  2. **Moisture** (from simplex noise + distance to rivers)
+  3. **Temperature** (from latitude + elevation - colder at high altitude)
+- Create biome lookup table: `select_biome(height, moisture, temperature) -> BiomeType`
 - Add biome data layer to SerializedChunk
-- Implement biome-aware terrain type selection
+- Implement biome transition zones (ecotones with gradient blending)
+- Apply biome-specific terrain types (Forest gets Forest tiles, etc.)
 - Test: Generate world with visible biome diversity
 
-### 3.2 Elevation & Height Maps
-**Track B - Map Generator**
-- Implement elevation noise generation (hills, valleys, mountains)
-- Create height map storage in chunks
-- Add elevation influence on terrain passability
-- Implement slope calculation for realistic terrain
-- Add elevation layer to world serialization
-- Create visualization of elevation (contour-like effects)
-- Test: Generate world with realistic elevation variation
+**Biome Distribution Rules:**
+```
+HIGH ELEVATION (height > 180):
+  - Alpine Meadow (moist)
+  - Rocky Outcrop (dry)
+  - Snow Peaks (very high, future)
 
-### 3.3 River Generation System
-**Track B - Map Generator**
-- Implement source point selection (high elevation areas)
-- Create flow simulation using pathfinding (downhill flow)
-- Add tributary branching logic
-- Implement river width variation (streams → rivers)
-- Create shallow water on banks, deep water in center
-- Add river influence on biomes (riparian zones)
-- Ensure rivers reach oceans/lakes
-- Test: Generate world with realistic river networks
+MEDIUM ELEVATION (height 100-180):
+  - Temperate Forest (moist + moderate temp)
+  - Woodland (moderate moisture)
+  - Grassland (dry + sunny)
 
-### 3.4 Vegetation Placement System
+LOW ELEVATION (height 50-100):
+  - Meadow (flat + moist)
+  - Riparian Zone (near rivers, very moist)
+  - Scrubland (dry)
+
+WATER LEVEL (height < 50):
+  - Shallow Water (height 40-50)
+  - Deep Water (height < 40)
+  - Beach (height 50-55, sandy transition)
+```
+
+**Advanced Features:**
+- Distance-to-river moisture boost (areas near rivers are lusher)
+- Elevation-based temperature gradient (alpine zones are colder)
+- Smooth biome transitions with 2-3 tile ecotone zones
+- Rain shadow effect (future - mountains block moisture)
+- Test: Biomes form natural patterns matching terrain
+
+**Success Criteria:**
+- ✅ At least 5-7 distinct biomes visible
+- ✅ Biomes correlate with elevation (alpine high, forest mid, grassland low)
+- ✅ River valleys have riparian biomes
+- ✅ Smooth transitions between biomes (no harsh boundaries)
+- ✅ Ecologically realistic distribution
+- ✅ Performance: <200ms to assign biomes to all chunks
+
+---
+
+### 3.4 Vegetation Placement System 🌳
 **Track B - Map Generator**
-- Create vegetation density maps per biome
-- Implement tree placement in forests (clustered patterns)
-- Add scattered trees in woodlands
-- Place bushes along forest edges and clearings
-- Add flowers in meadows and sunny areas
-- Implement grass coverage in appropriate areas
-- Create riparian vegetation along water sources
-- Add rocks and boulders in rocky outcrops
+**Depends On:** 3.3 (Biomes) - Vegetation matches biome type!
+
+**Core Implementation:**
+- Create VegetationDensityMap per biome type
+- Implement tree placement using biome-specific clustering
+  - Dense clustering in TemperateForest (80% tree coverage)
+  - Scattered trees in Woodland (30% coverage)
+  - No trees in Grassland (open meadows)
+  - Sparse trees in Alpine zones (treeline effect)
+- Place bushes along forest edges and clearings (transition zones)
+- Add flowers in meadows and sunny grasslands (spring/summer)
+- Implement grass coverage as terrain type in appropriate areas
+- Create riparian vegetation along water sources (willows, reeds)
+- Place rocks and boulders in rocky outcrops and mountains
 - Test: Generate world with natural-looking vegetation distribution
 
-### 3.5 Ecological Resource Distribution
+**Vegetation Density by Biome:**
+```rust
+BiomeVegetation {
+    TemperateForest: {
+        tree_density: 0.8,      // 80% of tiles
+        bush_density: 0.3,
+        grass_density: 0.9,
+        flower_density: 0.1,
+    },
+    Woodland: {
+        tree_density: 0.3,      // 30% scattered
+        bush_density: 0.4,
+        grass_density: 1.0,     // Full grass coverage
+        flower_density: 0.2,
+    },
+    Grassland: {
+        tree_density: 0.0,      // No trees
+        bush_density: 0.1,
+        grass_density: 1.0,
+        flower_density: 0.4,
+    },
+    Alpine: {
+        tree_density: 0.05,     // Treeline effect
+        bush_density: 0.2,
+        grass_density: 0.6,     // Alpine grass
+        flower_density: 0.3,    // Alpine flowers
+    },
+    Riparian: {
+        tree_density: 0.6,      // River trees (willow)
+        bush_density: 0.7,
+        grass_density: 1.0,
+        flower_density: 0.3,
+    },
+}
+```
+
+**Advanced Features:**
+- Tree clustering using Poisson disk sampling (natural spacing)
+- Size variation based on elevation (smaller trees at high altitude)
+- Avoid placing vegetation on steep slopes (>45 degrees)
+- Riparian vegetation follows river paths from 3.2
+- Season variation in flower/grass appearance (future)
+- Test: Vegetation looks organic, not random
+
+**Success Criteria:**
+- ✅ Forests have dense, clustered trees
+- ✅ Grasslands are open with scattered bushes
+- ✅ Rivers have lush bank vegetation
+- ✅ Mountains have sparse, small vegetation
+- ✅ No vegetation on very steep slopes or water
+- ✅ Performance: <1 second to place vegetation for full world
+
+---
+
+### 3.5 Ecological Resource Distribution & Balance 🍃
 **Track B - Map Generator**
-- Analyze food availability per biome (herbivore needs)
-- Calculate water accessibility (distance to nearest water)
-- Create spawn point recommendations based on resources
-- Implement resource regeneration parameters
-- Add seasonal variation support (future)
-- Balance food density for population support
-- Test: Verify animals can survive in generated worlds
+**Depends On:** 3.4 (Vegetation) - Resources = food for herbivores!
+
+**Core Implementation:**
+- Analyze food availability per biome (count vegetation tiles)
+- Calculate water accessibility (distance to nearest water tile from 3.2)
+- Create spawn point recommendations based on:
+  - Proximity to water (within 50 tiles)
+  - Adequate food density (herbivore needs X grass/bushes in Y radius)
+  - Terrain passability (avoid mountains for slow animals)
+- Implement resource density validation (ensure minimum food/water)
+- Add resource regeneration parameters (grass regrows, bushes respawn)
+- Balance food density to support target population sizes
+- Test: Verify animals can survive in generated worlds (run 100k tick test)
+
+**Resource Analysis:**
+```rust
+EcologicalMetrics {
+    water_coverage: f32,           // % of world that is water
+    avg_distance_to_water: f32,    // Tiles to nearest water source
+    food_density_by_biome: HashMap<BiomeType, f32>,
+    suitable_spawn_zones: Vec<IVec2>,  // Good starting positions
+    carrying_capacity_herbivore: u32,  // Max herbivores sustainable
+    carrying_capacity_carnivore: u32,  // Max predators sustainable
+}
+```
+
+**Balancing Checks:**
+- For every 100 herbivores, need X vegetation tiles within Y radius
+- Water accessibility: no land tile >50 tiles from water
+- Predator/prey ratio validation: 1 predator per 10-15 prey minimum
+- Spawn zone validation: at least 5 good starting areas
+- Test: Run long simulation (100k ticks) without mass starvation
+
+**Advanced Features:**
+- Heat map visualization of food availability
+- Water accessibility overlay for debugging
+- Resource regeneration rates configurable per biome
+- Seasonal food scarcity simulation (winter = less vegetation)
+- Test: Population remains stable over extended time
+
+**Success Criteria:**
+- ✅ All land tiles within 50 tiles of water
+- ✅ Adequate food density for target populations
+- ✅ Multiple suitable spawn zones identified
+- ✅ Simulation runs 100k ticks without ecosystem collapse
+- ✅ Resource distribution feels natural, not artificial
+- ✅ Performance: <200ms to calculate ecological metrics
 
 ---
 
@@ -842,29 +1065,51 @@ ResourceType enum: {
 
 ## Critical Path (Must Be Sequential)
 
-1. **Phase 3.1-3.2: Biome + Elevation Foundation** (Track B)
-   - Must come before river generation (rivers need elevation)
-   - Must come before vegetation placement (biome-specific)
+**🎯 HEIGHT MAPS ARE THE FOUNDATION - Everything else builds on elevation!**
 
-2. **Phase 3.3: River Generation** (Track B)
-   - Depends on elevation system
-   - Must come before riparian biomes
+1. **Phase 3.1: Height Map System** (Track B) ⛰️ **← START HERE**
+   - **FIRST STEP** - Must be implemented before anything else
+   - Provides elevation data for all other systems
+   - Influences terrain types (low=water, high=mountains)
+   - No dependencies - pure mathematical generation
 
-3. **Phase 3.4: Vegetation Placement** (Track B)
-   - Depends on biomes being defined
-   - Needed for food availability
+2. **Phase 3.2: River Generation** (Track B) 🌊
+   - **DEPENDS ON:** 3.1 (Height Maps) - Rivers flow downhill!
+   - Uses height gradients to trace natural water flow
+   - Must come before biome system (rivers affect moisture)
+   - Creates water sources that define riparian zones
 
-4. **Phase 3.5: Ecological Resource Distribution** (Track B)
-   - Depends on vegetation system
+3. **Phase 3.3: Biome System** (Track B) 🌲
+   - **DEPENDS ON:** 3.1 (Height) + 3.2 (Rivers)
+   - Uses elevation + moisture (from rivers) + temperature to select biomes
+   - Alpine biomes at high elevation
+   - Riparian zones near rivers
+   - Must come before vegetation placement
+
+4. **Phase 3.4: Vegetation Placement** (Track B) 🌳
+   - **DEPENDS ON:** 3.3 (Biomes)
+   - Biome type determines vegetation density and species
+   - Rivers from 3.2 influence riparian vegetation
+   - Elevation from 3.1 affects tree sizes (treeline effect)
+   - Needed for food availability calculations
+
+5. **Phase 3.5: Ecological Resource Distribution** (Track B) 🍃
+   - **DEPENDS ON:** 3.4 (Vegetation) + 3.2 (Rivers for water access)
+   - Analyzes food and water availability
+   - Validates ecosystem can support populations
    - Needed before ecosystem balancing
 
-5. **Phase 4.1-4.3: Godot Biome/River Rendering** (Track A)
-   - Can start after 3.1-3.3 complete (needs data)
-   - Can run in parallel with 3.4-3.5
+6. **Phase 4.1-4.3: Godot Visualization** (Track A) 🎨
+   - **CAN START AFTER:** 3.1-3.2 complete (has height + river data)
+   - Can run in parallel with 3.3-3.5 (biomes, vegetation)
+   - Height-based shading implemented early
+   - River rendering once rivers exist
+   - Biome coloring once biomes exist
 
-6. **Phase 5.1: Food Chain Balancing** (Track B)
-   - Depends on vegetation and resource distribution
+7. **Phase 5.1: Food Chain Balancing** (Track B) ⚖️
+   - **DEPENDS ON:** 3.5 (Resource Distribution)
    - Must come before other ecosystem features
+   - Uses ecological metrics from 3.5
 
 ## Parallel Development Opportunities
 
