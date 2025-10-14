@@ -73,15 +73,15 @@ func create_basic_tileset():
 	var tileset = TileSet.new()
 	tileset.tile_shape = 1  # ISOMETRIC
 	tileset.tile_layout = 1  # STACKED
-	tileset.tile_size = Vector2i(64, 64)  # Match RCT2 atlas cell size
-	print("   📐 TileSet configured: isometric, 64x64 (RCT2 atlas cell size)")
+	tileset.tile_size = Vector2i(64, 32)  # RCT2 isometric tile footprint (2:1 ratio)
+	print("   📐 TileSet configured: isometric, 64x32 (RCT2 2:1 isometric)")
 
 	# Create a single white diamond texture that we'll color with materials
 	var source = TileSetAtlasSource.new()
 	var white_texture = create_diamond_texture()
 	source.texture = white_texture
-	source.texture_region_size = Vector2i(64, 64)  # Match RCT2 atlas cell size
-	print("   🖼️ White diamond texture created (64x64)")
+	source.texture_region_size = Vector2i(64, 32)  # RCT2 isometric tile footprint
+	print("   🖼️ White diamond texture created (64x32)")
 
 	# Create just one tile at (0,0)
 	source.create_tile(Vector2i(0, 0))
@@ -103,50 +103,43 @@ func create_basic_tileset():
 
 	print("🎨 Terrain mapping configured for ", available_terrains.size(), " terrain types")
 
-# Create a diamond texture for isometric tiles (64×64 to match RCT2 atlas cells)
+# Create a diamond texture for isometric tiles (64×32 RCT2 isometric footprint)
 func create_diamond_texture() -> ImageTexture:
-	var image = Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	var image = Image.create(64, 32, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 
-	# Draw isometric diamond shape in bottom half of 64x64 cell
-	# RCT2 sprites are bottom-aligned in 64x64 cells
-	# Diamond is ~64 wide × 32 tall, positioned at bottom
-	var y_offset = 32  # Start diamond at vertical center
-
-	for y in range(32):  # Diamond height
-		for x in range(64):  # Diamond width
+	# Draw isometric diamond shape (64 wide × 32 tall - 2:1 ratio)
+	for y in range(32):
+		for x in range(64):
 			# Diamond shape calculation
 			var center_x = 32.0
 			var center_y = 16.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
-			# Isometric diamond: width 64, height 32
+			# Isometric diamond: width 64, height 32 (2:1 ratio)
 			if dx / 32.0 + dy / 16.0 <= 1.01:
-				image.set_pixel(x, y + y_offset, Color.WHITE)
+				image.set_pixel(x, y, Color.WHITE)
 
 	return ImageTexture.create_from_image(image)
 
-# Create a colored diamond texture for specific terrain (64×64 to match RCT2 atlas cells)
+# Create a colored diamond texture for specific terrain (64×32 RCT2 isometric footprint)
 func create_colored_diamond_texture(color: Color) -> ImageTexture:
-	var image = Image.create(64, 64, false, Image.FORMAT_RGBA8)
+	var image = Image.create(64, 32, false, Image.FORMAT_RGBA8)
 	image.fill(Color.TRANSPARENT)
 
-	# Draw isometric diamond shape in bottom half of 64x64 cell
-	# RCT2 sprites are bottom-aligned in 64x64 cells
-	var y_offset = 32  # Start diamond at vertical center
-
-	for y in range(32):  # Diamond height
-		for x in range(64):  # Diamond width
+	# Draw isometric diamond shape (64 wide × 32 tall - 2:1 ratio)
+	for y in range(32):
+		for x in range(64):
 			# Diamond shape calculation
 			var center_x = 32.0
 			var center_y = 16.0
 			var dx = float(abs(x - center_x))
 			var dy = float(abs(y - center_y))
 
-			# Isometric diamond: width 64, height 32
+			# Isometric diamond: width 64, height 32 (2:1 ratio)
 			if dx / 32.0 + dy / 16.0 <= 1.01:
-				image.set_pixel(x, y + y_offset, color)
+				image.set_pixel(x, y, color)
 
 	return ImageTexture.create_from_image(image)
 
@@ -165,7 +158,7 @@ func _get_or_create_terrain_source(terrain_type: String, color: Color) -> int:
 	# Create new source for this terrain type
 	var source = TileSetAtlasSource.new()
 	source.texture = create_colored_diamond_texture(color)
-	source.texture_region_size = Vector2i(64, 64)  # Match RCT2 atlas cell size
+	source.texture_region_size = Vector2i(64, 32)  # RCT2 isometric tile footprint
 	source.create_tile(Vector2i(0, 0))
 
 	var source_id = self.tile_set.add_source(source)
