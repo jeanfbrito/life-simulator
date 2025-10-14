@@ -11,6 +11,9 @@ var terrain_tile_ids: Dictionary = {}
 # RCT2 terrain texture manager for all terrain types (grass, sand, dirt, etc.)
 var rct2_terrain_manager = null
 
+# Water texture manager for RCT2 water sprites
+var water_texture_manager = null
+
 func _ready():
 	print("🗺️ TerrainTileMap initialized")
 
@@ -19,6 +22,11 @@ func _ready():
 	rct2_terrain_manager = TerrainManager.new()
 	add_child(rct2_terrain_manager)
 	print("🌍 RCT2TerrainTextureManager initialized")
+
+	# Initialize water texture manager (simple version for flat water)
+	water_texture_manager = _load_water_texture()
+	if water_texture_manager:
+		print("🌊 Water textures loaded")
 
 	# Set texture filtering to NEAREST for pixel art (no blurring)
 	texture_filter = TEXTURE_FILTER_NEAREST
@@ -277,19 +285,30 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String):
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""
-	return terrain_type in ["Grass", "Forest", "Sand", "Desert", "Dirt"]
+	return terrain_type in ["Grass", "Forest", "Sand", "Desert", "Dirt", "DeepWater", "ShallowWater"]
+
+func _is_water_terrain(terrain_type: String) -> bool:
+	"""Check if this terrain type is water."""
+	return terrain_type in ["DeepWater", "ShallowWater"]
 
 func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String):
-	"""Paint a tile using RCT2 terrain texture."""
-	# Get the RCT2 texture for this terrain type
-	var rct2_texture = rct2_terrain_manager.get_terrain_texture(terrain_type)
-	if not rct2_texture:
+	"""Paint a tile using RCT2 terrain or water texture."""
+	var texture: Texture2D = null
+
+	# Check if this is water terrain
+	if _is_water_terrain(terrain_type) and water_texture_manager:
+		texture = water_texture_manager
+	else:
+		# Get the RCT2 terrain texture
+		texture = rct2_terrain_manager.get_terrain_texture(terrain_type)
+
+	if not texture:
 		# Fallback to colored tile if texture loading failed
 		_paint_colored_tile(world_pos, terrain_type)
 		return
 
 	# Get or create a source for the RCT2 texture
-	var source_id = _get_or_create_texture_source(rct2_texture)
+	var source_id = _get_or_create_texture_source(texture)
 
 	# Set the cell with the RCT2 texture
 	set_cell(0, world_pos, source_id, Vector2i(0, 0))
@@ -297,7 +316,8 @@ func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String):
 	# Only print for first few tiles to avoid spam
 	if get_used_cells(0).size() <= 10:
 		var pixel_pos = map_to_local(world_pos)
-		print("🌍 Painted RCT2 terrain tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
+		var tile_type = "water" if _is_water_terrain(terrain_type) else "terrain"
+		print("🌊 Painted RCT2 %s tile at world %s (pixel: %s) as %s" % [tile_type, world_pos, pixel_pos, terrain_type])
 
 func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
 	"""Paint a tile using colored diamond (original method)."""
@@ -315,6 +335,21 @@ func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
 		# Get the actual pixel position of this tile in isometric space
 		var pixel_pos = map_to_local(world_pos)
 		print("🎨 Painted terrain tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type, " with source ID ", source_id)
+
+func _load_water_texture() -> Texture2D:
+	"""Load flat RCT2 water texture."""
+	var file_path = "assets/tiles/water/rct2/water_mask_00.png"
+	var image = Image.new()
+	var error = image.load(file_path)
+
+	if error == OK:
+		var texture = ImageTexture.create_from_image(image)
+		if texture:
+			print("✅ Loaded RCT2 water texture: ", file_path)
+			return texture
+
+	push_warning("🌊 Could not load water texture: " + file_path)
+	return null
 
 # Clear a chunk's tiles from the TileMap
 func clear_chunk(chunk_key: String):
