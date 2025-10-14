@@ -210,13 +210,15 @@ func _add_visible_chunks(visible_chunks: Array[String]) -> Array[String]:
 		# Always try to paint if chunk data exists in cache
 		var terrain_data = WorldDataCache.get_terrain_chunk(chunk_key)
 		if terrain_data.size() > 0 and not current_chunk_keys.has(chunk_key):
-			terrain_tilemap.paint_chunk(chunk_key, terrain_data)
-			
+			# Get height data for slope rendering
+			var height_data = WorldDataCache.get_height_chunk(chunk_key)
+			terrain_tilemap.paint_chunk(chunk_key, terrain_data, height_data)
+
 			# Paint resources too!
 			var resource_data = WorldDataCache.get_resource_chunk(chunk_key)
 			if resource_data.size() > 0:
 				resource_manager.paint_resources(chunk_key, resource_data)
-			
+
 			painted_chunks.append(chunk_key)
 
 	if painted_chunks.size() > 0:

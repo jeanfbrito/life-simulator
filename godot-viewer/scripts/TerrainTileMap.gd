@@ -237,13 +237,18 @@ func setup_terrain_mapping():
 	print("🎨 Terrain mapping setup for ", terrain_tile_ids.size(), " terrain types")
 
 # Paint a chunk's terrain on the TileMap
-func paint_chunk(chunk_key: String, terrain_data: Array):
+func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []):
 	if terrain_data.size() == 0:
 		print("⚠️ No terrain data for chunk ", chunk_key)
 		return
 
 	var chunk_origin = WorldDataCache.chunk_key_to_world_origin(chunk_key)
-	print("🎨 Painting chunk ", chunk_key, " with origin ", chunk_origin, " and ", terrain_data.size(), " rows")
+	var has_heights = height_data.size() > 0
+	print("🎨 Painting chunk ", chunk_key, " with origin ", chunk_origin, " (heights: ", has_heights, ")")
+
+	# Get chunk coordinates for slope calculation
+	var parts = chunk_key.split(",")
+	var chunk_coord = Vector2i(int(parts[0]), int(parts[1]))
 
 	var tiles_painted = 0
 	for y in range(terrain_data.size()):
@@ -261,7 +266,18 @@ func paint_chunk(chunk_key: String, terrain_data: Array):
 				chunk_origin.y + y
 			)
 
-			paint_terrain_tile(world_pos, terrain_type)
+			# Calculate slope index if we have height data
+			var slope_index = 0
+			if has_heights:
+				var world_cache = get_node("/root/WorldDataCache")
+				slope_index = SlopeCalculator.calculate_slope_index(
+					height_data,
+					Vector2i(x, y),
+					chunk_coord,
+					world_cache
+				)
+
+			paint_terrain_tile(world_pos, terrain_type, slope_index)
 			tiles_painted += 1
 
 	print("🎨 Painted ", tiles_painted, " terrain tiles for chunk ", chunk_key)
@@ -272,13 +288,13 @@ func paint_chunk(chunk_key: String, terrain_data: Array):
 		print("🎨 First cells: ", get_used_cells(0))
 
 # Paint a single terrain tile (isometric)
-func paint_terrain_tile(world_pos: Vector2i, terrain_type: String):
+func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0):
 	# world_pos is already in tile coordinates - use it directly!
 	# The isometric TileMap will handle the projection automatically
 
 	# Check if this terrain type has an RCT2 texture
 	if _should_use_rct2_texture(terrain_type) and rct2_terrain_manager and rct2_terrain_manager.has_textures():
-		_paint_rct2_tile(world_pos, terrain_type)
+		_paint_rct2_tile(world_pos, terrain_type, slope_index)
 	else:
 		# Use colored diamond for terrain without RCT2 textures
 		_paint_colored_tile(world_pos, terrain_type)
@@ -291,16 +307,16 @@ func _is_water_terrain(terrain_type: String) -> bool:
 	"""Check if this terrain type is water."""
 	return terrain_type in ["DeepWater", "ShallowWater"]
 
-func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String):
-	"""Paint a tile using RCT2 terrain or water texture."""
+func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0):
+	"""Paint a tile using RCT2 terrain or water texture with slope variation."""
 	var texture: Texture2D = null
 
 	# Check if this is water terrain
 	if _is_water_terrain(terrain_type) and water_texture_manager:
 		texture = water_texture_manager
 	else:
-		# Get the RCT2 terrain texture
-		texture = rct2_terrain_manager.get_terrain_texture(terrain_type)
+		# Get the RCT2 terrain texture with slope variation
+		texture = rct2_terrain_manager.get_terrain_texture(terrain_type, slope_index)
 
 	if not texture:
 		# Fallback to colored tile if texture loading failed
@@ -317,7 +333,8 @@ func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String):
 	if get_used_cells(0).size() <= 10:
 		var pixel_pos = map_to_local(world_pos)
 		var tile_type = "water" if _is_water_terrain(terrain_type) else "terrain"
-		print("🌊 Painted RCT2 %s tile at world %s (pixel: %s) as %s" % [tile_type, world_pos, pixel_pos, terrain_type])
+		var slope_info = " (slope %d)" % slope_index if slope_index > 0 else ""
+		print("🌊 Painted RCT2 %s tile at world %s (pixel: %s) as %s%s" % [tile_type, world_pos, pixel_pos, terrain_type, slope_info])
 
 func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
 	"""Paint a tile using colored diamond (original method)."""
