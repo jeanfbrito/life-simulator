@@ -256,11 +256,15 @@ impl WorldGenerator {
         let mut heights = Vec::with_capacity(16);
         let perlin = Perlin::new(self.config.seed as u32);
 
-        // Height map parameters (OpenRCT2 style - smooth, gentle slopes)
-        let base_height = 50; // Sea level
-        let noise_scale = 0.02; // Low frequency for smooth terrain
-        let noise_amplitude = 12.0; // Gentle variation (±6 height units)
+        // OpenRCT2-style Fractional Brownian Motion (fBm) parameters
+        // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:194
+        let base_freq = 0.015; // Base frequency (lower = larger features)
+        let octaves = 4; // Number of noise layers
+        let lacunarity = 2.0; // Frequency multiplier per octave (OpenRCT2 uses 2.0)
+        let persistence = 0.65; // Amplitude multiplier per octave (OpenRCT2 uses 0.65)
+        let amplitude = 8.0; // Overall height variation range
 
+        // Generate initial heights with fBm
         for y in 0..16 {
             let mut row = Vec::with_capacity(16);
             for x in 0..16 {
@@ -268,25 +272,70 @@ impl WorldGenerator {
                 let world_y = chunk_y * 16 + y;
 
                 // Get base height from island pattern
-                let base = self.calculate_base_height(world_x, world_y);
+                let base = self.calculate_base_height(world_x, world_y) as f64;
 
-                // Add Perlin noise for natural variation
-                let noise_x = (world_x as f64) * noise_scale;
-                let noise_y = (world_y as f64) * noise_scale;
-                let noise_value = perlin.get([noise_x, noise_y]);
+                // Apply Fractional Brownian Motion (multiple octaves)
+                let mut noise_value = 0.0;
+                let mut freq = base_freq;
+                let mut amp = 1.0;
+                let mut total_amp = 0.0;
 
-                // Combine base height with noise
-                let height = base as f64 + (noise_value * noise_amplitude);
+                for _ in 0..octaves {
+                    let sample_x = (world_x as f64) * freq;
+                    let sample_y = (world_y as f64) * freq;
+                    noise_value += perlin.get([sample_x, sample_y]) * amp;
+                    total_amp += amp;
+                    freq *= lacunarity; // Increase frequency
+                    amp *= persistence; // Decrease amplitude
+                }
 
-                // Clamp to u8 range (0-255)
+                // Normalize and scale
+                noise_value /= total_amp;
+                let height = base + (noise_value * amplitude);
+
+                // Clamp to u8 range
                 let final_height = height.max(0.0).min(255.0) as u8;
-
                 row.push(final_height);
             }
             heights.push(row);
         }
 
+        // Apply smoothing (OpenRCT2 does 2-7 passes, we'll do 3)
+        // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:212
+        for _ in 0..3 {
+            heights = self.smooth_heights(heights);
+        }
+
         heights
+    }
+
+    /// Smooth height map using 3×3 box filter (OpenRCT2 style)
+    /// Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:166-174
+    fn smooth_heights(&self, heights: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+        let mut smoothed = Vec::with_capacity(16);
+
+        for y in 0..16 {
+            let mut row = Vec::with_capacity(16);
+            for x in 0..16 {
+                let mut sum = 0;
+                let mut count = 0;
+
+                // 3×3 box filter
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let ny = (y as i32 + dy).clamp(0, 15) as usize;
+                        let nx = (x as i32 + dx).clamp(0, 15) as usize;
+                        sum += heights[ny][nx] as u32;
+                        count += 1;
+                    }
+                }
+
+                row.push((sum / count) as u8);
+            }
+            smoothed.push(row);
+        }
+
+        smoothed
     }
 
     /// Calculate base height for a tile based on circular island pattern
