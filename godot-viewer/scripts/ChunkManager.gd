@@ -314,9 +314,14 @@ func merge_chunk_data(new_data: Dictionary, existing_world_data: Dictionary):
 	if new_data.has("chunks"):
 		for key in new_data.chunks:
 			existing_world_data.chunks[key] = new_data.chunks[key]
+
 	if new_data.has("resources"):
 		for key in new_data.resources:
 			existing_world_data.resources[key] = new_data.resources[key]
+
+	if new_data.has("heights"):
+		for key in new_data.heights:
+			existing_world_data.heights[key] = new_data.heights[key]
 
 # Update connection status
 func update_connection_status(connected: bool):

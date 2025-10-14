@@ -501,9 +501,10 @@ impl WorldGenerator {
             heights.push(row);
         }
 
-        // Apply smoothing (OpenRCT2 does 2-7 passes, we'll do 3)
+        // Apply minimal smoothing to preserve dramatic height changes for visible slopes
+        // OpenRCT2 does 2-7 passes, but fewer passes = more dramatic elevation
         // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:212
-        for _ in 0..3 {
+        for _ in 0..1 {
             heights = self.smooth_heights(heights);
         }
 
