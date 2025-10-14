@@ -4,7 +4,7 @@
 extends CanvasLayer
 
 # References
-var tilemap: TileMap = null
+var tilemap: Node2D = null
 var camera: Camera2D = null
 
 # Tooltip container
@@ -65,7 +65,7 @@ func _ready():
 
 	print("🖱️ TooltipOverlay initialized")
 
-func set_tilemap(p_tilemap: TileMap):
+func set_tilemap(p_tilemap: Node2D):
 	tilemap = p_tilemap
 
 	# Create debug overlay for tile visualization
@@ -153,11 +153,14 @@ func _draw_debug_tile(tile_pos: Vector2i):
 
 	# Get the isometric position for this tile
 	var center = tilemap.map_to_local(tile_pos)
-	var tile_size = tilemap.tile_set.tile_size
+
+	# OpenRCT2 tile constants (64×32 isometric diamond)
+	const TILE_WIDTH = 64
+	const TILE_HEIGHT = 32
 
 	# Calculate diamond corners (same as GridOverlay but in red)
-	var half_width = tile_size.x / 2.0  # 32 for OpenRCT2 64×32 tiles
-	var half_height = tile_size.y / 2.0  # 16 for OpenRCT2 64×32 tiles
+	var half_width = TILE_WIDTH / 2.0  # 32 for OpenRCT2 64×32 tiles
+	var half_height = TILE_HEIGHT / 2.0  # 16 for OpenRCT2 64×32 tiles
 
 	# Adjust center: map_to_local() gives the top point, move to visual center
 	var visual_center = center + Vector2(0, half_height)

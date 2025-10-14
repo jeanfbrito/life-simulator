@@ -6,7 +6,7 @@ extends Node2D
 @export var grid_enabled: bool = false  # Disabled by default with heightmap terrain (grid doesn't follow elevation)
 
 # Reference to the coord_helper tilemap for coordinate conversion
-var tilemap: TileMap = null
+var tilemap: Node2D = null
 var camera: Camera2D = null
 
 # Grid bounds (in tile coordinates)
@@ -20,7 +20,7 @@ func _ready():
 	position = Vector2(0, 0)
 	print("🔲 GridOverlay initialized - Press 'G' to toggle")
 
-func set_tilemap(p_tilemap: TileMap):
+func set_tilemap(p_tilemap: Node2D):
 	tilemap = p_tilemap
 
 func set_camera(p_camera: Camera2D):
@@ -47,13 +47,16 @@ func _draw():
 func _draw_tile_border(tile_pos: Vector2i):
 	# Get the isometric tile center position
 	var center = tilemap.map_to_local(tile_pos)
-	var tile_size = tilemap.tile_set.tile_size
+
+	# OpenRCT2 tile constants (64×32 isometric diamond)
+	const TILE_WIDTH = 64
+	const TILE_HEIGHT = 32
 
 	# For OpenRCT2 isometric tiles (64×32), the corners form a diamond
 	# In Godot's isometric layout, map_to_local() returns the TOP corner of the diamond
 	# We need to offset by half_height to get the actual center
-	var half_width = tile_size.x / 2.0  # 64 / 2 = 32
-	var half_height = tile_size.y / 2.0  # 32 / 2 = 16
+	var half_width = TILE_WIDTH / 2.0  # 64 / 2 = 32
+	var half_height = TILE_HEIGHT / 2.0  # 32 / 2 = 16
 
 	# Adjust center: map_to_local() gives the top point, move to visual center
 	var visual_center = center + Vector2(0, half_height)

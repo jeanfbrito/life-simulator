@@ -12,7 +12,7 @@
 [node name="World" type="Node2D"]
 script = ExtResource("1_world_renderer")
 
-[node name="TerrainTileMap" type="TileMap" parent="."]
+[node name="TerrainTileMap" type="Node2D" parent="."]
 script = ExtResource("2_terrain_tilemap")
 
 [node name="Camera2D" type="Camera2D" parent="TerrainTileMap"]

@@ -3,7 +3,7 @@
 
 extends Node2D
 
-@onready var terrain_tilemap: TileMap = $TerrainTileMap
+@onready var terrain_tilemap: Node2D = $TerrainTileMap
 @onready var camera: Camera2D = $TerrainTileMap/Camera2D
 @onready var resource_manager: Node2D = $TerrainTileMap/ResourceManager
 @onready var entity_manager: Node2D = $TerrainTileMap/EntityManager
@@ -58,10 +58,7 @@ func _ready():
 
 	# Print camera and tilemap info
 	print("📹 Camera actual position: ", camera.position, " zoom: ", camera.zoom)
-	print("📹 TileMap tile_set: ", "Loaded" if terrain_tilemap.tile_set != null else "NULL")
-	if terrain_tilemap.tile_set:
-		print("📹 TileSet tile_shape: ", terrain_tilemap.tile_set.tile_shape)
-		print("📹 TileSet tile_size: ", terrain_tilemap.tile_set.tile_size)
+	# TerrainTileMap is now Node2D-based (not TileMap), no tile_set property
 
 	# Start world loading immediately for testing
 	print("🚀 Starting world loading immediately (timer bypassed)")
@@ -170,18 +167,11 @@ func _update_visible_chunks():
 		set_meta("screenshot_taken", true)
 		call_deferred("_take_debug_screenshot")
 
-	# Debug: Print TileMap state
-	print("📊 TileMap stats:")
-	print("   - Total cells rendered: ", terrain_tilemap.get_used_cells(0).size())
-	print("   - TileSet exists: ", terrain_tilemap.tile_set != null)
+	# Debug: Print TerrainTileMap state (Sprite2D-based, not TileMap)
+	print("📊 TerrainTileMap stats:")
 	print("   - Visible: ", terrain_tilemap.visible)
 	print("   - Modulate: ", terrain_tilemap.modulate)
-	if terrain_tilemap.get_used_cells(0).size() > 0:
-		var sample_cells = terrain_tilemap.get_used_cells(0).slice(0, min(5, terrain_tilemap.get_used_cells(0).size()))
-		print("   - Sample cells: ", sample_cells)
-		for cell_pos in sample_cells:
-			var pixel_pos = terrain_tilemap.map_to_local(cell_pos)
-			print("     Cell ", cell_pos, " -> Pixel ", pixel_pos)
+	# TerrainTileMap uses Sprite2D-based rendering, not cell-based TileMap
 
 # Get chunks currently visible to the camera
 func _get_visible_chunks() -> Array[String]:
