@@ -1,0 +1,350 @@
+{
+  "metadata": {
+    "title": "RCT2 Trees Index",
+    "generated": "2025-10-13",
+    "total_trees": 32,
+    "extracted": 11,
+    "available": 21
+  },
+  "trees": [
+    {
+      "dat_file": "TCF.DAT",
+      "object_id": "rct2.scenery_small.tcf",
+      "type": "scenery_small",
+      "name": "Caucasian Fir Tree",
+      "height": 120,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 4.5,
+      "notes": "Dark green dense foliage"
+    },
+    {
+      "dat_file": "TSP.DAT",
+      "object_id": "rct2.scenery_small.tsp",
+      "type": "scenery_small",
+      "name": "Scots Pine Tree",
+      "height": 156,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 6.4,
+      "notes": "Tallest tree - iconic"
+    },
+    {
+      "dat_file": "TRF.DAT",
+      "object_id": "rct2.scenery_small.trf",
+      "type": "scenery_small",
+      "name": "Red Fir Tree",
+      "height": 140,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 5.2,
+      "notes": "Medium green classic fir"
+    },
+    {
+      "dat_file": "TRF2.DAT",
+      "object_id": "rct2.scenery_small.trf2",
+      "type": "scenery_small",
+      "name": "Red Fir variant 2",
+      "height": 140,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 4.3,
+      "notes": "Light green narrow profile"
+    },
+    {
+      "dat_file": "TRF3.DAT",
+      "object_id": "rct2.scenery_small.trf3",
+      "type": "scenery_small",
+      "name": "Red Fir variant 3",
+      "height": 140,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 5.3,
+      "notes": "Medium-dark full canopy"
+    },
+    {
+      "dat_file": "TMZP.DAT",
+      "object_id": "rct2.scenery_small.tmzp",
+      "type": "scenery_small",
+      "name": "Montezuma Pine Tree",
+      "height": 135,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 4.4,
+      "notes": "Dark bushy canopy"
+    },
+    {
+      "dat_file": "TAP.DAT",
+      "object_id": "rct2.scenery_small.tap",
+      "type": "scenery_small",
+      "name": "Aleppo Pine Tree",
+      "height": 125,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 3.6,
+      "notes": "Compact Mediterranean"
+    },
+    {
+      "dat_file": "TCRP.DAT",
+      "object_id": "rct2.scenery_small.tcrp",
+      "type": "scenery_small",
+      "name": "Corsican Pine Tree",
+      "height": 145,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 5.6,
+      "notes": "Tall elegant vertical"
+    },
+    {
+      "dat_file": "TBP.DAT",
+      "object_id": "rct2.scenery_small.tbp",
+      "type": "scenery_small",
+      "name": "Black Poplar Tree",
+      "height": 130,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 5.0,
+      "notes": "Round deciduous canopy"
+    },
+    {
+      "dat_file": "TCL.DAT",
+      "object_id": "rct2.scenery_small.tcl",
+      "type": "scenery_small",
+      "name": "Cedar of Lebanon Tree",
+      "height": 150,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 11.0,
+      "notes": "Largest file - horizontal branches"
+    },
+    {
+      "dat_file": "TEL.DAT",
+      "object_id": "rct2.scenery_small.tel",
+      "type": "scenery_small",
+      "name": "European Larch Tree",
+      "height": 140,
+      "category": "GRASS_TREE",
+      "status": "EXTRACTED",
+      "file_size_kb": 5.1,
+      "notes": "Light airy deciduous conifer"
+    },
+    {
+      "dat_file": "TOAS.DAT",
+      "object_id": "rct2.scenery_small.toas",
+      "type": "scenery_small",
+      "name": "Oasis Palm Tree",
+      "height": 145,
+      "category": "DESERT_TREE",
+      "status": "AVAILABLE",
+      "notes": "Desert oasis palm"
+    },
+    {
+      "dat_file": "TLC.DAT",
+      "object_id": "rct2.scenery_small.tlc",
+      "type": "scenery_small",
+      "name": "Lombardy Cypress Tree",
+      "height": 160,
+      "category": "DESERT_TREE",
+      "status": "AVAILABLE",
+      "notes": "Tall narrow cypress"
+    },
+    {
+      "dat_file": "TMO.DAT",
+      "object_id": "rct2.scenery_small.tmo",
+      "type": "scenery_small",
+      "name": "Mediterranean Oak Tree",
+      "height": 135,
+      "category": "DESERT_TREE",
+      "status": "AVAILABLE",
+      "notes": "Mediterranean style"
+    },
+    {
+      "dat_file": "TWW.DAT",
+      "object_id": "rct2.scenery_small.tww",
+      "type": "scenery_small",
+      "name": "Weeping Willow Tree",
+      "height": 140,
+      "category": "DESERT_TREE",
+      "status": "AVAILABLE",
+      "notes": "Near water placement"
+    },
+    {
+      "dat_file": "TCFS.DAT",
+      "object_id": "rct2.scenery_small.tcfs",
+      "type": "scenery_small",
+      "name": "Caucasian Fir (Snow)",
+      "height": 120,
+      "category": "SNOW_TREE",
+      "status": "AVAILABLE",
+      "notes": "Snowy version of TCF"
+    },
+    {
+      "dat_file": "TRFS.DAT",
+      "object_id": "rct2.scenery_small.trfs",
+      "type": "scenery_small",
+      "name": "Red Fir (Snow)",
+      "height": 140,
+      "category": "SNOW_TREE",
+      "status": "AVAILABLE",
+      "notes": "Snowy version of TRF"
+    },
+    {
+      "dat_file": "TSP1.DAT",
+      "object_id": "rct2.scenery_small.tsp1",
+      "type": "scenery_small",
+      "name": "Scots Pine (Snow 1)",
+      "height": 156,
+      "category": "SNOW_TREE",
+      "status": "AVAILABLE",
+      "notes": "Light snow coverage"
+    },
+    {
+      "dat_file": "TSP2.DAT",
+      "object_id": "rct2.scenery_small.tsp2",
+      "type": "scenery_small",
+      "name": "Scots Pine (Snow 2)",
+      "height": 156,
+      "category": "SNOW_TREE",
+      "status": "AVAILABLE",
+      "notes": "Medium snow coverage"
+    },
+    {
+      "dat_file": "TSPH.DAT",
+      "object_id": "rct2.scenery_small.tsph",
+      "type": "scenery_small",
+      "name": "Scots Pine (Snow Heavy)",
+      "height": 156,
+      "category": "SNOW_TREE",
+      "status": "AVAILABLE",
+      "notes": "Heavy snow coverage"
+    },
+    {
+      "dat_file": "3X3ALTRE.DAT",
+      "object_id": "rct2.ww.3x3altre",
+      "type": "scenery_large",
+      "name": "Jungle Tree with Leopards",
+      "height": 180,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Animated animals"
+    },
+    {
+      "dat_file": "3X3ATRE1.DAT",
+      "object_id": "rct2.ww.3x3atre1",
+      "type": "scenery_large",
+      "name": "Jungle Tree 2",
+      "height": 170,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Dense canopy"
+    },
+    {
+      "dat_file": "3X3ATRE2.DAT",
+      "object_id": "rct2.ww.3x3atre2",
+      "type": "scenery_large",
+      "name": "Jungle Tree 1",
+      "height": 175,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Wide spread"
+    },
+    {
+      "dat_file": "3X3ATRE3.DAT",
+      "object_id": "rct2.ww.3x3atre3",
+      "type": "scenery_large",
+      "name": "Jungle Tree with Vines",
+      "height": 172,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Hanging vines"
+    },
+    {
+      "dat_file": "3X3EUCAL.DAT",
+      "object_id": "rct2.ww.3x3eucal",
+      "type": "scenery_large",
+      "name": "Eucalyptus Tree",
+      "height": 165,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Australian theme"
+    },
+    {
+      "dat_file": "3X3MANTR.DAT",
+      "object_id": "rct2.ww.3x3mantr",
+      "type": "scenery_large",
+      "name": "Mangrove Tree",
+      "height": 160,
+      "tiles": "3×3",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Swamp tree"
+    },
+    {
+      "dat_file": "4X4GMANT.DAT",
+      "object_id": "rct2.tt.4x4gmant",
+      "type": "scenery_large",
+      "name": "Giant Mangrove Tree",
+      "height": 200,
+      "tiles": "4×4",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Massive landmark"
+    },
+    {
+      "dat_file": "4X4VOLCA.DAT",
+      "object_id": "rct2.tt.4x4volca",
+      "type": "scenery_large",
+      "name": "Volcano with small trees",
+      "height": 220,
+      "tiles": "4×4",
+      "category": "LARGE_TREE",
+      "status": "AVAILABLE",
+      "notes": "Volcano with trees"
+    },
+    {
+      "dat_file": "1X1ATRE2.DAT",
+      "object_id": "rct2.ww.1x1atre2",
+      "type": "scenery_small",
+      "name": "Vine Tree",
+      "height": 95,
+      "category": "SMALL_TREE",
+      "status": "AVAILABLE",
+      "notes": "Compact vine tree"
+    },
+    {
+      "dat_file": "1X1JUGT2.DAT",
+      "object_id": "rct2.ww.1x1jugt2",
+      "type": "scenery_small",
+      "name": "Small Rainforest Tree 1",
+      "height": 100,
+      "category": "SMALL_TREE",
+      "status": "AVAILABLE",
+      "notes": "Compact rainforest"
+    },
+    {
+      "dat_file": "1X1JUGT3.DAT",
+      "object_id": "rct2.ww.1x1jugt3",
+      "type": "scenery_small",
+      "name": "Small Rainforest Tree 2",
+      "height": 105,
+      "category": "SMALL_TREE",
+      "status": "AVAILABLE",
+      "notes": "Compact rainforest"
+    },
+    {
+      "dat_file": "1X1ATREE.DAT",
+      "object_id": "rct2.ww.1x1atree",
+      "type": "scenery_small",
+      "name": "Low Bush",
+      "height": 60,
+      "category": "BUSH",
+      "status": "AVAILABLE",
+      "notes": "Ground cover vegetation"
+    }
+  ]
+}

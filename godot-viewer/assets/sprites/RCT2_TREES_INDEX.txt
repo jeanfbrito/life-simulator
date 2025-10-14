@@ -1,0 +1,13 @@
+# RCT2 COMPLETE TREES INDEX
+# Generated: $(date)
+# Source: RollerCoaster Tycoon 2 Triple Thrill Pack ObjData
+#
+# This index lists ALL tree objects found in RCT2
+# Format: FILENAME | OBJECT_ID | TYPE | NAME | HEIGHT | CATEGORY
+#
+# CATEGORIES:
+#   SMALL_TREE   - scenery_small with isTree=true (4 isometric views)
+#   LARGE_TREE   - scenery_large with "Tree" in name (multi-tile)
+#   BUSH         - Small vegetation
+#
+

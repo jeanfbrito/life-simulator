@@ -1,0 +1,8 @@
+# Ignore extracted RCT2 objects (they're large and can be regenerated)
+extracted-objects/
+extracted-trees/
+RCT2-Objects-Catalog.md
+
+# User might extract to custom locations
+*.dat
+*.DAT

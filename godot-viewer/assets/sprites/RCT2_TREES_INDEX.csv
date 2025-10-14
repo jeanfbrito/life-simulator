@@ -1,0 +1,33 @@
+DAT_FILE,OBJECT_ID,OBJECT_TYPE,NAME,HEIGHT,CATEGORY,STATUS,NOTES
+TCF.DAT,rct2.scenery_small.tcf,scenery_small,Caucasian Fir Tree,120,GRASS_TREE,EXTRACTED,Dark green dense foliage
+TSP.DAT,rct2.scenery_small.tsp,scenery_small,Scots Pine Tree,156,GRASS_TREE,EXTRACTED,Tallest tree - iconic
+TRF.DAT,rct2.scenery_small.trf,scenery_small,Red Fir Tree,140,GRASS_TREE,EXTRACTED,Medium green classic fir
+TRF2.DAT,rct2.scenery_small.trf2,scenery_small,Red Fir variant 2,140,GRASS_TREE,EXTRACTED,Light green narrow profile
+TRF3.DAT,rct2.scenery_small.trf3,scenery_small,Red Fir variant 3,140,GRASS_TREE,EXTRACTED,Medium-dark full canopy
+TMZP.DAT,rct2.scenery_small.tmzp,scenery_small,Montezuma Pine Tree,135,GRASS_TREE,EXTRACTED,Dark bushy canopy
+TAP.DAT,rct2.scenery_small.tap,scenery_small,Aleppo Pine Tree,125,GRASS_TREE,EXTRACTED,Compact Mediterranean
+TCRP.DAT,rct2.scenery_small.tcrp,scenery_small,Corsican Pine Tree,145,GRASS_TREE,EXTRACTED,Tall elegant vertical
+TBP.DAT,rct2.scenery_small.tbp,scenery_small,Black Poplar Tree,130,GRASS_TREE,EXTRACTED,Round deciduous canopy
+TCL.DAT,rct2.scenery_small.tcl,scenery_small,Cedar of Lebanon Tree,150,GRASS_TREE,EXTRACTED,Largest file - horizontal branches
+TEL.DAT,rct2.scenery_small.tel,scenery_small,European Larch Tree,140,GRASS_TREE,EXTRACTED,Light airy deciduous conifer
+TOAS.DAT,rct2.scenery_small.toas,scenery_small,Oasis Palm Tree,145,DESERT_TREE,AVAILABLE,Desert oasis palm
+TLC.DAT,rct2.scenery_small.tlc,scenery_small,Lombardy Cypress Tree,160,DESERT_TREE,AVAILABLE,Tall narrow cypress
+TMO.DAT,rct2.scenery_small.tmo,scenery_small,Mediterranean Oak Tree,135,DESERT_TREE,AVAILABLE,Mediterranean style
+TWW.DAT,rct2.scenery_small.tww,scenery_small,Weeping Willow Tree,140,DESERT_TREE,AVAILABLE,Near water placement
+TCFS.DAT,rct2.scenery_small.tcfs,scenery_small,Caucasian Fir (Snow),120,SNOW_TREE,AVAILABLE,Snowy version of TCF
+TRFS.DAT,rct2.scenery_small.trfs,scenery_small,Red Fir (Snow),140,SNOW_TREE,AVAILABLE,Snowy version of TRF
+TSP1.DAT,rct2.scenery_small.tsp1,scenery_small,Scots Pine (Snow 1),156,SNOW_TREE,AVAILABLE,Light snow coverage
+TSP2.DAT,rct2.scenery_small.tsp2,scenery_small,Scots Pine (Snow 2),156,SNOW_TREE,AVAILABLE,Medium snow coverage
+TSPH.DAT,rct2.scenery_small.tsph,scenery_small,Scots Pine (Snow Heavy),156,SNOW_TREE,AVAILABLE,Heavy snow coverage
+3X3ALTRE.DAT,rct2.ww.3x3altre,scenery_large,Jungle Tree with Leopards,180,LARGE_TREE,AVAILABLE,3×3 tiles with animals
+3X3ATRE1.DAT,rct2.ww.3x3atre1,scenery_large,Jungle Tree 2,170,LARGE_TREE,AVAILABLE,3×3 dense canopy
+3X3ATRE2.DAT,rct2.ww.3x3atre2,scenery_large,Jungle Tree 1,175,LARGE_TREE,AVAILABLE,3×3 wide spread
+3X3ATRE3.DAT,rct2.ww.3x3atre3,scenery_large,Jungle Tree with Vines,172,LARGE_TREE,AVAILABLE,3×3 hanging vines
+3X3EUCAL.DAT,rct2.ww.3x3eucal,scenery_large,Eucalyptus Tree,165,LARGE_TREE,AVAILABLE,3×3 Australian theme
+3X3MANTR.DAT,rct2.ww.3x3mantr,scenery_large,Mangrove Tree,160,LARGE_TREE,AVAILABLE,3×3 swamp tree
+4X4GMANT.DAT,rct2.tt.4x4gmant,scenery_large,Giant Mangrove Tree,200,LARGE_TREE,AVAILABLE,4×4 massive landmark
+4X4VOLCA.DAT,rct2.tt.4x4volca,scenery_large,Volcano with small trees,220,LARGE_TREE,AVAILABLE,4×4 volcano with trees
+1X1ATRE2.DAT,rct2.ww.1x1atre2,scenery_small,Vine Tree,95,SMALL_TREE,AVAILABLE,Compact vine tree
+1X1JUGT2.DAT,rct2.ww.1x1jugt2,scenery_small,Small Rainforest Tree 1,100,SMALL_TREE,AVAILABLE,Compact rainforest
+1X1JUGT3.DAT,rct2.ww.1x1jugt3,scenery_small,Small Rainforest Tree 2,105,SMALL_TREE,AVAILABLE,Compact rainforest
+1X1ATREE.DAT,rct2.ww.1x1atree,scenery_small,Low Bush,60,BUSH,AVAILABLE,Ground cover vegetation

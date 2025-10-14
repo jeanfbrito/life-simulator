@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCT2 Trees Index - Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .stat-card h3 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            margin-bottom: 30px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 1.1em;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-box input:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            background: #f5f5f5;
+            border: 2px solid #ddd;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+
+        .filter-btn:hover {
+            background: #efefef;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .results-info {
+            margin-bottom: 15px;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
+        thead {
+            background: #667eea;
+            color: white;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-extracted {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-available {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            background: #e7f3ff;
+            color: #0066cc;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .no-results h3 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            table {
+                font-size: 0.85em;
+            }
+
+            th, td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌲 RCT2 Trees Index</h1>
+        <p class="subtitle">Search and browse all available RCT2 tree sprites</p>
+
+        <div class="stats">
+            <div class="stat-card">
+                <h3 id="total-count">32</h3>
+                <p>Total Trees</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="extracted-count">11</h3>
+                <p>Extracted</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="available-count">21</h3>
+                <p>Available</p>
+            </div>
+        </div>
+
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search by name, DAT file, category, or notes...">
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="ALL">All Trees</button>
+            <button class="filter-btn" data-filter="EXTRACTED">✅ Extracted</button>
+            <button class="filter-btn" data-filter="AVAILABLE">📦 Available</button>
+            <button class="filter-btn" data-filter="GRASS_TREE">🌲 Grass</button>
+            <button class="filter-btn" data-filter="DESERT_TREE">🏜️ Desert</button>
+            <button class="filter-btn" data-filter="SNOW_TREE">❄️ Snow</button>
+            <button class="filter-btn" data-filter="LARGE_TREE">🌳 Large (3×3, 4×4)</button>
+            <button class="filter-btn" data-filter="SMALL_TREE">🌿 Small</button>
+            <button class="filter-btn" data-filter="BUSH">🍀 Bush</button>
+        </div>
+
+        <div class="results-info" id="results-info"></div>
+
+        <table id="trees-table">
+            <thead>
+                <tr>
+                    <th>DAT File</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Height</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody id="trees-tbody">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="no-results" id="no-results" style="display:none;">
+            <h3>No trees found</h3>
+            <p>Try adjusting your search or filters</p>
+        </div>
+    </div>
+
+    <script>
+        let treesData = [];
+        let currentFilter = 'ALL';
+
+        // Load JSON data
+        fetch('RCT2_TREES_INDEX.json')
+            .then(response => response.json())
+            .then(data => {
+                treesData = data.trees;
+                document.getElementById('total-count').textContent = data.metadata.total_trees;
+                document.getElementById('extracted-count').textContent = data.metadata.extracted;
+                document.getElementById('available-count').textContent = data.metadata.available;
+                renderTrees(treesData);
+                updateResultsInfo(treesData.length);
+            })
+            .catch(error => {
+                console.error('Error loading trees data:', error);
+                document.getElementById('trees-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;color:red;">Error loading data. Make sure RCT2_TREES_INDEX.json is in the same directory.</td></tr>';
+            });
+
+        // Search functionality
+        document.getElementById('search-input').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            filterAndRender(searchTerm, currentFilter);
+        });
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentFilter = this.dataset.filter;
+                const searchTerm = document.getElementById('search-input').value.toLowerCase();
+                filterAndRender(searchTerm, currentFilter);
+            });
+        });
+
+        function filterAndRender(searchTerm, filter) {
+            let filtered = treesData;
+
+            // Apply category filter
+            if (filter !== 'ALL') {
+                if (filter === 'EXTRACTED' || filter === 'AVAILABLE') {
+                    filtered = filtered.filter(tree => tree.status === filter);
+                } else {
+                    filtered = filtered.filter(tree => tree.category === filter);
+                }
+            }
+
+            // Apply search filter
+            if (searchTerm) {
+                filtered = filtered.filter(tree =>
+                    tree.name.toLowerCase().includes(searchTerm) ||
+                    tree.dat_file.toLowerCase().includes(searchTerm) ||
+                    tree.category.toLowerCase().includes(searchTerm) ||
+                    tree.notes.toLowerCase().includes(searchTerm) ||
+                    tree.object_id.toLowerCase().includes(searchTerm)
+                );
+            }
+
+            renderTrees(filtered);
+            updateResultsInfo(filtered.length);
+        }
+
+        function renderTrees(trees) {
+            const tbody = document.getElementById('trees-tbody');
+            const noResults = document.getElementById('no-results');
+            const table = document.getElementById('trees-table');
+
+            if (trees.length === 0) {
+                table.style.display = 'none';
+                noResults.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            noResults.style.display = 'none';
+
+            tbody.innerHTML = trees.map(tree => `
+                <tr>
+                    <td><strong>${tree.dat_file}</strong></td>
+                    <td>${tree.name}</td>
+                    <td><span class="category-badge">${formatCategory(tree.category)}</span></td>
+                    <td>${tree.height}${tree.tiles ? ' (' + tree.tiles + ')' : ''}</td>
+                    <td><span class="status-badge status-${tree.status.toLowerCase()}">${tree.status === 'EXTRACTED' ? '✅ ' : '📦 '}${tree.status}</span></td>
+                    <td>${tree.notes}</td>
+                </tr>
+            `).join('');
+        }
+
+        function formatCategory(category) {
+            return category.replace('_', ' ');
+        }
+
+        function updateResultsInfo(count) {
+            const info = document.getElementById('results-info');
+            info.textContent = `Showing ${count} tree${count !== 1 ? 's' : ''}`;
+        }
+    </script>
+</body>
+</html>

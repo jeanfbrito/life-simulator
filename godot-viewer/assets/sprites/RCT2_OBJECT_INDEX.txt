@@ -1,0 +1,58 @@
+# RCT2 OBJECT INDEX - Complete Catalog
+# Generated: seg 13 out 2025 21:04:27 -03
+# Source: RollerCoaster Tycoon 2 Triple Thrill Pack ObjData
+# Total Objects:     2119
+#
+# Format: FILENAME | OBJECT_ID | OBJECT_TYPE | NAME | PROPERTIES
+#
+
+1920PATH.DAT | rct2.tt.1920path | footpath | Sidewalk FootPath | 
+1920RACR.DAT | rct2.tt.1920racr | ride | 1920's Racing Cars | 
+1920SAND.DAT | rct2.tt.1920sand | ride | Art Deco Food Stall | 
+1920SENT.DAT | rct2.tt.1920sent | park_entrance | Roaring Twenties Park Entrance | 
+1920SLMP.DAT | rct2.tt.1920slmp | scenery_small | Period Street Lamps | 
+1950SCAR.DAT | rct2.tt.1950scar | scenery_large | 1950s Car | 
+1960TSRT.DAT | rct2.tt.1960tsrt | ride | Flower Power T-Shirts | 
+1X1ATRE2.DAT | rct2.ww.1x1atre2 | scenery_small | Vine Tree | 
+1X1ATREE.DAT | rct2.ww.1x1atree | scenery_small | Low Bush | 
+1X1BRANG.DAT | rct2.ww.1x1brang | scenery_small | Boomerang | 
+1X1DIDGE.DAT | rct2.ww.1x1didge | scenery_small | Digeridoo | 
+1X1EMUXX.DAT | rct2.ww.1x1emuxx | scenery_small | Emu | 
+1X1JUGT2.DAT | rct2.ww.1x1jugt2 | scenery_small | Small Rainforest Tree 1 | 
+1X1JUGT3.DAT | rct2.ww.1x1jugt3 | scenery_small | Small Rainforest Tree 2 | 
+1X1KANGA.DAT | rct2.ww.1x1kanga | scenery_small | Kangaroo | 
+1X1TERMM.DAT | rct2.ww.1x1termm | scenery_small | Termite Mound | 
+1X2ABR01.DAT | rct2.ww.1x2abr01 | scenery_large | Aboriginal Plain Tile | 
+1X2ABR02.DAT | rct2.ww.1x2abr02 | scenery_large | Aboriginal Snake Artwork | 
+1X2ABR03.DAT | rct2.ww.1x2abr03 | scenery_large | Aboriginal Spirit Artwork | 
+1X2AZT01.DAT | rct2.ww.1x2azt01 | scenery_large | Temple Wall Piece with Head | 
+1X2AZT02.DAT | rct2.ww.1x2azt02 | scenery_large | Temple Broken Wall Piece with Head | 
+1X2GLAMA.DAT | rct2.ww.1x2glama | scenery_large | Gold Llama | 
+1X2LGCHM.DAT | rct2.ww.1x2lgchm | scenery_large | Log Cabin Side Chimney | 
+1X2LION.DAT | rct2.ww.afrclion | scenery_large | Lion | 
+1X2RHINO.DAT | rct2.ww.afrrhino | scenery_large | Rhino | 
+1X2TRCTR.DAT | rct2.ww.atractor | scenery_large | Tractor | 
+1X2ZEBRA.DAT | rct2.ww.afrzebra | scenery_large | Zebra | 
+1X4BRG01.DAT | rct2.ww.1x4brg01 | scenery_large | Suspension Bridge Start side 1 | 
+1X4BRG02.DAT | rct2.ww.1x4brg02 | scenery_large | Suspension Bridge Start side 2 | 
+1X4BRG03.DAT | rct2.ww.1x4brg03 | scenery_large | Suspension Bridge Tower side 1 | 
+1X4BRG04.DAT | rct2.ww.1x4brg04 | scenery_large | Suspension Bridge Tower side 2 | 
+1X4BRG05.DAT | rct2.ww.1x4brg05 | scenery_large | Suspension Bridge Cable Section | 
+3X3ALTRE.DAT | rct2.ww.3x3altre | scenery_large | Jungle Tree with Leopards | 
+3X3ATRE1.DAT | rct2.ww.3x3atre1 | scenery_large | Jungle Tree 2 | 
+3X3ATRE2.DAT | rct2.ww.3x3atre2 | scenery_large | Jungle Tree 1 | 
+3X3ATRE3.DAT | rct2.ww.3x3atre3 | scenery_large | Jungle Tree with Vines | 
+3X3EUCAL.DAT | rct2.ww.3x3eucal | scenery_large | Eucalyptus Tree | 
+3X3HMSEN.DAT | rct2.ww.3x3hmsen | scenery_large | HMS Endeavour | 
+3X3MANTR.DAT | rct2.ww.3x3mantr | scenery_large | Mangrove Tree | 
+4X4.DAT | rct2.4x4 | ride | Monster Trucks | 
+4X4DINER.DAT | rct2.tt.4x4diner | scenery_large | Period Diner | 
+4X4GMANT.DAT | rct2.tt.4x4gmant | scenery_large | Giant Mangrove Tree | 
+4X4STNHN.DAT | rct2.tt.4x4stnhn | scenery_large | Stone Age Temple | 
+4X4TRPIT.DAT | rct2.tt.4x4trpit | scenery_large | Bubbling Tarpit | 
+4X4VOLCA.DAT | rct2.tt.4x4volca | scenery_large | Volcano with small trees | 
+50ROCKET.DAT | rct2.ww.50rocket | scenery_large | 1950's Rocket | 
+ADPANDA.DAT | rct2.ww.adpanda | scenery_small | Adult Panda | 
+ADULTELE.DAT | rct2.ww.adultele | scenery_large | Adult Indian Elephant | 
+AFRICENT.DAT | rct2.ww.africent | park_entrance | Africa Park Entrance | 
+ALENCRSH.DAT | rct2.tt.alencrsh | scenery_large | UFO Crash Site | 
