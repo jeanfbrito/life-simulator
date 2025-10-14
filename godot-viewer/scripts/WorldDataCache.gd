@@ -9,9 +9,11 @@ signal cache_cleared()
 # Cached world data storage
 var terrain_cache: Dictionary = {}  # chunk_key -> 2D array of terrain strings
 var resource_cache: Dictionary = {}  # chunk_key -> 2D array of resource strings
+var height_cache: Dictionary = {}  # chunk_key -> 2D array of height ints (u8, 0-255)
 var cache_stats: Dictionary = {
 	"terrain_chunks": 0,
 	"resource_chunks": 0,
+	"height_chunks": 0,
 	"total_tiles": 0
 }
 
@@ -38,12 +40,22 @@ func store_resource_chunk(chunk_key: String, resource_data: Array):
 		print("🗂️ Stored resource chunk: ", chunk_key, " (", resource_data.size(), "x", resource_data[0].size() if resource_data[0] is Array else "?", ")")
 		cache_updated.emit(chunk_key)
 
+# Store height data for a chunk
+func store_height_chunk(chunk_key: String, height_data: Array):
+	if height_data is Array and height_data.size() > 0:
+		height_cache[chunk_key] = height_data
+		update_stats()
+		print("🗺️ Stored height chunk: ", chunk_key, " (", height_data.size(), "x", height_data[0].size() if height_data[0] is Array else "?", ")")
+		cache_updated.emit(chunk_key)
+
 # Store both terrain and resource data for a chunk
 func store_chunk_data(chunk_key: String, chunk_data: Dictionary):
 	if chunk_data.has("terrain"):
 		store_terrain_chunk(chunk_key, chunk_data.terrain)
 	if chunk_data.has("resources"):
 		store_resource_chunk(chunk_key, chunk_data.resources)
+	if chunk_data.has("heights"):
+		store_height_chunk(chunk_key, chunk_data.heights)
 
 # Merge chunk data from ChunkManager response
 func merge_chunk_data(chunk_data_response: Dictionary):
@@ -54,6 +66,10 @@ func merge_chunk_data(chunk_data_response: Dictionary):
 	if chunk_data_response.has("resources"):
 		for chunk_key in chunk_data_response.resources:
 			store_resource_chunk(chunk_key, chunk_data_response.resources[chunk_key])
+
+	if chunk_data_response.has("heights"):
+		for chunk_key in chunk_data_response.heights:
+			store_height_chunk(chunk_key, chunk_data_response.heights[chunk_key])
 
 # Get terrain type at world coordinates
 func get_terrain_at(world_x: int, world_y: int) -> String:
@@ -116,6 +132,25 @@ func get_terrain_chunk(chunk_key: String) -> Array:
 func get_resource_chunk(chunk_key: String) -> Array:
 	return resource_cache.get(chunk_key, [])
 
+# Get cached height chunk data
+func get_height_chunk(chunk_key: String) -> Array:
+	return height_cache.get(chunk_key, [])
+
+# Get complete chunk with all layers
+func get_chunk(chunk_key: String) -> Dictionary:
+	var chunk_data = {}
+
+	if terrain_cache.has(chunk_key):
+		chunk_data["terrain"] = terrain_cache[chunk_key]
+
+	if resource_cache.has(chunk_key):
+		chunk_data["resources"] = resource_cache[chunk_key]
+
+	if height_cache.has(chunk_key):
+		chunk_data["heights"] = height_cache[chunk_key]
+
+	return chunk_data
+
 # Convert world coordinates to chunk key
 func get_chunk_key(world_x: int, world_y: int) -> String:
 	var chunk_x = int(floor(float(world_x) / float(CHUNK_SIZE)))
@@ -176,6 +211,7 @@ func get_cache_stats() -> Dictionary:
 func update_stats():
 	cache_stats.terrain_chunks = terrain_cache.size()
 	cache_stats.resource_chunks = resource_cache.size()
+	cache_stats.height_chunks = height_cache.size()
 
 	# Calculate total tiles
 	var total_tiles = 0
@@ -193,6 +229,7 @@ func clear_cache():
 
 	terrain_cache.clear()
 	resource_cache.clear()
+	height_cache.clear()
 	update_stats()
 
 	cache_cleared.emit()
@@ -208,6 +245,10 @@ func clear_chunk(chunk_key: String):
 
 	if resource_cache.has(chunk_key):
 		resource_cache.erase(chunk_key)
+		was_cached = true
+
+	if height_cache.has(chunk_key):
+		height_cache.erase(chunk_key)
 		was_cached = true
 
 	if was_cached:

@@ -1,6 +1,7 @@
 use super::{BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
 use bevy::log::debug;
 use bevy::prelude::*;
+use noise::{NoiseFn, Perlin, Simplex};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use serde::{Deserialize, Serialize};
@@ -240,6 +241,101 @@ impl WorldGenerator {
         }
 
         chunk
+    }
+
+    /// Generate height map for a chunk using Perlin noise
+    ///
+    /// Heights follow the circular island pattern:
+    /// - Center (island): Higher elevation (80-120)
+    /// - Beach zone: Mid elevation (45-55)
+    /// - Water zones: Sea level (30-40)
+    /// - Deep water: Lower (10-20)
+    ///
+    /// Perlin noise adds natural variation to create hills/valleys
+    pub fn generate_height_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
+        let mut heights = Vec::with_capacity(16);
+        let perlin = Perlin::new(self.config.seed as u32);
+
+        // Height map parameters
+        let base_height = 50; // Sea level
+        let noise_scale = 0.05; // Frequency of height variation
+        let noise_amplitude = 30.0; // Height variation range
+
+        for y in 0..16 {
+            let mut row = Vec::with_capacity(16);
+            for x in 0..16 {
+                let world_x = chunk_x * 16 + x;
+                let world_y = chunk_y * 16 + y;
+
+                // Get base height from island pattern
+                let base = self.calculate_base_height(world_x, world_y);
+
+                // Add Perlin noise for natural variation
+                let noise_x = (world_x as f64) * noise_scale;
+                let noise_y = (world_y as f64) * noise_scale;
+                let noise_value = perlin.get([noise_x, noise_y]);
+
+                // Combine base height with noise
+                let height = base as f64 + (noise_value * noise_amplitude);
+
+                // Clamp to u8 range (0-255)
+                let final_height = height.max(0.0).min(255.0) as u8;
+
+                row.push(final_height);
+            }
+            heights.push(row);
+        }
+
+        heights
+    }
+
+    /// Calculate base height for a tile based on circular island pattern
+    ///
+    /// Matches terrain generation: center is elevated, edges are water
+    fn calculate_base_height(&self, world_x: i32, world_y: i32) -> u8 {
+        let distance_from_center = ((world_x * world_x + world_y * world_y) as f32).sqrt();
+
+        // Match terrain generation parameters
+        let island_radius = 35.0;
+        let beach_width = 4.0;
+        let shallow_water_width = 6.0;
+
+        // Add same variations as terrain
+        let angle = (world_y as f32).atan2(world_x as f32);
+        let island_variation = (angle * 2.0).sin() * 1.5 + (angle * 3.0).cos() * 1.0;
+        let effective_island_radius = island_radius + island_variation;
+
+        let beach_variation = (angle * 4.0).sin() * 0.8;
+        let effective_beach_width = beach_width + beach_variation;
+
+        // Height zones matching terrain types
+        if distance_from_center
+            > effective_island_radius + effective_beach_width + shallow_water_width
+        {
+            // Deep water - lowest elevation
+            15
+        } else if distance_from_center > effective_island_radius + effective_beach_width {
+            // Shallow water - below sea level
+            35
+        } else if distance_from_center > effective_island_radius {
+            // Beach - at sea level
+            50
+        } else {
+            // Island interior - elevated terrain
+            let center_distance = distance_from_center;
+            let inner_radius = effective_island_radius * 0.7;
+
+            if center_distance < inner_radius {
+                // Inner island - highest elevation
+                100
+            } else {
+                // Transition zone - gradient from center to beach
+                let transition_factor = (distance_from_center - inner_radius)
+                    / (effective_island_radius - inner_radius);
+                let height = 100.0 - (transition_factor * 50.0); // 100 → 50
+                height as u8
+            }
+        }
     }
 
     fn generate_terrain_type(

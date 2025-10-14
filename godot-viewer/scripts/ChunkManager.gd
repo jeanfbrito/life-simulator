@@ -85,7 +85,8 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 
 	var new_world_data: Dictionary = {
 		"chunks": {},
-		"resources": {}
+		"resources": {},
+		"heights": {}
 	}
 
 	for chunk_key in batch:
@@ -146,6 +147,15 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 				new_world_data.chunks[chunk_key] = chunk_data.terrain
 			if chunk_data.has("resources"):
 				new_world_data.resources[chunk_key] = chunk_data.resources
+			if chunk_data.has("heights"):
+				# Convert height strings to integers
+				var heights_int = []
+				for row in chunk_data.heights:
+					var row_int = []
+					for height_str in row:
+						row_int.append(int(height_str))
+					heights_int.append(row_int)
+				new_world_data.heights[chunk_key] = heights_int
 
 			# Mark as loaded
 			loaded_chunks[chunk_key] = true

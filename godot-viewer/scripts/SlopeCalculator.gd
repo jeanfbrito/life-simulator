@@ -6,19 +6,15 @@ extends RefCounted
 ## Slope is determined by comparing a tile's height with its 4 neighbors (N/E/S/W).
 ## Each raised neighbor sets a bit in the slope value (4 bits = 16+ combinations).
 ##
-## Reference: /GODOT_SLOPE_RENDERING_IMPLEMENTATION.md
-## Reference: /OPENRCT2_SPRITE_EXTRACTION_GUIDE.md
+## Based on OpenRCT2's Paint.Surface.cpp slope calculation system
 
-# Slope bitfield constants (OpenRCT2 style)
-const CORNER_N = 0b0001  # North corner raised
-const CORNER_E = 0b0010  # East corner raised
-const CORNER_S = 0b0100  # South corner raised
-const CORNER_W = 0b1000  # West corner raised
+# Corner bitmasks
+const CORNER_N = 0b0001
+const CORNER_E = 0b0010
+const CORNER_S = 0b0100
+const CORNER_W = 0b1000
 
 # Threshold for considering a height difference significant
-# Adjust this value to control sensitivity:
-# - Lower (2-3): More slopes detected, terrain looks hillier
-# - Higher (7-10): Fewer slopes, terrain looks flatter
 const HEIGHT_THRESHOLD = 5  # Minimum height difference to create slope
 
 
@@ -35,7 +31,6 @@ static func calculate_slope_index(
 	chunk_coord: Vector2i,
 	world_cache: Node
 ) -> int:
-	# Get current tile height
 	var current_height = heights[local_pos.y][local_pos.x]
 
 	# Get neighbor heights (handles chunk boundaries)
@@ -56,15 +51,11 @@ static func calculate_slope_index(
 	if h_w > current_height + HEIGHT_THRESHOLD:
 		slope |= CORNER_W
 
-	# Convert bitfield to atlas index (handles special cases)
+	# Check for special cases (valleys, diagonals, peaks)
 	return slope_to_index(slope, h_n, h_e, h_s, h_w, current_height)
 
 
 ## Get height of neighbor tile (handles chunk boundaries)
-##
-## If neighbor is within current chunk, returns height directly.
-## If neighbor is in adjacent chunk, fetches from WorldDataCache.
-## If neighbor chunk not loaded, assumes same height (flat transition).
 static func get_neighbor_height(
 	heights: Array,
 	local_pos: Vector2i,
@@ -74,16 +65,16 @@ static func get_neighbor_height(
 ) -> int:
 	var neighbor_pos = local_pos + offset
 
-	# Check if neighbor is within current chunk (0-15 range)
+	# Check if neighbor is within current chunk
 	if neighbor_pos.x >= 0 and neighbor_pos.x < 16 and \
 	   neighbor_pos.y >= 0 and neighbor_pos.y < 16:
 		return heights[neighbor_pos.y][neighbor_pos.x]
 
-	# Neighbor is in adjacent chunk - need to fetch from cache
+	# Neighbor is in adjacent chunk - fetch from cache
 	var neighbor_chunk_coord = chunk_coord
 	var neighbor_local_pos = neighbor_pos
 
-	# Adjust chunk coordinate and local position for boundary crossing
+	# Adjust chunk coordinate and local position
 	if neighbor_pos.x < 0:
 		neighbor_chunk_coord.x -= 1
 		neighbor_local_pos.x = 15
@@ -104,44 +95,37 @@ static func get_neighbor_height(
 
 	if neighbor_chunk == null or not neighbor_chunk.has("heights"):
 		# Neighbor chunk not loaded - assume same height (flat transition)
-		# This prevents abrupt slope changes at chunk boundaries
 		return heights[local_pos.y][local_pos.x]
 
-	# Return height from neighbor chunk
 	return neighbor_chunk["heights"][neighbor_local_pos.y][neighbor_local_pos.x]
 
 
 ## Convert slope bitfield to atlas index (0-18)
-##
-## Handles basic 4-bit slopes (0-15) and special cases (valleys, diagonals, peaks).
-## Atlas layout matches OpenRCT2 sprite organization.
 static func slope_to_index(
 	slope: int,
 	h_n: int, h_e: int, h_s: int, h_w: int,
 	current: int
 ) -> int:
-	# Basic 4-bit slopes (16 combinations)
+	# Basic 4-bit slopes (0-15)
 	match slope:
-		0b0000: return 0   # Flat - all corners same height
-		0b0001: return 1   # N corner up
-		0b0010: return 2   # E corner up
-		0b0011: return 3   # NE side up (two adjacent corners)
-		0b0100: return 4   # S corner up
-		0b0101: return 5   # NS valley (opposite corners up)
+		0b0000: return 0   # Flat
+		0b0001: return 1   # N up
+		0b0010: return 2   # E up
+		0b0011: return 3   # NE side up
+		0b0100: return 4   # S up
+		0b0101: return 5   # NS valley
 		0b0110: return 6   # SE side up
-		0b0111: return 7   # NES corners up (three corners)
-		0b1000: return 8   # W corner up
+		0b0111: return 7   # NES corners up
+		0b1000: return 8   # W up
 		0b1001: return 9   # NW side up
-		0b1010: return 10  # EW valley (opposite corners up)
-		0b1011: return 11  # NEW corners up (three corners)
+		0b1010: return 10  # EW valley
+		0b1011: return 11  # NEW corners up
 		0b1100: return 12  # SW side up
-		0b1101: return 13  # NWS corners up (three corners)
-		0b1110: return 14  # ESW corners up (three corners)
+		0b1101: return 13  # NWS corners up
+		0b1110: return 14  # ESW corners up
 		0b1111: return 15  # All corners up (plateau)
 
 	# Check for diagonal slopes (16-18)
-	# These are special cases where diagonal neighbors are higher/lower
-
 	# Diagonal NE-SW: N and E high, S and W low (or vice versa)
 	if (h_n > current and h_e > current and h_s < current and h_w < current) or \
 	   (h_n < current and h_e < current and h_s > current and h_w > current):
@@ -156,30 +140,5 @@ static func slope_to_index(
 	if h_n < current and h_e < current and h_s < current and h_w < current:
 		return 18
 
-	# Fallback to flat if no pattern matches
+	# Fallback to flat
 	return 0
-
-
-## Debug utility: Get slope name for index
-static func get_slope_name(slope_index: int) -> String:
-	match slope_index:
-		0: return "Flat"
-		1: return "N corner up"
-		2: return "E corner up"
-		3: return "NE side up"
-		4: return "S corner up"
-		5: return "NS valley"
-		6: return "SE side up"
-		7: return "NES corners up"
-		8: return "W corner up"
-		9: return "NW side up"
-		10: return "EW valley"
-		11: return "NEW corners up"
-		12: return "SW side up"
-		13: return "NWS corners up"
-		14: return "ESW corners up"
-		15: return "All corners up"
-		16: return "Diagonal NE-SW"
-		17: return "Diagonal NW-SE"
-		18: return "Center peak"
-		_: return "Unknown"
