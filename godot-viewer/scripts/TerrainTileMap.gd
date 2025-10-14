@@ -8,17 +8,17 @@ extends TileMap
 # Terrain mapping to tile IDs
 var terrain_tile_ids: Dictionary = {}
 
-# Grass texture manager for stone-kingdoms grass textures
+# Grass texture manager for RCT2 grass textures
 var grass_manager = null
 
 func _ready():
 	print("🗺️ TerrainTileMap initialized")
 
-	# Initialize grass texture manager
-	var GrassManager = load("res://scripts/GrassTextureManager.gd")
+	# Initialize RCT2 grass texture manager
+	var GrassManager = load("res://scripts/GrassTextureManagerRCT2.gd")
 	grass_manager = GrassManager.new()
 	add_child(grass_manager)
-	print("🌿 GrassTextureManager initialized")
+	print("🌿 RCT2 GrassTextureManager initialized")
 
 	# Set texture filtering to NEAREST for pixel art (no blurring)
 	texture_filter = TEXTURE_FILTER_NEAREST
@@ -281,15 +281,15 @@ func _should_use_grass_texture(terrain_type: String) -> bool:
 	return terrain_type in ["Grass", "Forest"]
 
 func _paint_grass_tile(world_pos: Vector2i, terrain_type: String):
-	"""Paint a tile using grass texture from stone-kingdoms."""
-	# Get a random grass texture
-	var grass_texture = grass_manager.get_random_grass_texture()
+	"""Paint a tile using RCT2 grass texture."""
+	# Get the flat RCT2 grass texture
+	var grass_texture = grass_manager.get_grass_texture()
 	if not grass_texture:
 		# Fallback to colored tile if texture loading failed
 		_paint_colored_tile(world_pos, terrain_type)
 		return
 
-	# Get or create a source for this specific grass texture
+	# Get or create a source for the RCT2 grass texture
 	var source_id = _get_or_create_texture_source(grass_texture)
 
 	# Set the cell with the grass texture
@@ -298,7 +298,7 @@ func _paint_grass_tile(world_pos: Vector2i, terrain_type: String):
 	# Only print for first few tiles to avoid spam
 	if get_used_cells(0).size() <= 10:
 		var pixel_pos = map_to_local(world_pos)
-		print("🌿 Painted grass tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
+		print("🌿 Painted RCT2 grass tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
 
 func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
 	"""Paint a tile using colored diamond (original method)."""
