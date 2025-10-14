@@ -112,15 +112,16 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 				height = int(height_data[y][x])
 
 			# Calculate slope index if we have height data
+			# TEMPORARILY DISABLED - using flat tiles only to show elevation is working
 			var slope_index = 0
-			if has_heights:
-				var world_cache = get_node("/root/WorldDataCache")
-				slope_index = SlopeCalculator.calculate_slope_index(
-					height_data,
-					Vector2i(x, y),
-					chunk_coord,
-					world_cache
-				)
+			# if has_heights:
+			# 	var world_cache = get_node("/root/WorldDataCache")
+			# 	slope_index = SlopeCalculator.calculate_slope_index(
+			# 		height_data,
+			# 		Vector2i(x, y),
+			# 		chunk_coord,
+			# 		world_cache
+			# 	)
 
 			paint_terrain_tile(world_pos, terrain_type, slope_index, height)
 			tiles_painted += 1
