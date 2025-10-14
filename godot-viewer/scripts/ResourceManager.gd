@@ -9,67 +9,34 @@ var resource_sprites: Dictionary = {}  # chunk_key -> Array[Node2D]
 # Tree texture manager (loaded dynamically)
 var tree_texture_manager = null
 
-# Tree animation tracking (stateless - trees query global WindManager)
-var animated_trees: Array[Dictionary] = []  # Array of {sprite, is_pine, current_frame}
-
 signal resources_rendered(chunk_key: String, sprite_count: int)
 
 func _ready():
 	print("🌳 ResourceManager initialized")
 
-	# Load tree texture manager script and instantiate
-	var TreeTextureManagerScript = load("res://scripts/TreeTextureManager.gd")
+	# Load RCT2 tree texture manager script and instantiate
+	var TreeTextureManagerScript = load("res://scripts/TreeTextureManagerRCT2.gd")
 	tree_texture_manager = TreeTextureManagerScript.new()
 	add_child(tree_texture_manager)
 	# Textures will load in tree_texture_manager's _ready()
 
-func _process(delta: float):
-	# Update tree animations based on global wind
-	for tree_data in animated_trees:
-		var sprite = tree_data["sprite"]
+# RCT2 trees are static (no animation frames like Stone Kingdoms trees)
 
-		# Query global wind system for this tree's frame
-		var wind_frame = WindManager.get_wind_frame_for_position(sprite.global_position)
-
-		# Only update if frame changed (optimization)
-		if tree_data["current_frame"] != wind_frame:
-			tree_data["current_frame"] = wind_frame
-
-			# Get texture and offset for this frame
-			var new_texture = null
-			var new_offset = Vector2.ZERO
-
-			if tree_data["is_pine"]:
-				if wind_frame < tree_texture_manager.pine_tree_textures.size():
-					new_texture = tree_texture_manager.pine_tree_textures[wind_frame]
-					new_offset = tree_texture_manager.pine_offsets[wind_frame]
-			else:  # Birch
-				if wind_frame < tree_texture_manager.birch_tree_textures.size():
-					new_texture = tree_texture_manager.birch_tree_textures[wind_frame]
-					new_offset = tree_texture_manager.birch_offsets[wind_frame]
-
-			# Update sprite texture and position
-			if new_texture:
-				sprite.texture = new_texture
-
-				# Update position with new offset
-				var sk_offset_x = tree_texture_manager.TREE_BASE_OFFSET_X + new_offset.x
-				var sk_offset_y = tree_texture_manager.TREE_BASE_OFFSET_Y + new_offset.y
-				sprite.position = Vector2(sk_offset_x, sk_offset_y)
+# Map backend resource types to specific RCT2 tree species
+const TREE_TYPE_MAPPING = {
+	"Wood": "scots_pine",           # Default tree type → Scots Pine
+	"Pine": "scots_pine",            # Pine → Scots Pine
+	"Birch": "black_poplar",         # Birch → Black Poplar (deciduous)
+	"Oak": "cedar_lebanon",          # Oak → Cedar of Lebanon (large tree)
+	"Fir": "caucasian_fir",          # Fir → Caucasian Fir
+	"Spruce": "red_fir",             # Spruce → Red Fir
+}
 
 # Paint resources for a chunk
 func paint_resources(chunk_key: String, resource_data: Array):
 	# Clear existing resources for this chunk
 	if resource_sprites.has(chunk_key):
 		for container in resource_sprites[chunk_key]:
-			# Remove any tree sprites in this container from animated_trees
-			if container.get_child_count() > 0:
-				var child = container.get_child(0)
-				# Remove from animated_trees if it's a tree sprite
-				for i in range(animated_trees.size() - 1, -1, -1):
-					if animated_trees[i]["sprite"] == child:
-						animated_trees.remove_at(i)
-						break
 			container.queue_free()
 		resource_sprites.erase(chunk_key)
 
@@ -98,48 +65,24 @@ func paint_resources(chunk_key: String, resource_data: Array):
 			# Get resource config for sizing and offset
 			var config = Config.get_resource_config(resource_type)
 
-			# Check if this is a tree type (use actual texture)
+			# Check if this is a tree type (use actual RCT2 texture)
 			if _is_tree_resource(resource_type):
 				var sprite = Sprite2D.new()
 
-				# Determine tree type (pine or birch)
-				var is_pine = true
-				var type_lower = resource_type.to_lower()
-				if type_lower.contains("birch"):
-					is_pine = false
-				# Default to pine for "wood" or unknown types
-
-				# Start with variant 01 (index 0)
-				var tree_texture = null
-				var quad_offset = Vector2.ZERO
-
-				if is_pine and tree_texture_manager.pine_tree_textures.size() > 0:
-					tree_texture = tree_texture_manager.pine_tree_textures[0]  # tree_pine_large_01
-					quad_offset = tree_texture_manager.pine_offsets[0]
-				elif not is_pine and tree_texture_manager.birch_tree_textures.size() > 0:
-					tree_texture = tree_texture_manager.birch_tree_textures[0]  # tree_birch_large_01
-					quad_offset = tree_texture_manager.birch_offsets[0]
+				# Map resource type to specific RCT2 tree species
+				var tree_species = _get_tree_species(resource_type)
+				var tree_texture = tree_texture_manager.get_tree_texture(tree_species)
 
 				if tree_texture:
 					sprite.texture = tree_texture
 					sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-					# Apply stone-kingdoms offset system
-					var sk_offset_x = tree_texture_manager.TREE_BASE_OFFSET_X + quad_offset.x
-					var sk_offset_y = tree_texture_manager.TREE_BASE_OFFSET_Y + quad_offset.y
-
-					sprite.centered = false
-					sprite.position = Vector2(sk_offset_x, sk_offset_y)
+					# RCT2 trees are already centered and properly sized
+					# Just apply a small Y-offset to position feet in tile
+					sprite.centered = true
+					sprite.position = Vector2(0, Config.TILE_SIZE * config.offset_y)
 
 					container.add_child(sprite)
-
-					# Add to animated trees list
-					# Trees are stateless - they query global WindManager for their frame
-					animated_trees.append({
-						"sprite": sprite,
-						"is_pine": is_pine,
-						"current_frame": 0  # Will be updated by wind system
-					})
 				else:
 					# Fallback to emoji if texture not available
 					var label = _create_emoji_label(resource_type, config)
@@ -175,7 +118,7 @@ func paint_resources(chunk_key: String, resource_data: Array):
 			if child is Sprite2D:
 				tree_count += 1
 
-	print("🌳 Rendered ", sprites.size(), " resources for chunk ", chunk_key, " (", tree_count, " animated trees, ", animated_trees.size(), " total)")
+	print("🌳 Rendered ", sprites.size(), " resources for chunk ", chunk_key, " (", tree_count, " RCT2 trees)")
 	resources_rendered.emit(chunk_key, sprites.size())
 
 # Clear resources for a chunk
@@ -235,6 +178,21 @@ func _is_tree_resource(resource_type: String) -> bool:
 			type_lower.contains("pine") or
 			type_lower.contains("birch") or
 			type_lower.contains("oak"))
+
+# Helper: Map resource type to RCT2 tree species
+func _get_tree_species(resource_type: String) -> String:
+	# Check if we have a direct mapping
+	if TREE_TYPE_MAPPING.has(resource_type):
+		return TREE_TYPE_MAPPING[resource_type]
+
+	# Check for substring matches
+	var type_lower = resource_type.to_lower()
+	for key in TREE_TYPE_MAPPING.keys():
+		if type_lower.contains(key.to_lower()):
+			return TREE_TYPE_MAPPING[key]
+
+	# Default to scots pine for unmapped tree types
+	return "scots_pine"
 
 # Helper: Create emoji label for non-tree resources
 func _create_emoji_label(resource_type: String, config: Dictionary) -> Label:
