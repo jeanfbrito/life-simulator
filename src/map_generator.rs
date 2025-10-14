@@ -11,7 +11,7 @@ mod tilemap;
 
 use resources::ResourceGenerator;
 use serialization::WorldSerializer;
-use tilemap::{WorldConfig, WorldGenerator};
+use tilemap::{TerrainGenerationMode, WorldConfig, WorldGenerator};
 
 /// Map Generator for Life Simulator
 ///
@@ -35,6 +35,10 @@ struct Args {
     /// Output directory for generated worlds
     #[arg(short, long, default_value = "maps")]
     output_dir: String,
+
+    /// Terrain generation mode: 'openrct2' (default, recommended) or 'island' (legacy)
+    #[arg(short = 'm', long, default_value = "openrct2")]
+    terrain_mode: String,
 
     /// Generate preview HTML file
     #[arg(long)]
@@ -80,9 +84,31 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Parse terrain generation mode
+    let terrain_mode = match args.terrain_mode.to_lowercase().as_str() {
+        "openrct2" | "rct2" => TerrainGenerationMode::OpenRCT2Heights,
+        "island" | "circular" => TerrainGenerationMode::CircularIsland,
+        _ => {
+            eprintln!(
+                "Invalid terrain mode: '{}'. Valid options: 'openrct2' (default), 'island'",
+                args.terrain_mode
+            );
+            std::process::exit(1);
+        }
+    };
+
+    if args.verbose {
+        let mode_name = match terrain_mode {
+            TerrainGenerationMode::OpenRCT2Heights => "OpenRCT2 Heights",
+            TerrainGenerationMode::CircularIsland => "Circular Island (legacy)",
+        };
+        println!("Terrain Mode: {}", mode_name);
+    }
+
     // Initialize world generator
     let mut config = WorldConfig::default();
     config.seed = seed;
+    config.terrain_generation_mode = terrain_mode;
     let world_generator = WorldGenerator::new(config);
 
     // Generate complete world data

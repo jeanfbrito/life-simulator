@@ -10,7 +10,10 @@ pub use chunk::{Chunk, ChunkCoordinate, CHUNK_SIZE};
 pub use chunk_manager::{ChunkLoadRequest, ChunkManager, ChunkManagerStatistics, LoadPriority};
 pub use terrain::{TerrainProperties, TerrainType};
 pub use terrain_query::{AreaAnalysis, PositionComponent, TerrainQuery, TerrainQuerySystem};
-pub use world_generator::{WorldConfig, WorldGenerator, WorldMetadata, WorldStatistics};
+pub use world_generator::{
+    OpenRCT2TerrainConfig, TerrainGenerationMode, WorldConfig, WorldGenerator, WorldMetadata,
+    WorldStatistics,
+};
 
 use crate::tilemap::chunk_manager::{MAX_LOADED_CHUNKS, UNLOAD_DISTANCE, VIEW_DISTANCE};
 use bevy::log::{info, warn};

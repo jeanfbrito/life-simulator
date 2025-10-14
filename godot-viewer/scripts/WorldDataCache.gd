@@ -136,6 +136,26 @@ func get_resource_chunk(chunk_key: String) -> Array:
 func get_height_chunk(chunk_key: String) -> Array:
 	return height_cache.get(chunk_key, [])
 
+# Get height at specific world coordinates
+func get_height_at(world_x: int, world_y: int) -> int:
+	var chunk_key = get_chunk_key(world_x, world_y)
+	var height_chunk = get_height_chunk(chunk_key)
+
+	if height_chunk.is_empty():
+		return -1  # No height data available
+
+	var local_coords = get_local_coords(world_x, world_y)
+
+	# Validate array bounds
+	if local_coords.y < 0 or local_coords.y >= height_chunk.size():
+		return -1
+
+	var row = height_chunk[local_coords.y]
+	if local_coords.x < 0 or local_coords.x >= row.size():
+		return -1
+
+	return row[local_coords.x]
+
 # Get complete chunk with all layers
 func get_chunk(chunk_key: String) -> Dictionary:
 	var chunk_data = {}

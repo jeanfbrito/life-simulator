@@ -15,6 +15,56 @@ pub struct WorldConfig {
     pub tile_size: f32,
     pub enable_resources: bool,
     pub resource_density: f32,
+    pub terrain_generation_mode: TerrainGenerationMode,
+}
+
+/// Terrain generation mode
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum TerrainGenerationMode {
+    /// Legacy circular island generation (deprecated)
+    CircularIsland,
+    /// OpenRCT2-style height-based generation (recommended)
+    OpenRCT2Heights,
+}
+
+/// OpenRCT2-style terrain generation configuration
+/// Based on height thresholds and noise-based variation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenRCT2TerrainConfig {
+    // Water levels
+    pub deep_water_max: u8,      // Below this = DeepWater (default: 35)
+    pub shallow_water_max: u8,   // Below this = ShallowWater (default: 48)
+    pub beach_max: u8,           // Below this = Sand (beach) (default: 55)
+
+    // Land elevations
+    pub plains_max: u8,          // Below this = Grass/Dirt (default: 120)
+    pub hills_max: u8,           // Below this = Stone (default: 160)
+    pub mountain_min: u8,        // Above this = Mountain (default: 160)
+
+    // Terrain variety parameters
+    pub forest_frequency: f64,   // Perlin noise frequency for forests (default: 0.05)
+    pub forest_threshold: f64,   // Noise threshold for forest placement (default: 0.3)
+    pub desert_frequency: f64,   // Frequency for desert zones (default: 0.03)
+    pub desert_threshold: f64,   // Threshold for desert placement (default: 0.5)
+    pub snow_altitude: u8,       // Height above which snow appears (default: 180)
+}
+
+impl Default for OpenRCT2TerrainConfig {
+    fn default() -> Self {
+        Self {
+            deep_water_max: 35,
+            shallow_water_max: 48,
+            beach_max: 55,
+            plains_max: 120,
+            hills_max: 160,
+            mountain_min: 160,
+            forest_frequency: 0.05,
+            forest_threshold: 0.3,
+            desert_frequency: 0.03,
+            desert_threshold: 0.5,
+            snow_altitude: 180,
+        }
+    }
 }
 
 impl Default for WorldConfig {
@@ -25,6 +75,7 @@ impl Default for WorldConfig {
             tile_size: 10.0,
             enable_resources: true,
             resource_density: 0.1,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
         }
     }
 }
@@ -33,6 +84,7 @@ impl Default for WorldConfig {
 pub struct WorldGenerator {
     config: WorldConfig,
     rng: RwLock<Pcg64>,
+    openrct2_config: OpenRCT2TerrainConfig,
 }
 
 impl WorldGenerator {
@@ -41,7 +93,13 @@ impl WorldGenerator {
         Self {
             config,
             rng: RwLock::new(rng),
+            openrct2_config: OpenRCT2TerrainConfig::default(),
         }
+    }
+
+    pub fn with_openrct2_config(mut self, openrct2_config: OpenRCT2TerrainConfig) -> Self {
+        self.openrct2_config = openrct2_config;
+        self
     }
 
     pub fn get_seed(&self) -> u64 {
@@ -220,6 +278,15 @@ impl WorldGenerator {
     }
 
     pub fn generate_procedural_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
+        // Dispatch to the appropriate generation method based on config
+        match self.config.terrain_generation_mode {
+            TerrainGenerationMode::CircularIsland => self.generate_island_chunk(chunk_x, chunk_y),
+            TerrainGenerationMode::OpenRCT2Heights => self.generate_openrct2_chunk(chunk_x, chunk_y),
+        }
+    }
+
+    /// Legacy circular island generation (kept for backward compatibility)
+    fn generate_island_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
         let mut chunk = Vec::with_capacity(16);
         let seed = (chunk_x as u64)
             .wrapping_mul(1000)
@@ -243,36 +310,168 @@ impl WorldGenerator {
         chunk
     }
 
+    /// OpenRCT2-style terrain generation based on height and noise
+    fn generate_openrct2_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<String>> {
+        let mut chunk = Vec::with_capacity(16);
+
+        // Generate heights first (using existing fBm method)
+        let heights = self.generate_height_chunk(chunk_x, chunk_y);
+
+        // Create noise generators for terrain variety
+        let perlin = Perlin::new(self.config.seed as u32);
+
+        for y in 0..16 {
+            let mut row = Vec::with_capacity(16);
+            for x in 0..16 {
+                let world_x = chunk_x * 16 + x;
+                let world_y = chunk_y * 16 + y;
+                let height = heights[y as usize][x as usize];
+
+                // Generate terrain type from height and noise
+                let terrain_type = self.generate_terrain_from_height(
+                    height,
+                    world_x,
+                    world_y,
+                    &perlin,
+                );
+                row.push(terrain_type);
+            }
+            chunk.push(row);
+        }
+
+        chunk
+    }
+
+    /// Map height to terrain type using OpenRCT2-style thresholds
+    /// Uses additional noise layers for natural terrain variety
+    fn generate_terrain_from_height(
+        &self,
+        height: u8,
+        world_x: i32,
+        world_y: i32,
+        perlin: &Perlin,
+    ) -> String {
+        let cfg = &self.openrct2_config;
+
+        // Water levels (lowest priority - height-based only)
+        if height <= cfg.deep_water_max {
+            return "DeepWater".to_string();
+        }
+        if height <= cfg.shallow_water_max {
+            return "ShallowWater".to_string();
+        }
+        if height <= cfg.beach_max {
+            return "Sand".to_string();
+        }
+
+        // Snow at high altitudes (highest priority on land)
+        if height >= cfg.snow_altitude {
+            return "Snow".to_string();
+        }
+
+        // Mountains (high elevation)
+        if height >= cfg.mountain_min {
+            return "Mountain".to_string();
+        }
+
+        // Hills/Stone (medium-high elevation)
+        if height >= cfg.hills_max {
+            return "Stone".to_string();
+        }
+
+        // Plains (medium elevation) - use noise for variety
+        // Sample terrain variety noise
+        let forest_noise = perlin.get([
+            world_x as f64 * cfg.forest_frequency,
+            world_y as f64 * cfg.forest_frequency,
+        ]);
+        let desert_noise = perlin.get([
+            world_x as f64 * cfg.desert_frequency,
+            world_y as f64 * cfg.desert_frequency,
+        ]);
+
+        // Normalize noise to [0, 1]
+        let forest_value = (forest_noise + 1.0) / 2.0;
+        let desert_value = (desert_noise + 1.0) / 2.0;
+
+        // Apply terrain types based on noise thresholds
+        if desert_value > cfg.desert_threshold && height > 60 && height < 100 {
+            // Desert zones in mid-elevation dry areas
+            return "Desert".to_string();
+        }
+
+        if forest_value > cfg.forest_threshold && height > 65 && height < 140 {
+            // Forests in suitable elevation range
+            return "Forest".to_string();
+        }
+
+        // Height-based terrain for remaining tiles
+        if height > 100 {
+            // Higher plains - more varied
+            if (world_x + world_y) % 7 == 0 {
+                "Dirt".to_string()
+            } else if (world_x + world_y) % 11 == 0 {
+                "Stone".to_string()
+            } else {
+                "Grass".to_string()
+            }
+        } else if height > 70 {
+            // Mid plains - mostly grass
+            if (world_x * 3 + world_y * 2) % 13 == 0 {
+                "Dirt".to_string()
+            } else {
+                "Grass".to_string()
+            }
+        } else {
+            // Lower plains near beach
+            if (world_x + world_y) % 5 == 0 {
+                "Sand".to_string()
+            } else {
+                "Grass".to_string()
+            }
+        }
+    }
+
     /// Generate height map for a chunk using Perlin noise
     ///
-    /// Heights follow the circular island pattern:
-    /// - Center (island): Higher elevation (80-120)
-    /// - Beach zone: Mid elevation (45-55)
-    /// - Water zones: Sea level (30-40)
-    /// - Deep water: Lower (10-20)
+    /// OpenRCT2 mode: Pure Fractional Brownian Motion noise (0-255 range)
+    /// Island mode: Noise + circular island pattern for backward compatibility
     ///
     /// Perlin noise adds natural variation to create hills/valleys
     pub fn generate_height_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
+        match self.config.terrain_generation_mode {
+            TerrainGenerationMode::CircularIsland => {
+                self.generate_height_chunk_island(chunk_x, chunk_y)
+            }
+            TerrainGenerationMode::OpenRCT2Heights => {
+                self.generate_height_chunk_openrct2(chunk_x, chunk_y)
+            }
+        }
+    }
+
+    /// Pure OpenRCT2-style height generation using Fractional Brownian Motion
+    /// No circular island bias - pure procedural terrain
+    fn generate_height_chunk_openrct2(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
         let mut heights = Vec::with_capacity(16);
         let perlin = Perlin::new(self.config.seed as u32);
 
         // OpenRCT2-style Fractional Brownian Motion (fBm) parameters
         // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:194
         let base_freq = 0.015; // Base frequency (lower = larger features)
-        let octaves = 4; // Number of noise layers
-        let lacunarity = 2.0; // Frequency multiplier per octave (OpenRCT2 uses 2.0)
-        let persistence = 0.65; // Amplitude multiplier per octave (OpenRCT2 uses 0.65)
-        let amplitude = 8.0; // Overall height variation range
+        let octaves = 6; // Number of noise layers (OpenRCT2 uses 6)
+        let lacunarity = 2.0; // Frequency multiplier per octave
+        let persistence = 0.65; // Amplitude multiplier per octave
 
-        // Generate initial heights with fBm
+        // Height range for normalization
+        let min_height = 0.0;
+        let max_height = 255.0;
+
+        // Generate heights with fBm
         for y in 0..16 {
             let mut row = Vec::with_capacity(16);
             for x in 0..16 {
                 let world_x = chunk_x * 16 + x;
                 let world_y = chunk_y * 16 + y;
-
-                // Get base height from island pattern
-                let base = self.calculate_base_height(world_x, world_y) as f64;
 
                 // Apply Fractional Brownian Motion (multiple octaves)
                 let mut noise_value = 0.0;
@@ -285,13 +484,15 @@ impl WorldGenerator {
                     let sample_y = (world_y as f64) * freq;
                     noise_value += perlin.get([sample_x, sample_y]) * amp;
                     total_amp += amp;
-                    freq *= lacunarity; // Increase frequency
-                    amp *= persistence; // Decrease amplitude
+                    freq *= lacunarity;
+                    amp *= persistence;
                 }
 
-                // Normalize and scale
-                noise_value /= total_amp;
-                let height = base + (noise_value * amplitude);
+                // Normalize from [-total_amp, total_amp] to [0, 1]
+                let normalized = (noise_value / total_amp + 1.0) / 2.0;
+
+                // Map to height range [0, 255]
+                let height = min_height + (normalized * (max_height - min_height));
 
                 // Clamp to u8 range
                 let final_height = height.max(0.0).min(255.0) as u8;
@@ -302,6 +503,57 @@ impl WorldGenerator {
 
         // Apply smoothing (OpenRCT2 does 2-7 passes, we'll do 3)
         // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:212
+        for _ in 0..3 {
+            heights = self.smooth_heights(heights);
+        }
+
+        heights
+    }
+
+    /// Legacy height generation with circular island pattern
+    fn generate_height_chunk_island(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
+        let mut heights = Vec::with_capacity(16);
+        let perlin = Perlin::new(self.config.seed as u32);
+
+        let base_freq = 0.015;
+        let octaves = 4;
+        let lacunarity = 2.0;
+        let persistence = 0.65;
+        let amplitude = 8.0;
+
+        for y in 0..16 {
+            let mut row = Vec::with_capacity(16);
+            for x in 0..16 {
+                let world_x = chunk_x * 16 + x;
+                let world_y = chunk_y * 16 + y;
+
+                // Get base height from island pattern
+                let base = self.calculate_base_height(world_x, world_y) as f64;
+
+                // Apply noise variation
+                let mut noise_value = 0.0;
+                let mut freq = base_freq;
+                let mut amp = 1.0;
+                let mut total_amp = 0.0;
+
+                for _ in 0..octaves {
+                    let sample_x = (world_x as f64) * freq;
+                    let sample_y = (world_y as f64) * freq;
+                    noise_value += perlin.get([sample_x, sample_y]) * amp;
+                    total_amp += amp;
+                    freq *= lacunarity;
+                    amp *= persistence;
+                }
+
+                noise_value /= total_amp;
+                let height = base + (noise_value * amplitude);
+
+                let final_height = height.max(0.0).min(255.0) as u8;
+                row.push(final_height);
+            }
+            heights.push(row);
+        }
+
         for _ in 0..3 {
             heights = self.smooth_heights(heights);
         }

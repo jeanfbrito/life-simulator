@@ -5,7 +5,7 @@ extends Node2D
 @export var grid_thickness: float = 1.0
 @export var grid_enabled: bool = true
 
-# Reference to the tilemap to align with
+# Reference to the coord_helper tilemap for coordinate conversion
 var tilemap: TileMap = null
 var camera: Camera2D = null
 
@@ -49,11 +49,11 @@ func _draw_tile_border(tile_pos: Vector2i):
 	var center = tilemap.map_to_local(tile_pos)
 	var tile_size = tilemap.tile_set.tile_size
 
-	# For isometric tiles (64x32), the corners form a diamond
+	# For OpenRCT2 isometric tiles (32x16), the corners form a diamond
 	# In Godot's isometric layout, map_to_local() returns the TOP corner of the diamond
 	# We need to offset by half_height to get the actual center
-	var half_width = tile_size.x / 2.0  # 64 / 2 = 32
-	var half_height = tile_size.y / 2.0  # 32 / 2 = 16
+	var half_width = tile_size.x / 2.0  # 32 / 2 = 16
+	var half_height = tile_size.y / 2.0  # 16 / 2 = 8
 
 	# Adjust center: map_to_local() gives the top point, move to visual center
 	var visual_center = center + Vector2(0, half_height)

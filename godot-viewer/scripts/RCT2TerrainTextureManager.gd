@@ -14,7 +14,7 @@ var textures_loaded: bool = false
 # Number of slope variations (OpenRCT2 has 19: flat + 18 slopes)
 const NUM_SLOPES = 19
 
-# Available RCT2 terrain types
+# Available RCT2 terrain types (all 13 extracted from OpenRCT2)
 const TERRAIN_TYPES = {
 	"grass": "grass",
 	"sand": "sand",
@@ -25,6 +25,10 @@ const TERRAIN_TYPES = {
 	"sand_yellow": "sand_yellow",
 	"grass_clumps": "grass_clumps",
 	"grass_mowed": "grass_mowed",
+	"grass_mowed_90": "grass_mowed_90",
+	"martian": "martian",
+	"checkerboard": "checkerboard",
+	"checkerboard_inverted": "checkerboard_inverted",
 }
 
 func _ready():
@@ -109,18 +113,29 @@ func map_terrain_to_rct2(terrain_type: String) -> String:
 	if TERRAIN_TYPES.has(terrain_key):
 		return terrain_key
 
-	# Try mapping backend terrain names to RCT2 names
+	# Map backend terrain names to RCT2 terrain types
 	match terrain_key:
+		# Grass-like terrains
 		"grass", "forest":
 			return "grass"
+		# Sandy terrains
 		"sand", "desert":
 			return "sand"
+		# Dirt
 		"dirt":
 			return "dirt"
+		# Rocky/Mountain terrains
 		"stone", "mountain":
 			return "rock"
-		"snow":
+		# Snow/Ice
+		"snow", "ice":
 			return "ice"
+		# Water terrains - use sand as placeholder (will be handled separately)
+		"deepwater", "shallowwater", "water":
+			return "sand"  # Temporary - water should use dedicated water sprites
+		# Swamp - use grass_clumps for natural look
+		"swamp":
+			return "grass_clumps"
 		_:
 			return ""
 

@@ -1,14 +1,9 @@
 # TerrainTileMap.gd - Manages isometric terrain rendering
-# Handles chunk data conversion to TileMap cells
+# Handles chunk data conversion to individual Sprite2D nodes with height-based positioning
 
-extends TileMap
+extends Node2D
 
 const SlopeCalculator = preload("res://scripts/SlopeCalculator.gd")
-
-@export var tileset_path: String = "res://resources/TerrainTileSet.tres"
-
-# Terrain mapping to tile IDs
-var terrain_tile_ids: Dictionary = {}
 
 # RCT2 terrain texture manager for all terrain types (grass, sand, dirt, etc.)
 var rct2_terrain_manager = null
@@ -16,8 +11,38 @@ var rct2_terrain_manager = null
 # Water texture manager for RCT2 water sprites
 var water_texture_manager = null
 
+# Tile sprite container (for Y-sorting)
+var tile_container: Node2D = null
+
+# Store all tile sprites by world position for updates/cleanup
+var tile_sprites: Dictionary = {}  # Key: "x,y", Value: Sprite2D
+
+# Isometric tile size (32x16 to match OpenRCT2 grid exactly)
+const TILE_WIDTH = 32
+const TILE_HEIGHT = 16
+
+# Helper TileMap for coordinate conversion only (not rendered)
+var coord_helper: TileMap = null
+
 func _ready():
-	print("🗺️ TerrainTileMap initialized")
+	print("🗺️ TerrainTileMap initialized (Sprite2D-based rendering)")
+
+	# Create tile container with Y-sorting enabled
+	tile_container = Node2D.new()
+	tile_container.name = "TileContainer"
+	tile_container.y_sort_enabled = true
+	add_child(tile_container)
+	print("📦 Tile container created with Y-sorting enabled")
+
+	# Create helper TileMap for coordinate conversion (not rendered, just for map_to_local)
+	coord_helper = TileMap.new()
+	coord_helper.tile_set = TileSet.new()
+	coord_helper.tile_set.tile_shape = TileSet.TILE_SHAPE_ISOMETRIC
+	coord_helper.tile_set.tile_layout = TileSet.TILE_LAYOUT_STACKED
+	coord_helper.tile_set.tile_size = Vector2i(TILE_WIDTH, TILE_HEIGHT)
+	coord_helper.visible = false  # Don't render it
+	add_child(coord_helper)
+	print("🧭 Coordinate helper TileMap created")
 
 	# Initialize RCT2 terrain texture manager
 	var TerrainManager = load("res://scripts/RCT2TerrainTextureManager.gd")
@@ -30,215 +55,17 @@ func _ready():
 	if water_texture_manager:
 		print("🌊 Water textures loaded")
 
-	# Set texture filtering to NEAREST for pixel art (no blurring)
-	texture_filter = TEXTURE_FILTER_NEAREST
-	print("🎨 Texture filter set to NEAREST (pixel-perfect rendering)")
+# Helper function to convert tile coordinates to pixel position with height
+func map_to_local(tile_pos: Vector2i) -> Vector2:
+	"""Convert tile coordinates to isometric pixel coordinates."""
+	return coord_helper.map_to_local(tile_pos)
 
-	# Disable grid lines and debug visualizations
-	navigation_visibility_mode = TileMap.VISIBILITY_MODE_FORCE_HIDE
-	rendering_quadrant_size = 16  # Match chunk size for optimal rendering
-	print("🔧 Grid visualization disabled")
+# Helper function for reverse conversion (if needed)
+func local_to_map(pixel_pos: Vector2) -> Vector2i:
+	"""Convert pixel coordinates to tile coordinates."""
+	return coord_helper.local_to_map(pixel_pos)
 
-	# Ensure we have at least one rendering layer
-	if get_layers_count() == 0:
-		print("⚠️ No layers configured, adding layer 0")
-		add_layer(-1)  # Add a new layer at the end
-
-	# Make sure layer 0 is enabled and visible
-	set_layer_enabled(0, true)
-	set_layer_modulate(0, Color(1, 1, 1, 1))  # Fully visible
-	print("📋 TileMap layers count: ", get_layers_count())
-	print("📋 Layer 0 enabled: ", is_layer_enabled(0))
-
-	# Load the tileset
-	load_tileset()
-
-	# Initialize terrain mapping
-	setup_terrain_mapping()
-
-# Load the terrain tileset
-func load_tileset():
-	print("🔍 Attempting to load TileSet from: ", tileset_path)
-
-	if ResourceLoader.exists(tileset_path):
-		print("📁 TileSet file exists, attempting to load...")
-		var loaded_tileset = ResourceLoader.load(tileset_path)
-		if loaded_tileset != null:
-			self.tile_set = loaded_tileset
-			print("✅ TileSet loaded successfully: ", tileset_path)
-			return
-		else:
-			print("❌ Failed to load TileSet: ", tileset_path)
-	else:
-		print("❌ TileSet file not found: ", tileset_path)
-
-	# Always create a basic tileset programmatically as fallback
-	print("🔧 Creating programmatically generated TileSet...")
-	create_basic_tileset()
-
-# Create a basic tileset programmatically if file loading fails
-func create_basic_tileset():
-	print("🎨 Creating basic TileSet...")
-
-	var tileset = TileSet.new()
-	tileset.tile_shape = 1  # ISOMETRIC
-	tileset.tile_layout = 1  # STACKED
-	tileset.tile_size = Vector2i(64, 32)  # RCT2 isometric tile footprint (2:1 ratio)
-	print("   📐 TileSet configured: isometric, 64x32 (RCT2 2:1 isometric)")
-
-	# Create a single white diamond texture that we'll color with materials
-	var source = TileSetAtlasSource.new()
-	var white_texture = create_diamond_texture()
-	source.texture = white_texture
-	source.texture_region_size = Vector2i(64, 32)  # RCT2 isometric tile footprint
-	print("   🖼️ White diamond texture created (64x32)")
-
-	# Create just one tile at (0,0)
-	source.create_tile(Vector2i(0, 0))
-	print("   🎯 Tile created at (0,0)")
-
-	var source_id = tileset.add_source(source)
-	print("   🔗 Source added with ID: ", source_id)
-
-	# Set the tileset on this TileMap node
-	self.tile_set = tileset
-	print("✅ Created basic TileSet with white diamond and assigned to TileMap")
-
-	# All terrain types will use tile (0,0) but with different materials
-	var available_terrains = ["Grass", "Forest", "Sand", "Water", "Dirt", "Snow",
-							 "Mountain", "Stone", "Swamp", "Desert", "DeepWater", "ShallowWater"]
-
-	for terrain in available_terrains:
-		terrain_tile_ids[terrain] = 0  # All use the same tile at (0,0)
-
-	print("🎨 Terrain mapping configured for ", available_terrains.size(), " terrain types")
-
-# Create a diamond texture for isometric tiles (64×32 RCT2 isometric footprint)
-func create_diamond_texture() -> ImageTexture:
-	var image = Image.create(64, 32, false, Image.FORMAT_RGBA8)
-	image.fill(Color.TRANSPARENT)
-
-	# Draw isometric diamond shape (64 wide × 32 tall - 2:1 ratio)
-	for y in range(32):
-		for x in range(64):
-			# Diamond shape calculation
-			var center_x = 32.0
-			var center_y = 16.0
-			var dx = float(abs(x - center_x))
-			var dy = float(abs(y - center_y))
-
-			# Isometric diamond: width 64, height 32 (2:1 ratio)
-			if dx / 32.0 + dy / 16.0 <= 1.01:
-				image.set_pixel(x, y, Color.WHITE)
-
-	return ImageTexture.create_from_image(image)
-
-# Create a colored diamond texture for specific terrain (64×32 RCT2 isometric footprint)
-func create_colored_diamond_texture(color: Color) -> ImageTexture:
-	var image = Image.create(64, 32, false, Image.FORMAT_RGBA8)
-	image.fill(Color.TRANSPARENT)
-
-	# Draw isometric diamond shape (64 wide × 32 tall - 2:1 ratio)
-	for y in range(32):
-		for x in range(64):
-			# Diamond shape calculation
-			var center_x = 32.0
-			var center_y = 16.0
-			var dx = float(abs(x - center_x))
-			var dy = float(abs(y - center_y))
-
-			# Isometric diamond: width 64, height 32 (2:1 ratio)
-			if dx / 32.0 + dy / 16.0 <= 1.01:
-				image.set_pixel(x, y, color)
-
-	return ImageTexture.create_from_image(image)
-
-
-# Get or create a TileSet source for a specific terrain type
-func _get_or_create_terrain_source(terrain_type: String, color: Color) -> int:
-	if not has_meta("terrain_sources"):
-		set_meta("terrain_sources", {})
-
-	var sources = get_meta("terrain_sources")
-
-	# Return existing source ID if we already have one for this terrain type
-	if sources.has(terrain_type):
-		return sources[terrain_type]
-
-	# Create new source for this terrain type
-	var source = TileSetAtlasSource.new()
-	source.texture = create_colored_diamond_texture(color)
-	source.texture_region_size = Vector2i(64, 32)  # RCT2 isometric tile footprint
-	source.create_tile(Vector2i(0, 0))
-
-	var source_id = self.tile_set.add_source(source)
-	sources[terrain_type] = source_id
-
-	print("🔧 Created new terrain source for ", terrain_type, " with ID ", source_id)
-	return source_id
-
-# Get or create a TileSet source for a specific texture
-func _get_or_create_texture_source(texture: Texture2D) -> int:
-	if not texture:
-		push_error("❌ Cannot create texture source: texture is null")
-		return -1
-
-	if not has_meta("texture_sources"):
-		set_meta("texture_sources", {})
-
-	var sources = get_meta("texture_sources")
-
-	# Use texture size as key since resource_path may be empty for runtime textures
-	var texture_size = texture.get_size()
-	var texture_key = str(texture_size.x) + "x" + str(texture_size.y) + "_" + str(texture.get_rid().get_id())
-
-	# Return existing source ID if we already have one for this texture
-	if sources.has(texture_key):
-		return sources[texture_key]
-
-	# Validate texture size
-	if texture_size.x == 0 or texture_size.y == 0:
-		push_error("❌ Cannot create texture source: texture has invalid size " + str(texture_size))
-		return -1
-
-	# Create new source for this texture
-	var source = TileSetAtlasSource.new()
-	source.texture = texture
-	# IMPORTANT: Use the actual texture size, not our desired tile size!
-	source.texture_region_size = Vector2i(int(texture_size.x), int(texture_size.y))
-	source.create_tile(Vector2i(0, 0))
-
-	# Apply texture offset like stone-kingdoms does for grass tiles
-	# For 1×1 grass: lOffsetY = 16 - lh + 1 (where lh is texture height)
-	# For 30×18 texture on 32×16 tile: Y offset = 16 - 18 + 1 = -1
-	var tile_height = int(texture_size.y)
-	var offset_y = 16 - tile_height + 1  # Match stone-kingdoms offset calculation
-	var offset_x = 0
-
-	# Set texture offset on the tile data
-	var tile_data = source.get_tile_data(Vector2i(0, 0), 0)
-	if tile_data:
-		tile_data.texture_origin = Vector2i(offset_x, offset_y)
-
-	var source_id = self.tile_set.add_source(source)
-	sources[texture_key] = source_id
-
-	print("🔧 Created new texture source (size: %dx%d, offset: %d,%d) with ID %d" % [texture_size.x, texture_size.y, offset_x, offset_y, source_id])
-	return source_id
-
-# Setup terrain to tile ID mapping
-func setup_terrain_mapping():
-	# For now, we'll use the same white tile for all terrain
-	# In a more complex implementation, each terrain type would have its own tile
-	var available_terrains = ["Grass", "Forest", "Sand", "Water", "Dirt", "Snow",
-							 "Mountain", "Stone", "Swamp", "Desert", "DeepWater", "ShallowWater"]
-
-	for terrain in available_terrains:
-		terrain_tile_ids[terrain] = 0  # All use tile ID 0 for now
-
-	print("🎨 Terrain mapping setup for ", terrain_tile_ids.size(), " terrain types")
-
-# Paint a chunk's terrain on the TileMap
+# Paint a chunk's terrain using individual Sprite2D nodes
 func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []):
 	if terrain_data.size() == 0:
 		print("⚠️ No terrain data for chunk ", chunk_key)
@@ -268,6 +95,11 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 				chunk_origin.y + y
 			)
 
+			# Get height value for this tile
+			var height = 0
+			if has_heights and y < height_data.size() and x < height_data[y].size():
+				height = int(height_data[y][x])
+
 			# Calculate slope index if we have height data
 			var slope_index = 0
 			if has_heights:
@@ -279,81 +111,73 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 					world_cache
 				)
 
-			paint_terrain_tile(world_pos, terrain_type, slope_index)
+			paint_terrain_tile(world_pos, terrain_type, slope_index, height)
 			tiles_painted += 1
 
 	print("🎨 Painted ", tiles_painted, " terrain tiles for chunk ", chunk_key)
-	print("🎨 Total cells in TileMap after painting: ", get_used_cells(0).size())
+	print("🎨 Total sprites: ", tile_sprites.size())
 
-	# Debug: Print first few cell positions
-	if get_used_cells(0).size() > 0 and get_used_cells(0).size() <= 20:
-		print("🎨 First cells: ", get_used_cells(0))
+# Paint a single terrain tile as Sprite2D with height-based positioning
+func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0, height: int = 0):
+	# Get texture for this tile
+	var texture: Texture2D = null
 
-# Paint a single terrain tile (isometric)
-func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0):
-	# world_pos is already in tile coordinates - use it directly!
-	# The isometric TileMap will handle the projection automatically
-
-	# Check if this terrain type has an RCT2 texture
 	if _should_use_rct2_texture(terrain_type) and rct2_terrain_manager and rct2_terrain_manager.has_textures():
-		_paint_rct2_tile(world_pos, terrain_type, slope_index)
+		if _is_water_terrain(terrain_type) and water_texture_manager:
+			texture = water_texture_manager
+		else:
+			texture = rct2_terrain_manager.get_terrain_texture(terrain_type, slope_index)
+
+	if not texture:
+		print("⚠️ No texture for terrain type: ", terrain_type)
+		return
+
+	# Create or get existing sprite for this position
+	var tile_key = "%d,%d" % [world_pos.x, world_pos.y]
+	var sprite: Sprite2D = null
+
+	if tile_sprites.has(tile_key):
+		sprite = tile_sprites[tile_key]
 	else:
-		# Use colored diamond for terrain without RCT2 textures
-		_paint_colored_tile(world_pos, terrain_type)
+		sprite = Sprite2D.new()
+		sprite.name = "Tile_%d_%d" % [world_pos.x, world_pos.y]
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST  # Pixel-perfect
+		tile_container.add_child(sprite)
+		tile_sprites[tile_key] = sprite
+
+	# Set texture
+	sprite.texture = texture
+
+	# Calculate isometric position (without height yet)
+	var base_pos = map_to_local(world_pos)
+
+	# Apply height offset (OpenRCT2 formula: screen_y -= height)
+	# OpenRCT2 uses kCoordsZPerTinyZ = 16 to scale height values
+	# Height values are 0-255, divide by 16 to get tile elevation levels
+	var height_offset = height / 16.0
+	var final_pos = Vector2(base_pos.x, base_pos.y - height_offset)
+
+	sprite.position = final_pos
+
+	# Set Z index for Y-sorting based on final Y position
+	sprite.z_index = int(final_pos.y)
+
+	# Only print for first few tiles to avoid spam
+	if tile_sprites.size() <= 10:
+		var slope_info = " (slope %d)" % slope_index if slope_index > 0 else ""
+		print("🏔️ Painted tile at world %s → pixel %s (height: %d)%s as %s" % [world_pos, final_pos, height, slope_info, terrain_type])
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""
-	return terrain_type in ["Grass", "Forest", "Sand", "Desert", "Dirt", "DeepWater", "ShallowWater"]
+	# Enable RCT2 textures for ALL terrain types that have RCT2 mappings
+	var supported_terrains = ["Grass", "Forest", "Sand", "Desert", "Dirt",
+							  "Stone", "Mountain", "Snow", "Ice", "Swamp",
+							  "DeepWater", "ShallowWater"]
+	return terrain_type in supported_terrains
 
 func _is_water_terrain(terrain_type: String) -> bool:
 	"""Check if this terrain type is water."""
 	return terrain_type in ["DeepWater", "ShallowWater"]
-
-func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0):
-	"""Paint a tile using RCT2 terrain or water texture with slope variation."""
-	var texture: Texture2D = null
-
-	# Check if this is water terrain
-	if _is_water_terrain(terrain_type) and water_texture_manager:
-		texture = water_texture_manager
-	else:
-		# Get the RCT2 terrain texture with slope variation
-		texture = rct2_terrain_manager.get_terrain_texture(terrain_type, slope_index)
-
-	if not texture:
-		# Fallback to colored tile if texture loading failed
-		_paint_colored_tile(world_pos, terrain_type)
-		return
-
-	# Get or create a source for the RCT2 texture
-	var source_id = _get_or_create_texture_source(texture)
-
-	# Set the cell with the RCT2 texture
-	set_cell(0, world_pos, source_id, Vector2i(0, 0))
-
-	# Only print for first few tiles to avoid spam
-	if get_used_cells(0).size() <= 10:
-		var pixel_pos = map_to_local(world_pos)
-		var tile_type = "water" if _is_water_terrain(terrain_type) else "terrain"
-		var slope_info = " (slope %d)" % slope_index if slope_index > 0 else ""
-		print("🌊 Painted RCT2 %s tile at world %s (pixel: %s) as %s%s" % [tile_type, world_pos, pixel_pos, terrain_type, slope_info])
-
-func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
-	"""Paint a tile using colored diamond (original method)."""
-	# Get terrain color from config
-	var terrain_color = Config.terrain_colors.get(terrain_type, Color.WHITE)
-
-	# Create/get a colored texture for this terrain type
-	var source_id = _get_or_create_terrain_source(terrain_type, terrain_color)
-
-	# Set the cell with the colored tile (world_pos is already in tile coords)
-	set_cell(0, world_pos, source_id, Vector2i(0, 0))
-
-	# Only print for first few tiles to avoid spam
-	if get_used_cells(0).size() <= 10:
-		# Get the actual pixel position of this tile in isometric space
-		var pixel_pos = map_to_local(world_pos)
-		print("🎨 Painted terrain tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type, " with source ID ", source_id)
 
 func _load_water_texture() -> Texture2D:
 	"""Load flat RCT2 water texture."""
@@ -377,8 +201,14 @@ func clear_chunk(chunk_key: String):
 	for y in range(Config.CHUNK_SIZE):
 		for x in range(Config.CHUNK_SIZE):
 			var world_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
-			# world_pos is already in tile coordinates - use directly
-			erase_cell(0, world_pos)
+			var tile_key = "%d,%d" % [world_pos.x, world_pos.y]
+
+			# Remove sprite if it exists
+			if tile_sprites.has(tile_key):
+				var sprite = tile_sprites[tile_key]
+				if sprite and is_instance_valid(sprite):
+					sprite.queue_free()
+				tile_sprites.erase(tile_key)
 
 	# Clear terrain rectangles in this chunk area
 	_clear_terrain_rects_in_chunk(chunk_origin)
@@ -415,11 +245,16 @@ func _clear_terrain_sprites_in_chunk(chunk_origin: Vector2i):
 
 	set_meta("terrain_sprites", sprites_to_keep)
 
-# Clear all tiles from the TileMap
+# Clear all tiles (sprites)
 func clear_all_tiles():
-	clear()
+	# Clear all tile sprites
+	for tile_key in tile_sprites.keys():
+		var sprite = tile_sprites[tile_key]
+		if sprite and is_instance_valid(sprite):
+			sprite.queue_free()
+	tile_sprites.clear()
 
-	# Clear all terrain sprites
+	# Clear all terrain sprites (legacy)
 	if has_meta("terrain_sprites"):
 		var sprites = get_meta("terrain_sprites")
 		for sprite in sprites:
@@ -440,11 +275,11 @@ func update_chunks(chunk_keys: Array[String]):
 		if terrain_data.size() > 0:
 			paint_chunk(chunk_key, terrain_data)
 
-# Debug function to print tilemap info
+# Debug function to print terrain rendering info
 func debug_print_info():
 	print("=== TerrainTileMap Debug Info ===")
-	print("TileSet: ", "Loaded" if self.tile_set != null else "Not loaded")
-	print("Tile shape: ", self.tile_set.tile_shape if self.tile_set else "N/A")
-	print("Tile size: ", self.tile_set.tile_size if self.tile_set else "N/A")
-	print("Used cells: ", get_used_cells(0).size())
+	print("Rendering mode: Sprite2D-based with height positioning")
+	print("Total tile sprites: ", tile_sprites.size())
+	print("Tile container children: ", tile_container.get_child_count() if tile_container else 0)
+	print("Y-sorting enabled: ", tile_container.y_sort_enabled if tile_container else false)
 	print("=== End Debug Info ===")

@@ -115,10 +115,18 @@ func _update_tooltip(screen_pos: Vector2):
 	# Get resource type from cache using WorldDataCache's built-in method
 	var resource_type = WorldDataCache.get_resource_at(tile_pos.x, tile_pos.y)
 
+	# Get height from cache
+	var height = WorldDataCache.get_height_at(tile_pos.x, tile_pos.y)
+
 	# Build tooltip text
 	var text = "World: (%d, %d)\n" % [tile_pos.x, tile_pos.y]
 	text += "Chunk: (%d, %d)\n" % [chunk_x, chunk_y]
-	text += "Terrain: %s" % terrain_type
+	text += "Terrain: %s\n" % terrain_type
+
+	if height >= 0:
+		text += "Height: %d" % height
+	else:
+		text += "Height: N/A"
 
 	if resource_type != "":
 		var resource_symbol = Config.get_resource_symbol(resource_type)
@@ -148,8 +156,8 @@ func _draw_debug_tile(tile_pos: Vector2i):
 	var tile_size = tilemap.tile_set.tile_size
 
 	# Calculate diamond corners (same as GridOverlay but in red)
-	var half_width = tile_size.x / 2.0  # 32
-	var half_height = tile_size.y / 2.0  # 16
+	var half_width = tile_size.x / 2.0  # 16 for OpenRCT2 32×16 tiles
+	var half_height = tile_size.y / 2.0  # 8 for OpenRCT2 32×16 tiles
 
 	# Adjust center: map_to_local() gives the top point, move to visual center
 	var visual_center = center + Vector2(0, half_height)

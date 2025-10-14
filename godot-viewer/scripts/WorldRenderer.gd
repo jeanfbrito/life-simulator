@@ -53,8 +53,8 @@ func _ready():
 	var center_tile = Vector2i(0, 0)
 	var center_pixel = terrain_tilemap.map_to_local(center_tile)
 	camera.position = center_pixel
-	camera.zoom = Vector2(0.5, 0.5)  # Zoom out to see isometric tiles (128x64 tiles are large)
-	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 0.5x")
+	camera.zoom = Vector2(1.0, 1.0)  # 1:1 zoom for OpenRCT2 32×16 tiles
+	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 1.0x")
 
 	# Print camera and tilemap info
 	print("📹 Camera actual position: ", camera.position, " zoom: ", camera.zoom)
@@ -306,7 +306,7 @@ func _initialize_grid_overlay():
 
 	# Create grid overlay instance
 	grid_overlay = GridOverlay.new()
-	grid_overlay.set_tilemap(terrain_tilemap)
+	grid_overlay.set_tilemap(terrain_tilemap.coord_helper)  # Use coord_helper for coordinate conversion
 	grid_overlay.set_camera(camera)
 
 	# Add as child of TerrainTileMap so it inherits transformations
@@ -324,7 +324,7 @@ func _initialize_tooltip_overlay():
 
 	# Create tooltip overlay instance
 	tooltip_overlay = TooltipOverlay.new()
-	tooltip_overlay.set_tilemap(terrain_tilemap)
+	tooltip_overlay.set_tilemap(terrain_tilemap.coord_helper)  # Use coord_helper for coordinate conversion
 	tooltip_overlay.set_camera(camera)
 
 	# Add as child of root World node to be in screen space (not world space)
@@ -383,7 +383,7 @@ func reset_camera_to_origin():
 		var center_tile = Vector2i(0, 0)
 		var center_pixel = terrain_tilemap.map_to_local(center_tile)
 		camera.position = center_pixel
-		camera.zoom = Vector2(0.5, 0.5)
+		camera.zoom = Vector2(1.0, 1.0)
 		print("📹 Camera reset to origin (0,0)")
 		_update_visible_chunks()
 
