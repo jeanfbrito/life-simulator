@@ -6,7 +6,7 @@ extends Node
 signal configuration_loaded
 
 # Display configuration
-var TILE_SIZE: int = 32  # Tile width - matches TileSet tile_size width (32×16) from stone-kingdoms
+var TILE_SIZE: int = 64  # Tile size - matches RCT2 atlas cell size (64×64)
 var render_scale: float = 1.0  # Scale factor for rendering
 var VIEW_SIZE_X: int = 100  # Dynamic view width based on container
 var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container
