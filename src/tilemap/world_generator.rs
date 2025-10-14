@@ -256,10 +256,10 @@ impl WorldGenerator {
         let mut heights = Vec::with_capacity(16);
         let perlin = Perlin::new(self.config.seed as u32);
 
-        // Height map parameters
+        // Height map parameters (OpenRCT2 style - smooth, gentle slopes)
         let base_height = 50; // Sea level
-        let noise_scale = 0.05; // Frequency of height variation
-        let noise_amplitude = 30.0; // Height variation range
+        let noise_scale = 0.02; // Low frequency for smooth terrain
+        let noise_amplitude = 12.0; // Gentle variation (±6 height units)
 
         for y in 0..16 {
             let mut row = Vec::with_capacity(16);

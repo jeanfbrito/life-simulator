@@ -10,8 +10,8 @@ const CORNER_E = 0b0010  # East corner elevated
 const CORNER_S = 0b0100  # South corner elevated
 const CORNER_W = 0b1000  # West corner elevated
 
-# Height threshold for corner elevation detection
-const HEIGHT_THRESHOLD = 5  # Height difference to consider corner elevated
+# Height threshold for corner elevation detection (OpenRCT2 style)
+const HEIGHT_THRESHOLD = 8  # Only significant height differences create slopes
 
 ## Calculate slope index for a tile based on neighbor heights
 ## Returns slope index 0-18 (0 = flat, 1-18 = various slopes)
