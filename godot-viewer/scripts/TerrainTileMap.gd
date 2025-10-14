@@ -17,9 +17,15 @@ var tile_container: Node2D = null
 # Store all tile sprites by world position for updates/cleanup
 var tile_sprites: Dictionary = {}  # Key: "x,y", Value: Sprite2D
 
-# Isometric tile size (32x16 to match OpenRCT2 grid exactly)
-const TILE_WIDTH = 32
-const TILE_HEIGHT = 16
+# OpenRCT2 coordinate constants - EXACT MATCH
+# From: src/openrct2/world/Location.hpp
+const COORDS_XY_STEP = 32          # kCoordsXYStep - base coordinate step
+const COORDS_Z_STEP = 8            # kCoordsZStep - pixels per Z level
+const COORDS_Z_PER_TINY_Z = 16     # kCoordsZPerTinyZ - height division factor
+
+# Isometric tile dimensions - OpenRCT2 EXACT MATCH
+const TILE_WIDTH = 64   # 2 * COORDS_XY_STEP = 64 (diamond width)
+const TILE_HEIGHT = 32  # COORDS_XY_STEP = 32 (diamond height)
 
 # Helper TileMap for coordinate conversion only (not rendered)
 var coord_helper: TileMap = null
@@ -151,10 +157,12 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Calculate isometric position (without height yet)
 	var base_pos = map_to_local(world_pos)
 
-	# Apply height offset (OpenRCT2 formula: screen_y -= height)
-	# OpenRCT2 uses kCoordsZPerTinyZ = 16 to scale height values
-	# Height values are 0-255, divide by 16 to get tile elevation levels
-	var height_offset = height / 16.0
+	# Apply OpenRCT2 height formula - EXACT MATCH
+	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp
+	# Formula: screen_y -= (height * kCoordsZStep) / kCoordsZPerTinyZ
+	var height_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
+	# Simplifies to: height / 2.0
+
 	var final_pos = Vector2(base_pos.x, base_pos.y - height_offset)
 
 	sprite.position = final_pos
@@ -162,10 +170,11 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Set Z index for Y-sorting based on final Y position
 	sprite.z_index = int(final_pos.y)
 
-	# Only print for first few tiles to avoid spam
-	if tile_sprites.size() <= 10:
-		var slope_info = " (slope %d)" % slope_index if slope_index > 0 else ""
-		print("🏔️ Painted tile at world %s → pixel %s (height: %d)%s as %s" % [world_pos, final_pos, height, slope_info, terrain_type])
+	# Debug output for first few tiles
+	if tile_sprites.size() <= 3:
+		var slope_info = " slope=%d" % slope_index if slope_index > 0 else ""
+		print("🏔️ OpenRCT2 EXACT: tile %s, height=%d → offset=%.1f px (h*%d/%d)%s → %s" %
+		      [world_pos, height, height_offset, COORDS_Z_STEP, COORDS_Z_PER_TINY_Z, slope_info, terrain_type])
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""

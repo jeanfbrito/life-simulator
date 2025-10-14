@@ -156,8 +156,8 @@ func _draw_debug_tile(tile_pos: Vector2i):
 	var tile_size = tilemap.tile_set.tile_size
 
 	# Calculate diamond corners (same as GridOverlay but in red)
-	var half_width = tile_size.x / 2.0  # 16 for OpenRCT2 32×16 tiles
-	var half_height = tile_size.y / 2.0  # 8 for OpenRCT2 32×16 tiles
+	var half_width = tile_size.x / 2.0  # 32 for OpenRCT2 64×32 tiles
+	var half_height = tile_size.y / 2.0  # 16 for OpenRCT2 64×32 tiles
 
 	# Adjust center: map_to_local() gives the top point, move to visual center
 	var visual_center = center + Vector2(0, half_height)

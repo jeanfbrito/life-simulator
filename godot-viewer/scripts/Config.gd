@@ -5,9 +5,13 @@ extends Node
 
 signal configuration_loaded
 
-# Display configuration
-var TILE_SIZE: int = 32  # Tile width - matches OpenRCT2 isometric grid (32×16)
-var TILE_HEIGHT: int = 16  # Tile height for isometric projection
+# Display configuration - OpenRCT2 EXACT MATCH
+# From: src/openrct2/world/Location.hpp
+var TILE_SIZE: int = 64  # Tile width - OpenRCT2 isometric diamond (64×32)
+var TILE_HEIGHT: int = 32  # Tile height - OpenRCT2 isometric diamond
+var COORDS_XY_STEP: int = 32  # kCoordsXYStep - base coordinate step
+var COORDS_Z_STEP: int = 8  # kCoordsZStep - pixels per Z level
+var COORDS_Z_PER_TINY_Z: int = 16  # kCoordsZPerTinyZ - height division factor
 var render_scale: float = 1.0  # Scale factor for rendering
 var VIEW_SIZE_X: int = 100  # Dynamic view width based on container
 var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container
@@ -177,6 +181,12 @@ var juvenile_scales: Dictionary = {}
 var CHUNK_SIZE: int = 16
 var DEFAULT_TERRAIN_TYPE: String = "DeepWater"
 var DEFAULT_CENTER_CHUNK: Vector2i = Vector2i(0, 0)
+
+# OpenRCT2 height limits - EXACT MATCH
+# From: src/openrct2/Limits.h
+const MIN_LAND_HEIGHT: int = 2
+const MAX_TILE_HEIGHT: int = 254
+const WATER_BASE_HEIGHT: int = 14
 
 # Called when the node enters the scene tree for the first time.
 func _ready():

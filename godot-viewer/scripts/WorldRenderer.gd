@@ -53,8 +53,8 @@ func _ready():
 	var center_tile = Vector2i(0, 0)
 	var center_pixel = terrain_tilemap.map_to_local(center_tile)
 	camera.position = center_pixel
-	camera.zoom = Vector2(1.0, 1.0)  # 1:1 zoom for OpenRCT2 32×16 tiles
-	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 1.0x")
+	camera.zoom = Vector2(0.5, 0.5)  # 0.5x zoom for OpenRCT2 64×32 tiles
+	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 0.5x (OpenRCT2 exact)")
 
 	# Print camera and tilemap info
 	print("📹 Camera actual position: ", camera.position, " zoom: ", camera.zoom)
@@ -383,7 +383,7 @@ func reset_camera_to_origin():
 		var center_tile = Vector2i(0, 0)
 		var center_pixel = terrain_tilemap.map_to_local(center_tile)
 		camera.position = center_pixel
-		camera.zoom = Vector2(1.0, 1.0)
+		camera.zoom = Vector2(0.5, 0.5)  # OpenRCT2 64×32 tiles
 		print("📹 Camera reset to origin (0,0)")
 		_update_visible_chunks()
 

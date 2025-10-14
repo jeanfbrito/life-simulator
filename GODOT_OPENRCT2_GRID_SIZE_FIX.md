@@ -3,9 +3,11 @@
 **Date:** 2025-10-14
 **Status:** Complete
 
-## Problem
+## Problem (SUPERSEDED - See OPENRCT2_EXACT_MATCH_PLAN.md)
 
-The Godot viewer was using **64×32 pixel tiles** for isometric rendering, but OpenRCT2 actually uses **32×16 pixel tiles** for its grid. This caused the tiles to appear at 2× the correct size, making the grid not match OpenRCT2's specifications.
+**NOTE:** This document described an intermediate fix that was later superseded. The final implementation matches OpenRCT2 EXACTLY with 64×32 tiles.
+
+The initial Godot viewer was using **128×64 pixel tiles**, which was incorrect. This document originally fixed it to 32×16, but the final correct size is **64×32 pixels** (OpenRCT2's exact diamond size).
 
 ## Root Cause
 

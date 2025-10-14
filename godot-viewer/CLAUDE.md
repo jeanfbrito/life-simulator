@@ -30,29 +30,35 @@ camera.position = center_pixel  # Now camera sees tile (0,0)
 ### Why This Matters
 
 **Isometric tiles have non-obvious pixel positions:**
-- Tile size: 32×16 pixels (OpenRCT2 standard)
+- Tile size: 64×32 pixels (OpenRCT2 EXACT MATCH)
 - Tile (0, 0) → Pixel (0, 0)
-- Tile (-48, -48) → Pixel (-1504, -384) ⚠️
-- Tile (10, 10) → Pixel (320, 80)
+- Tile (-48, -48) → Pixel (-3072, -768) ⚠️
+- Tile (10, 10) → Pixel (0, 320)
 
-**Formula for isometric projection:**
+**Formula for isometric projection (OpenRCT2 EXACT):**
 ```
-pixel_x = (tile_x - tile_y) × (tile_width / 2)
-pixel_y = (tile_x + tile_y) × (tile_height / 2)
+pixel_x = (tile_x - tile_y) × kCoordsXYStep
+pixel_y = (tile_x + tile_y) × (kCoordsXYStep / 2) - height_offset
+
+Where:
+kCoordsXYStep = 32
+height_offset = (height × kCoordsZStep) / kCoordsZPerTinyZ
+              = (height × 8) / 16
+              = height / 2
 ```
 
-For OpenRCT2 32×16 tiles:
+For OpenRCT2 64×32 tiles:
 ```
-pixel_x = (tile_x - tile_y) × 16
-pixel_y = (tile_x + tile_y) × 8
+pixel_x = (tile_x - tile_y) × 32
+pixel_y = (tile_x + tile_y) × 16 - height / 2
 ```
 
 ### Camera Zoom for Isometric Tiles
 
 **Default zoom levels:**
-- `zoom = 0.5`: Zoomed out for full island view
-- `zoom = 1.0`: Standard OpenRCT2 view (32×16 tiles at 1:1)
-- `zoom = 2.0`: Close-up view for detailed inspection
+- `zoom = 0.5`: Standard view for OpenRCT2 64×32 tiles (default)
+- `zoom = 1.0`: Zoomed in for detailed inspection
+- `zoom = 2.0`: Close-up view for tile-by-tile work
 
 **Rule of thumb:** Larger tiles need smaller zoom values.
 
@@ -148,12 +154,12 @@ func _update_visible_chunks():
 var tileset = TileSet.new()
 tileset.tile_shape = TileSet.TILE_SHAPE_ISOMETRIC  # Shape: 1
 tileset.tile_layout = TileSet.TILE_LAYOUT_STACKED   # Layout: 1
-tileset.tile_size = Vector2i(32, 16)  # OpenRCT2 isometric diamond
+tileset.tile_size = Vector2i(64, 32)  # OpenRCT2 isometric diamond (EXACT)
 
 # Create atlas source with diamond texture
 var source = TileSetAtlasSource.new()
 source.texture = create_diamond_texture()
-source.texture_region_size = Vector2i(32, 16)
+source.texture_region_size = Vector2i(64, 32)
 source.create_tile(Vector2i(0, 0))
 
 var source_id = tileset.add_source(source)
@@ -176,7 +182,7 @@ func _get_or_create_terrain_source(terrain_type: String, color: Color) -> int:
     # Create new colored source
     var source = TileSetAtlasSource.new()
     source.texture = create_colored_diamond_texture(color)
-    source.texture_region_size = Vector2i(32, 16)
+    source.texture_region_size = Vector2i(64, 32)
     source.create_tile(Vector2i(0, 0))
 
     var source_id = self.tile_set.add_source(source)
@@ -295,7 +301,7 @@ WorldDataCache initialized
 🎨 Terrain mapping setup for 12 terrain types
 📊 TopBar initialized successfully
 🌍 WorldRenderer initialized
-📹 Camera positioned at tile (0, 0) = pixel (0.0, 0.0) with zoom 1.0x
+📹 Camera positioned at tile (0, 0) = pixel (0.0, 0.0) with zoom 0.5x (OpenRCT2 exact)
 🚀 Starting world loading...
 ✅ Species configuration loaded from API
 Species loaded: ["default", "Bear", "Deer", "Fox", "Human", "Rabbit", "Raccoon", "Wolf"]
@@ -414,7 +420,7 @@ print("Chunk 0,0 size: ", chunk_data.size())
 
 - Use cached colored sources (don't recreate textures)
 - Layer 0 only (single rendering layer)
-- Diamond textures: 32×16 pixels = 512 bytes each (OpenRCT2 size)
+- Diamond textures: 64×32 pixels = 2KB each (OpenRCT2 EXACT)
 
 ### Memory Usage
 
