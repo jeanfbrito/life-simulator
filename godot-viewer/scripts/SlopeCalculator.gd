@@ -10,8 +10,9 @@ const CORNER_E = 0b0010  # East corner elevated
 const CORNER_S = 0b0100  # South corner elevated
 const CORNER_W = 0b1000  # West corner elevated
 
-# Height threshold for corner elevation detection (OpenRCT2 style)
-const HEIGHT_THRESHOLD = 2  # Detect slopes with small height differences (smoothed fBm terrain)
+# OpenRCT2 height constants - EXACT MATCH
+const LAND_HEIGHT_STEP = 16  # kLandHeightStep from MapLimits.h (2 * kCoordsZStep)
+const HEIGHT_THRESHOLD = 8   # Half of LAND_HEIGHT_STEP for reliable slope detection
 
 ## Calculate slope index for a tile based on neighbor heights
 ## Returns slope index 0-18 (0 = flat, 1-18 = various slopes)
@@ -27,11 +28,17 @@ static func calculate_slope_index(
 
 	var current_height = heights[local_pos.y][local_pos.x]
 
-	# Get neighbor heights (N, E, S, W)
-	var h_n = get_neighbor_height(heights, local_pos, Vector2i(0, -1), chunk_coord, world_cache)
-	var h_e = get_neighbor_height(heights, local_pos, Vector2i(1, 0), chunk_coord, world_cache)
-	var h_s = get_neighbor_height(heights, local_pos, Vector2i(0, 1), chunk_coord, world_cache)
-	var h_w = get_neighbor_height(heights, local_pos, Vector2i(-1, 0), chunk_coord, world_cache)
+	# Get DIAGONAL neighbor heights for corner detection (OpenRCT2 EXACT MATCH)
+	# In isometric tiles, corners touch diagonal neighbors, not orthogonal ones
+	# From OpenRCT2 MapHelpers.cpp smoothTileStrong():
+	#   North corner checks (x+1, y+1)
+	#   East corner checks (x+1, y-1)
+	#   South corner checks (x-1, y-1)
+	#   West corner checks (x-1, y+1)
+	var h_n = get_neighbor_height(heights, local_pos, Vector2i(1, 1), chunk_coord, world_cache)    # NE diagonal
+	var h_e = get_neighbor_height(heights, local_pos, Vector2i(1, -1), chunk_coord, world_cache)   # SE diagonal
+	var h_s = get_neighbor_height(heights, local_pos, Vector2i(-1, -1), chunk_coord, world_cache)  # SW diagonal
+	var h_w = get_neighbor_height(heights, local_pos, Vector2i(-1, 1), chunk_coord, world_cache)   # NW diagonal
 
 	# Build slope bitfield based on which corners are elevated
 	var slope = 0
