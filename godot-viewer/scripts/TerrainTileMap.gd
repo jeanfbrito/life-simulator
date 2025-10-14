@@ -3,6 +3,8 @@
 
 extends TileMap
 
+const SlopeCalculator = preload("res://scripts/SlopeCalculator.gd")
+
 @export var tileset_path: String = "res://resources/TerrainTileSet.tres"
 
 # Terrain mapping to tile IDs
