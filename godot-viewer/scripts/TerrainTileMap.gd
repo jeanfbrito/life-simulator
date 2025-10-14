@@ -8,17 +8,17 @@ extends TileMap
 # Terrain mapping to tile IDs
 var terrain_tile_ids: Dictionary = {}
 
-# Grass texture manager for RCT2 grass textures
-var grass_manager = null
+# RCT2 terrain texture manager for all terrain types (grass, sand, dirt, etc.)
+var rct2_terrain_manager = null
 
 func _ready():
 	print("🗺️ TerrainTileMap initialized")
 
-	# Initialize RCT2 grass texture manager
-	var GrassManager = load("res://scripts/GrassTextureManagerRCT2.gd")
-	grass_manager = GrassManager.new()
-	add_child(grass_manager)
-	print("🌿 RCT2 GrassTextureManager initialized")
+	# Initialize RCT2 terrain texture manager
+	var TerrainManager = load("res://scripts/RCT2TerrainTextureManager.gd")
+	rct2_terrain_manager = TerrainManager.new()
+	add_child(rct2_terrain_manager)
+	print("🌍 RCT2TerrainTextureManager initialized")
 
 	# Set texture filtering to NEAREST for pixel art (no blurring)
 	texture_filter = TEXTURE_FILTER_NEAREST
@@ -268,36 +268,36 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String):
 	# world_pos is already in tile coordinates - use it directly!
 	# The isometric TileMap will handle the projection automatically
 
-	# Check if this is a grass terrain and we have grass textures loaded
-	if _should_use_grass_texture(terrain_type) and grass_manager and grass_manager.has_textures():
-		_paint_grass_tile(world_pos, terrain_type)
+	# Check if this terrain type has an RCT2 texture
+	if _should_use_rct2_texture(terrain_type) and rct2_terrain_manager and rct2_terrain_manager.has_textures():
+		_paint_rct2_tile(world_pos, terrain_type)
 	else:
-		# Use colored diamond for non-grass terrain
+		# Use colored diamond for terrain without RCT2 textures
 		_paint_colored_tile(world_pos, terrain_type)
 
-func _should_use_grass_texture(terrain_type: String) -> bool:
-	"""Check if this terrain type should use grass textures."""
-	return terrain_type in ["Grass", "Forest"]
+func _should_use_rct2_texture(terrain_type: String) -> bool:
+	"""Check if this terrain type should use RCT2 textures."""
+	return terrain_type in ["Grass", "Forest", "Sand", "Desert", "Dirt"]
 
-func _paint_grass_tile(world_pos: Vector2i, terrain_type: String):
-	"""Paint a tile using RCT2 grass texture."""
-	# Get the flat RCT2 grass texture
-	var grass_texture = grass_manager.get_grass_texture()
-	if not grass_texture:
+func _paint_rct2_tile(world_pos: Vector2i, terrain_type: String):
+	"""Paint a tile using RCT2 terrain texture."""
+	# Get the RCT2 texture for this terrain type
+	var rct2_texture = rct2_terrain_manager.get_terrain_texture(terrain_type)
+	if not rct2_texture:
 		# Fallback to colored tile if texture loading failed
 		_paint_colored_tile(world_pos, terrain_type)
 		return
 
-	# Get or create a source for the RCT2 grass texture
-	var source_id = _get_or_create_texture_source(grass_texture)
+	# Get or create a source for the RCT2 texture
+	var source_id = _get_or_create_texture_source(rct2_texture)
 
-	# Set the cell with the grass texture
+	# Set the cell with the RCT2 texture
 	set_cell(0, world_pos, source_id, Vector2i(0, 0))
 
 	# Only print for first few tiles to avoid spam
 	if get_used_cells(0).size() <= 10:
 		var pixel_pos = map_to_local(world_pos)
-		print("🌿 Painted RCT2 grass tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
+		print("🌍 Painted RCT2 terrain tile at world ", world_pos, " (pixel: ", pixel_pos, ") as ", terrain_type)
 
 func _paint_colored_tile(world_pos: Vector2i, terrain_type: String):
 	"""Paint a tile using colored diamond (original method)."""
