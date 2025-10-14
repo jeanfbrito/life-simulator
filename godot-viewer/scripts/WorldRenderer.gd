@@ -53,8 +53,8 @@ func _ready():
 	var center_tile = Vector2i(0, 0)
 	var center_pixel = terrain_tilemap.map_to_local(center_tile)
 	camera.position = center_pixel
-	camera.zoom = Vector2(0.5, 0.5)  # 0.5x zoom for OpenRCT2 64×32 tiles
-	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 0.5x (OpenRCT2 exact)")
+	camera.zoom = Vector2(0.2, 0.2)  # 0.2x zoom - zoomed out to see full terrain elevation
+	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom 0.2x (zoomed out view)")
 
 	# Print camera and tilemap info
 	print("📹 Camera actual position: ", camera.position, " zoom: ", camera.zoom)
@@ -164,6 +164,11 @@ func _update_visible_chunks():
 			current_chunk_keys.append(chunk_key)
 
 	print("📊 Total rendered chunks: ", current_chunk_keys.size(), " / ", visible_chunks.size(), " visible")
+
+	# Take debug screenshot when all chunks loaded
+	if current_chunk_keys.size() >= 49 and not has_meta("screenshot_taken"):
+		set_meta("screenshot_taken", true)
+		call_deferred("_take_debug_screenshot")
 
 	# Debug: Print TileMap state
 	print("📊 TileMap stats:")
@@ -421,6 +426,18 @@ func force_refresh_chunks():
 	start_world_loading()
 
 	print("✅ Full reload initiated")
+
+# Debug: Take screenshot for debugging
+func _take_debug_screenshot():
+	await RenderingServer.frame_post_draw
+	var viewport = get_viewport()
+	var img = viewport.get_texture().get_image()
+	var screenshot_path = "/tmp/godot_terrain_debug.png"
+	var error = img.save_png(screenshot_path)
+	if error == OK:
+		print("📸 Screenshot saved to: ", screenshot_path)
+	else:
+		print("❌ Failed to save screenshot: ", error)
 
 # Debug information
 func debug_print_status():

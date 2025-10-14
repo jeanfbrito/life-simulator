@@ -160,7 +160,7 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	sprite.texture = texture
 
 	# Calculate isometric position using OpenRCT2 EXACT formula
-	var base_pos = map_to_local(world_pos)
+	var base_pos = map_to_local(world_pos)  # Uses custom OpenRCT2 formula, NOT Godot's TileMap
 
 	# Apply OpenRCT2 height formula - EXACT MATCH
 	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp
