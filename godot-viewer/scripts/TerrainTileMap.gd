@@ -63,8 +63,13 @@ func _ready():
 
 # Helper function to convert tile coordinates to pixel position with height
 func map_to_local(tile_pos: Vector2i) -> Vector2:
-	"""Convert tile coordinates to isometric pixel coordinates."""
-	return coord_helper.map_to_local(tile_pos)
+	"""Convert tile coordinates to isometric pixel coordinates using OpenRCT2 EXACT formula."""
+	# OpenRCT2 isometric projection formula from Location.hpp:
+	# screen_x = (tile_x - tile_y) × kCoordsXYStep
+	# screen_y = (tile_x + tile_y) × (kCoordsXYStep / 2)
+	var pixel_x = float(tile_pos.x - tile_pos.y) * float(COORDS_XY_STEP)
+	var pixel_y = float(tile_pos.x + tile_pos.y) * float(COORDS_XY_STEP / 2)
+	return Vector2(pixel_x, pixel_y)
 
 # Helper function for reverse conversion (if needed)
 func local_to_map(pixel_pos: Vector2) -> Vector2i:
@@ -154,8 +159,8 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Set texture
 	sprite.texture = texture
 
-	# Calculate isometric position (without height yet)
-	var base_pos = coord_helper.map_to_local(world_pos)
+	# Calculate isometric position using OpenRCT2 EXACT formula
+	var base_pos = map_to_local(world_pos)
 
 	# Apply OpenRCT2 height formula - EXACT MATCH
 	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp
@@ -170,11 +175,11 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Set Z index for Y-sorting based on final Y position
 	sprite.z_index = int(final_pos.y)
 
-	# Debug output for first few tiles
-	if tile_sprites.size() <= 3:
+	# Debug output for first few tiles - ENHANCED
+	if tile_sprites.size() <= 10:
 		var slope_info = " slope=%d" % slope_index if slope_index > 0 else ""
-		print("🏔️ OpenRCT2 EXACT: tile %s, height=%d → offset=%.1f px (h*%d/%d)%s → %s" %
-		      [world_pos, height, height_offset, COORDS_Z_STEP, COORDS_Z_PER_TINY_Z, slope_info, terrain_type])
+		print("🏔️ POSITION DEBUG: tile %s, height=%d → base_y=%.1f, offset=%.1f, final_y=%.1f (Δ=%.1f px)%s → %s" %
+		      [world_pos, height, base_pos.y, height_offset, final_pos.y, base_pos.y - final_pos.y, slope_info, terrain_type])
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""

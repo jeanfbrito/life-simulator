@@ -306,7 +306,7 @@ func _initialize_grid_overlay():
 
 	# Create grid overlay instance
 	grid_overlay = GridOverlay.new()
-	grid_overlay.set_tilemap(terrain_tilemap.coord_helper)  # Use coord_helper for coordinate conversion
+	grid_overlay.set_tilemap(terrain_tilemap)  # Use TerrainTileMap with OpenRCT2 exact formula
 	grid_overlay.set_camera(camera)
 
 	# Add as child of TerrainTileMap so it inherits transformations
@@ -324,7 +324,7 @@ func _initialize_tooltip_overlay():
 
 	# Create tooltip overlay instance
 	tooltip_overlay = TooltipOverlay.new()
-	tooltip_overlay.set_tilemap(terrain_tilemap.coord_helper)  # Use coord_helper for coordinate conversion
+	tooltip_overlay.set_tilemap(terrain_tilemap)  # Use TerrainTileMap with OpenRCT2 exact formula
 	tooltip_overlay.set_camera(camera)
 
 	# Add as child of root World node to be in screen space (not world space)
