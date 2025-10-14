@@ -27,6 +27,12 @@ const COORDS_Z_PER_TINY_Z = 16     # kCoordsZPerTinyZ - height division factor
 const TILE_WIDTH = 64   # 2 * COORDS_XY_STEP = 64 (diamond width)
 const TILE_HEIGHT = 32  # COORDS_XY_STEP = 32 (diamond height)
 
+# OpenRCT2 Rendering Scale - CRITICAL FOR ELEVATION VISIBILITY
+# OpenRCT2 has sprite scale options: 1x, 2x, 3x, 4x (Settings → Display)
+# Default is 2x for modern displays to make elevation dramatic
+# This is INDEPENDENT of camera zoom (zoom is for viewport, scale is for rendering)
+const RENDERING_SCALE = 2.0  # 2x scale like OpenRCT2 default (try 1.0, 2.0, 3.0, or 4.0)
+
 # Helper TileMap for coordinate conversion only (not rendered)
 var coord_helper: TileMap = null
 
@@ -111,17 +117,18 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 			if has_heights and y < height_data.size() and x < height_data[y].size():
 				height = int(height_data[y][x])
 
-			# Calculate slope index if we have height data
-			# TEMPORARILY DISABLED - using flat tiles only to show elevation is working
+			# Calculate slope index from height differences
+			# Slope sprites are 64×32 pixels (base size), matching our TILE dimensions
+			# With RENDERING_SCALE applied, they'll match the scaled elevation
 			var slope_index = 0
-			# if has_heights:
-			# 	var world_cache = get_node("/root/WorldDataCache")
-			# 	slope_index = SlopeCalculator.calculate_slope_index(
-			# 		height_data,
-			# 		Vector2i(x, y),
-			# 		chunk_coord,
-			# 		world_cache
-			# 	)
+			if has_heights:
+				var world_cache = get_node("/root/WorldDataCache")
+				slope_index = SlopeCalculator.calculate_slope_index(
+					height_data,
+					Vector2i(x, y),
+					chunk_coord,
+					world_cache
+				)
 
 			paint_terrain_tile(world_pos, terrain_type, slope_index, height)
 			tiles_painted += 1
@@ -163,11 +170,17 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Calculate isometric position using OpenRCT2 EXACT formula
 	var base_pos = map_to_local(world_pos)  # Uses custom OpenRCT2 formula, NOT Godot's TileMap
 
-	# Apply OpenRCT2 height formula - EXACT MATCH
+	# OpenRCT2 Pipeline Step 3: Divide by 2 when rendering (EXACT match)
 	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp
 	# Formula: screen_y -= (height * kCoordsZStep) / kCoordsZPerTinyZ
-	var height_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
 	# Simplifies to: height / 2.0
+	var height_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
+	# Result: [0, 254] / 2 → [0, 127] pixels of elevation
+
+	# Apply rendering scale (like OpenRCT2's sprite scale feature)
+	# This is INDEPENDENT of camera zoom - it's a rendering multiplier
+	# OpenRCT2 uses 2x-3x scale by default for modern displays
+	height_offset *= RENDERING_SCALE  # Multiply by rendering scale!
 
 	var final_pos = Vector2(base_pos.x, base_pos.y - height_offset)
 
@@ -179,8 +192,9 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Debug output for first few tiles - ENHANCED
 	if tile_sprites.size() <= 10:
 		var slope_info = " slope=%d" % slope_index if slope_index > 0 else ""
-		print("🏔️ POSITION DEBUG: tile %s, height=%d → base_y=%.1f, offset=%.1f, final_y=%.1f (Δ=%.1f px)%s → %s" %
-		      [world_pos, height, base_pos.y, height_offset, final_pos.y, base_pos.y - final_pos.y, slope_info, terrain_type])
+		var base_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
+		print("🏔️ POSITION DEBUG: tile %s, height=%d → base_y=%.1f, base_offset=%.1f, SCALED_offset=%.1f (×%.1f), final_y=%.1f (Δ=%.1f px)%s → %s" %
+		      [world_pos, height, base_pos.y, base_offset, height_offset, RENDERING_SCALE, final_pos.y, base_pos.y - final_pos.y, slope_info, terrain_type])
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""

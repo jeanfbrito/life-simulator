@@ -463,8 +463,10 @@ impl WorldGenerator {
         let persistence = 0.65; // Amplitude multiplier per octave
 
         // Height range for normalization
+        // OpenRCT2 Pipeline Step 1: Generate heightmap in smaller range [0, 127]
+        // (OpenRCT2 divides settings by 2: heightmapHigh/2 = 100/2 = 50)
         let min_height = 0.0;
-        let max_height = 255.0;
+        let max_height = 127.0;  // Half of 255 (like OpenRCT2's division by 2)
 
         // Generate heights with fBm
         for y in 0..16 {
@@ -491,11 +493,39 @@ impl WorldGenerator {
                 // Normalize from [-total_amp, total_amp] to [0, 1]
                 let normalized = (noise_value / total_amp + 1.0) / 2.0;
 
-                // Map to height range [0, 255]
-                let height = min_height + (normalized * (max_height - min_height));
+                // Apply OpenRCT2-style power curve to create DRAMATIC peaks and deep valleys
+                // This uses a piecewise quadratic function to emphasize extreme values:
+                // - High values (> 0.5) are pushed MUCH higher toward 1.0
+                // - Low values (< 0.5) are pushed MUCH lower toward 0.0
+                // - Creates the characteristic OpenRCT2 dramatic mountain peaks
+                let curved = if normalized < 0.5 {
+                    // Lower half: square to emphasize valleys (push toward 0)
+                    let lower = normalized * 2.0; // Normalize to [0, 1]
+                    (lower * lower) * 0.5 // Square and scale back to [0, 0.5]
+                } else {
+                    // Upper half: inverse square to emphasize peaks (push toward 1)
+                    let upper = (normalized - 0.5) * 2.0; // Normalize to [0, 1]
+                    0.5 + (1.0 - (1.0 - upper) * (1.0 - upper)) * 0.5 // Inverse square and scale to [0.5, 1.0]
+                };
+
+                // Map to heightmap range [0, 127]
+                let heightmap_value = min_height + (curved * (max_height - min_height));
+
+                // OpenRCT2 Pipeline Step 2: Multiply by 2 when storing (like MapGen.cpp:149)
+                // OpenRCT2: surfaceElement->BaseHeight = std::max(2, baseHeight * 2);
+                // This doubles the range: [0, 127] → [0, 254]
+                let base_height = heightmap_value * 2.0;
+
+                // OpenRCT2 Slope Quantization (CRITICAL for slopes):
+                // Slopes represent height differences in multiples of kLandHeightStep = 16
+                // From MapLimits.h: kLandHeightStep = 2 * kCoordsZStep = 2 * 8 = 16
+                // Quantize to multiples of 16: 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
+                // This gives 16 distinct height levels that EXACTLY match slope sprite angles
+                const LAND_HEIGHT_STEP: f64 = 16.0;
+                let quantized_height = (base_height / LAND_HEIGHT_STEP).round() * LAND_HEIGHT_STEP;
 
                 // Clamp to u8 range
-                let final_height = height.max(0.0).min(255.0) as u8;
+                let final_height = quantized_height.max(0.0).min(255.0) as u8;
                 row.push(final_height);
             }
             heights.push(row);
