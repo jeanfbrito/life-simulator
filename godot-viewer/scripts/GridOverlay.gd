@@ -3,7 +3,7 @@ extends Node2D
 
 @export var grid_color: Color = Color(1.0, 1.0, 1.0, 0.3)  # White with transparency
 @export var grid_thickness: float = 1.0
-@export var grid_enabled: bool = true
+@export var grid_enabled: bool = false  # Disabled by default with heightmap terrain (grid doesn't follow elevation)
 
 # Reference to the coord_helper tilemap for coordinate conversion
 var tilemap: TileMap = null

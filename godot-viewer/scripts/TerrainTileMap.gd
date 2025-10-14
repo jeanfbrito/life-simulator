@@ -155,7 +155,7 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	sprite.texture = texture
 
 	# Calculate isometric position (without height yet)
-	var base_pos = map_to_local(world_pos)
+	var base_pos = coord_helper.map_to_local(world_pos)
 
 	# Apply OpenRCT2 height formula - EXACT MATCH
 	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp

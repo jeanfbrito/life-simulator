@@ -62,6 +62,13 @@ func paint_resources(chunk_key: String, resource_data: Array):
 			var tile_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
 			var pixel_pos = get_parent().map_to_local(tile_pos)
 
+			# Apply terrain height offset to match elevated terrain (OpenRCT2 EXACT)
+			var height = WorldDataCache.get_height_at(tile_pos.x, tile_pos.y)
+			if height > 0:
+				# Same formula as TerrainTileMap: offset = (height * COORDS_Z_STEP) / COORDS_Z_PER_TINY_Z
+				var height_offset = float(height * Config.COORDS_Z_STEP) / float(Config.COORDS_Z_PER_TINY_Z)
+				pixel_pos.y -= height_offset  # Move up to match terrain
+
 			# Get resource config for sizing and offset
 			var config = Config.get_resource_config(resource_type)
 
