@@ -671,90 +671,211 @@ impl WorldGenerator {
                     final_heights_border[border_y + 1][border_x + 1]
                 };
 
-                // OpenRCT2 exact algorithm from smoothTileStrong:
-                // 1. Check diagonal neighbors - each raises ONE corner
-                // 2. Check orthogonal neighbors - each raises TWO corners (a side)
-                // 3. Use |= to accumulate flags (corners can be raised by multiple neighbors)
+                // OpenRCT2 EXACT smoothTileStrong algorithm (MapHelpers.cpp lines 35-194)
+                //
+                // UNIT SYSTEM CRITICAL INFO:
+                // - OpenRCT2 BaseHeight: in "levels" (0-255, each level is a discrete height)
+                // - Our heights array: in "units" (0-255, where 8 units = 1 level)
+                // - COORDS_Z_STEP = 8 (units per level)
+                // - All OpenRCT2 operations like "-2" must be multiplied by 8 in our code!
+                //   Example: OpenRCT2 "highest - 2" = Our "highest - 16" (2 levels × 8 units/level)
+                //
+                // Two-path algorithm:
+                // PATH 1 (lines 40-149): Diagonal detection via corner analysis
+                // PATH 2 (lines 151-194): Normal slope calculation
 
-                let mut slope_bits = 0u8;
-
-                // OpenRCT2 EXACT mapping from MapHelpers.cpp lines 155-186
-
-                // Step 1: Diagonal neighbors raise individual corners
-                // (x+1, y+1) = SE diagonal
-                if h_se > final_height {
-                    slope_bits |= TILE_SLOPE_N_CORNER_UP;
-                }
-                // (x-1, y+1) = SW diagonal
-                if h_sw > final_height {
-                    slope_bits |= TILE_SLOPE_W_CORNER_UP;
-                }
-                // (x+1, y-1) = NE diagonal
-                if h_ne > final_height {
-                    slope_bits |= TILE_SLOPE_E_CORNER_UP;
-                }
-                // (x-1, y-1) = NW diagonal
-                if h_nw > final_height {
-                    slope_bits |= TILE_SLOPE_S_CORNER_UP;
-                }
-
-                // Step 2: Orthogonal neighbors raise SIDES (two corners each)
-                // OpenRCT2 compares BASE HEIGHTS only, not corner/slope heights!
-                // (x+1, y+0) = East neighbor base height
-                if h_e > final_height {
-                    slope_bits |= TILE_SLOPE_NE_SIDE_UP;
-                }
-                // (x-1, y+0) = West neighbor base height
-                if h_w > final_height {
-                    slope_bits |= TILE_SLOPE_SW_SIDE_UP;
-                }
-                // (x+0, y-1) = North neighbor base height
-                if h_n > final_height {
-                    slope_bits |= TILE_SLOPE_SE_SIDE_UP;
-                }
-                // (x+0, y+1) = South neighbor base height
-                if h_s > final_height {
-                    slope_bits |= TILE_SLOPE_NW_SIDE_UP;
-                }
-
-                // Step 3: If all four corners are raised, raise the base height and flatten
-                // This is EXACTLY what OpenRCT2 does in smoothTileStrong:
-                // if (slope == kTileSlopeRaisedCornersMask) {
-                //     slope = kTileSlopeFlat;
-                //     surfaceElement->BaseHeight = surfaceElement->ClearanceHeight += 2;
-                // }
                 let old_height = heights[local_y][local_x];
-                let old_slope = slope_masks[local_y][local_x];
+                let old_slope = slope_masks[local_y][local_x];  // For statistics tracking
 
-                if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
-                    // Raise base height by 2 units (OpenRCT2 exact behavior)
-                    // This prevents holes when surrounded by higher terrain
-                    heights[local_y][local_x] = heights[local_y][local_x].saturating_add(2);
-                    slope_bits = 0; // Flat
+                // OpenRCT2 Line 35: Reset slope to flat before processing
+                // CRITICAL: Always recalculate slope from scratch based on current heights
+                slope_masks[local_y][local_x] = 0;
+
+                // PATH 1: Diagonal slope detection (lines 40-149)
+
+                // Step 1: Raise to edge height - 2 (lines 42-50)
+                // OpenRCT2: "highest - 2" (in levels)
+                // Our code: "highest - 16" (2 levels × 8 units/level = 16 units)
+                let mut highest_orthogonal = final_height;
+                highest_orthogonal = highest_orthogonal.max(h_w);
+                highest_orthogonal = highest_orthogonal.max(h_e);
+                highest_orthogonal = highest_orthogonal.max(h_n);
+                highest_orthogonal = highest_orthogonal.max(h_s);
+
+                if final_height < highest_orthogonal - 16 {
+                    heights[local_y][local_x] = ((highest_orthogonal - 16).max(0)) as u8;
                 }
 
-                slope_masks[local_y][local_x] = slope_bits;
+                // Update final_height after potential raise
+                let final_height = heights[local_y][local_x] as i32;
 
-                // Track if this tile changed (for iteration convergence)
-                if heights[local_y][local_x] != old_height {
-                    heights_raised += 1;
-                    num_tiles_changed += 1;
+                // Step 2: Check 4 diagonal corners (lines 52-58)
+                let corner_heights = [h_nw, h_ne, h_se, h_sw];  // NW=0, NE=1, SE=2, SW=3
+
+                // Step 3: Find highest corner (lines 60-62)
+                let mut highest_corner = final_height;
+                for &corner_h in &corner_heights {
+                    highest_corner = highest_corner.max(corner_h);
                 }
-                if slope_bits != old_slope {
-                    slopes_changed += 1;
-                    if heights[local_y][local_x] == old_height {
-                        num_tiles_changed += 1;
+
+                // Step 4: If highest corner >= current + 4, check for diagonal (lines 64-129)
+                let mut double_corner: Option<usize> = None;
+
+                if highest_corner >= final_height + 32 {  // +4 in OpenRCT2 units = +32 in our units (×8)
+                    // Count how many corners are at highest AND check canCompensate (lines 67-103)
+                    let mut count = 0;
+                    let mut corner_idx = 0;
+                    let mut can_compensate = true;
+
+                    for (i, &corner_h) in corner_heights.iter().enumerate() {
+                        if corner_h == highest_corner {
+                            count += 1;
+                            corner_idx = i;
+
+                            // CRITICAL: Check if surrounding corners aren't too high (lines 75-102)
+                            // Get the two orthogonal neighbors on the OPPOSITE side of this corner
+                            // If they're higher than current tile, we can't use diagonal compensation
+                            let highest_on_lowest_side = match i {
+                                0 => h_e.max(h_s),  // NW corner highest → check E, S (opposite side)
+                                1 => h_w.max(h_s),  // NE corner highest → check W, S
+                                2 => h_w.max(h_n),  // SE corner highest → check W, N
+                                3 => h_e.max(h_n),  // SW corner highest → check E, N
+                                _ => final_height,
+                            };
+
+                            if highest_on_lowest_side > final_height {
+                                // Opposite side is too high - raise tile and disable diagonal
+                                heights[local_y][local_x] = highest_on_lowest_side as u8;
+                                can_compensate = false;
+                            }
+                        }
+                    }
+
+                    // Update final_height after potential raise from canCompensate check
+                    let final_height = heights[local_y][local_x] as i32;
+
+                    // Lines 105-120: Try diagonal if count == 1 AND canCompensate
+                    if count == 1 && can_compensate {
+                        // Raise tile to highest - 4 (lines 107-110)
+                        if final_height < highest_corner - 32 {
+                            heights[local_y][local_x] = ((highest_corner - 32).max(0)) as u8;
+                        }
+
+                        // CRITICAL: Verify opposite diagonal corner is low enough (lines 112-119)
+                        // The opposite corner must be ≤ highest - 32 for diagonal to work
+                        let opposite_corner_low = match corner_idx {
+                            0 => corner_heights[2] <= corner_heights[0] - 32,  // NW high → SE must be low
+                            1 => corner_heights[3] <= corner_heights[1] - 32,  // NE high → SW must be low
+                            2 => corner_heights[0] <= corner_heights[2] - 32,  // SE high → NW must be low
+                            3 => corner_heights[1] <= corner_heights[3] - 32,  // SW high → NE must be low
+                            _ => false,
+                        };
+
+                        if opposite_corner_low {
+                            double_corner = Some(corner_idx);
+                        }
+                        // If opposite corner not low enough, doubleCorner stays None
+                        // and we fall through to Path 2 (normal slopes)
+                    } else {
+                        // Lines 121-128: Fallback when count != 1 OR can't compensate
+                        // Raise to highest - 2 (not highest - 4!)
+                        let final_height = heights[local_y][local_x] as i32;
+                        if final_height < highest_corner - 16 {  // -2 in OpenRCT2 = -16 in our units
+                            heights[local_y][local_x] = ((highest_corner - 16).max(0)) as u8;
+                        }
                     }
                 }
 
-                // Check for diagonal (steep) slopes
-                // When 3 corners are raised (one corner down) and orthogonal neighbor is >=4 units higher
-                if (slope_bits == TILE_SLOPE_W_CORNER_DOWN && h_w >= final_height + 32)
-                    || (slope_bits == TILE_SLOPE_S_CORNER_DOWN && h_s >= final_height + 32)
-                    || (slope_bits == TILE_SLOPE_E_CORNER_DOWN && h_e >= final_height + 32)
-                    || (slope_bits == TILE_SLOPE_N_CORNER_DOWN && h_n >= final_height + 32)
-                {
-                    slope_bits |= TILE_SLOPE_DIAGONAL_FLAG;
+                let mut slope_bits = 0u8;
+
+                // Step 5: If diagonal detected, set flags and skip normal slope logic (lines 131-149)
+                if let Some(corner_idx) = double_corner {
+                    slope_bits = TILE_SLOPE_DIAGONAL_FLAG;
+
+                    // Set the corner DOWN flag based on which corner is highest
+                    // When NW (0) is highest, N corner is DOWN, etc.
+                    match corner_idx {
+                        0 => slope_bits |= TILE_SLOPE_N_CORNER_DOWN,  // NW highest → N down
+                        1 => slope_bits |= TILE_SLOPE_W_CORNER_DOWN,  // NE highest → W down
+                        2 => slope_bits |= TILE_SLOPE_S_CORNER_DOWN,  // SE highest → S down
+                        3 => slope_bits |= TILE_SLOPE_E_CORNER_DOWN,  // SW highest → E down
+                        _ => {}
+                    }
+
+                    slope_masks[local_y][local_x] = slope_bits;
+                } else {
+                    // PATH 2: Normal slope calculation (lines 151-194)
+                    // Only runs if NO diagonal was detected
+
+                    // Update final_height again (may have been raised in Path 1)
+                    let final_height = heights[local_y][local_x] as i32;
+
+                    // Step 1: Diagonal neighbors raise individual corners
+                    // (x+1, y+1) = SE diagonal
+                    if h_se > final_height {
+                        slope_bits |= TILE_SLOPE_N_CORNER_UP;
+                    }
+                    // (x-1, y+1) = SW diagonal
+                    if h_sw > final_height {
+                        slope_bits |= TILE_SLOPE_W_CORNER_UP;
+                    }
+                    // (x+1, y-1) = NE diagonal
+                    if h_ne > final_height {
+                        slope_bits |= TILE_SLOPE_E_CORNER_UP;
+                    }
+                    // (x-1, y-1) = NW diagonal
+                    if h_nw > final_height {
+                        slope_bits |= TILE_SLOPE_S_CORNER_UP;
+                    }
+
+                    // Step 2: Orthogonal neighbors raise SIDES (two corners each)
+                    // OpenRCT2 compares BASE HEIGHTS only, not corner/slope heights!
+                    // (x+1, y+0) = East neighbor base height
+                    if h_e > final_height {
+                        slope_bits |= TILE_SLOPE_NE_SIDE_UP;
+                    }
+                    // (x-1, y+0) = West neighbor base height
+                    if h_w > final_height {
+                        slope_bits |= TILE_SLOPE_SW_SIDE_UP;
+                    }
+                    // (x+0, y-1) = North neighbor base height
+                    if h_n > final_height {
+                        slope_bits |= TILE_SLOPE_SE_SIDE_UP;
+                    }
+                    // (x+0, y+1) = South neighbor base height
+                    if h_s > final_height {
+                        slope_bits |= TILE_SLOPE_NW_SIDE_UP;
+                    }
+
+                    // Step 3: If all four corners are raised, raise the base height and flatten
+                    // This is EXACTLY what OpenRCT2 does in smoothTileStrong:
+                    // if (slope == kTileSlopeRaisedCornersMask) {
+                    //     slope = kTileSlopeFlat;
+                    //     surfaceElement->BaseHeight = surfaceElement->ClearanceHeight += 2;
+                    // }
+                    if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
+                        // Raise base height by 2 LEVELS (OpenRCT2 exact behavior)
+                        // OpenRCT2: "+= 2" (in levels)
+                        // Our code: "+= 16" (2 levels × 8 units/level = 16 units)
+                        // This prevents holes when surrounded by higher terrain
+                        heights[local_y][local_x] = heights[local_y][local_x].saturating_add(16);
+                        slope_bits = 0; // Flat
+                    }
+
+                    slope_masks[local_y][local_x] = slope_bits;
+                }
+
+                // Track if this tile changed (for iteration convergence)
+                // CRITICAL: OpenRCT2 only counts HEIGHT changes (raisedLand flag), NOT slope changes!
+                // Slopes are always recalculated, but only height raises trigger another iteration.
+                if heights[local_y][local_x] != old_height {
+                    heights_raised += 1;
+                    num_tiles_changed += 1;  // Only height changes count for convergence!
+                }
+
+                // Track slope changes for statistics, but don't affect convergence
+                if slope_masks[local_y][local_x] != old_slope {
+                    slopes_changed += 1;
                 }
 
                 let slope_index = slope_mask_to_index(slope_bits);
