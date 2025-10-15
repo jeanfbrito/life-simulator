@@ -58,32 +58,101 @@ static func should_draw_edge(tile_corners: Dictionary, neighbor_corners: Diction
 
 ## Calculate edge sprite position and height
 ## Returns Dictionary with position, scale, and texture info
-static func compute_edge_render_data(tile_pos: Vector2i, tile_corners: Dictionary, neighbor_corners: Dictionary, edge_direction: String) -> Dictionary:
+static func compute_edge_render_data(tile_pos: Vector2i, tile_corners: Dictionary, neighbor_corners: Dictionary, edge_direction: String, coord_helper) -> Dictionary:
 	"""
 	Calculate where and how to draw an edge face.
 	
 	Returns:
 		{
-			"position": Vector2,    # Screen position for edge sprite
-			"height": float,        # Vertical size of edge in pixels
-			"orientation": String   # "vertical" or "diagonal"
+			"position": Vector2,        # Screen position for edge sprite
+			"height_pixels": float,     # Vertical size of edge in pixels
+			"base_height": int,         # Lower corner height in tiny-Z
+			"top_height": int,          # Upper corner height in tiny-Z
+			"direction": String         # Edge direction for sprite selection
 		}
 	"""
 	
-	# TODO: Implement edge positioning math
-	# Reference: OpenRCT2's viewport_surface_paint_data struct
-	# - Get base position from tile_pos
-	# - Calculate average corner height difference
-	# - Determine sprite offset and scale
+	# OpenRCT2 constants
+	const COORDS_XY_STEP = 32
+	const COORDS_Z_STEP = 8
+	const COORDS_Z_PER_TINY_Z = 16
+	const RENDERING_SCALE = 2.0
+	
+	# Map edge direction to the two corners that define that edge
+	const EDGE_CORNERS = {
+		"north": ["top", "right"],      # North edge: top-left to top-right in isometric
+		"east": ["right", "bottom"],    # East edge: top-right to bottom-right
+		"south": ["bottom", "left"],    # South edge: bottom-right to bottom-left
+		"west": ["left", "top"]         # West edge: bottom-left to top-left
+	}
+	
+	const NEIGHBOR_MAP = {
+		"north": {"top": "bottom", "right": "left"},
+		"east": {"right": "left", "bottom": "top"},
+		"south": {"bottom": "top", "left": "right"},
+		"west": {"left": "right", "top": "bottom"}
+	}
+	
+	var corners = EDGE_CORNERS[edge_direction]
+	var corner_a = corners[0]
+	var corner_b = corners[1]
+	
+	var neighbor_corner_a = NEIGHBOR_MAP[edge_direction][corner_a]
+	var neighbor_corner_b = NEIGHBOR_MAP[edge_direction][corner_b]
+	
+	# Get heights at both corners of the edge
+	var tile_height_a = tile_corners[corner_a]
+	var tile_height_b = tile_corners[corner_b]
+	var neighbor_height_a = neighbor_corners[neighbor_corner_a]
+	var neighbor_height_b = neighbor_corners[neighbor_corner_b]
+	
+	# Calculate height differences
+	var height_diff_a = tile_height_a - neighbor_height_a
+	var height_diff_b = tile_height_b - neighbor_height_b
+	
+	# Average height difference for this edge
+	var avg_height_diff = (height_diff_a + height_diff_b) / 2.0
+	
+	# Base height is the minimum of the two sides
+	var base_height = min(min(tile_height_a, tile_height_b), min(neighbor_height_a, neighbor_height_b))
+	var top_height = base_height + abs(avg_height_diff)
+	
+	# Convert to screen pixels
+	var height_pixels = abs(avg_height_diff * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z) * RENDERING_SCALE
+	
+	# Calculate edge midpoint position
+	# For isometric, edges are positioned between tile centers
+	var edge_offset_map = {
+		"north": Vector2(0, -COORDS_XY_STEP / 2),   # North edge: up from center
+		"east": Vector2(COORDS_XY_STEP, 0),          # East edge: right from center
+		"south": Vector2(0, COORDS_XY_STEP / 2),     # South edge: down from center
+		"west": Vector2(-COORDS_XY_STEP, 0)          # West edge: left from center
+	}
+	
+	# Base position of this tile
+	var pixel_x = float(tile_pos.x - tile_pos.y) * float(COORDS_XY_STEP)
+	var pixel_y = float(tile_pos.x + tile_pos.y) * float(COORDS_XY_STEP / 2)
+	var base_pos = Vector2(pixel_x, pixel_y)
+	
+	# Offset to edge midpoint
+	var edge_offset = edge_offset_map[edge_direction]
+	var edge_pos = base_pos + edge_offset
+	
+	# Adjust Y for base height
+	var base_screen_offset = float(base_height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z) * RENDERING_SCALE
+	edge_pos.y -= base_screen_offset
 	
 	return {
-		"position": Vector2.ZERO,
-		"height": 0.0,
-		"orientation": "vertical"
+		"position": edge_pos,
+		"height_pixels": height_pixels,
+		"base_height": int(base_height),
+		"top_height": int(top_height),
+		"direction": edge_direction,
+		"visible": height_pixels > 1.0  # Only draw if height is significant
 	}
 
 ## Draw edge sprites for a tile (to be called after base terrain is painted)
-func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: Dictionary, neighbors: Dictionary) -> void:
+func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: Dictionary, neighbors: Dictionary, coord_helper = null) -> void:
 	"""
 	Add edge sprites for vertical faces between this tile and its neighbors.
 	
@@ -92,17 +161,74 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 		tile_pos: World position of this tile
 		tile_corners: {top, right, bottom, left} heights for this tile
 		neighbors: Dictionary of neighbor corner data keyed by direction
+		coord_helper: Optional coordinate helper (unused, kept for signature compatibility)
 	"""
 	
-	# TODO: Implement edge sprite creation
-	# For each direction (north, east, south, west):
-	#   - Check if edge is needed via should_draw_edge()
-	#   - Get render data via compute_edge_render_data()
-	#   - Create Sprite2D with edge texture
-	#   - Position and scale sprite appropriately
-	#   - Set z_index for proper layering
+	const DIRECTIONS = ["north", "east", "south", "west"]
 	
-	pass
+	for direction in DIRECTIONS:
+		# Skip if no neighbor data for this direction
+		if not neighbors.has(direction) or neighbors[direction] == null:
+			continue
+		
+		var neighbor_corners = neighbors[direction]
+		
+		# Check if edge is needed
+		if not should_draw_edge(tile_corners, neighbor_corners, direction):
+			continue
+		
+		# Calculate edge render data
+		var edge_data = compute_edge_render_data(tile_pos, tile_corners, neighbor_corners, direction, coord_helper)
+		
+		if not edge_data.visible:
+			continue
+		
+		# Create edge sprite
+		var edge_sprite = Sprite2D.new()
+		edge_sprite.name = "Edge_%s_%d_%d" % [direction, tile_pos.x, tile_pos.y]
+		edge_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		
+		# Load or create edge texture
+		var edge_texture = _create_edge_texture(edge_data.height_pixels, direction)
+		if edge_texture:
+			edge_sprite.texture = edge_texture
+			edge_sprite.position = edge_data.position
+			
+			# Set z_index to render edges behind terrain surface
+			# Edges should appear "below" the tiles they connect
+			edge_sprite.z_index = int(edge_data.position.y) - 1
+			
+			tile_container.add_child(edge_sprite)
+
+## Create a simple colored edge texture (placeholder until OpenRCT2 sprites extracted)
+func _create_edge_texture(height_pixels: float, direction: String) -> Texture2D:
+	"""
+	Create a procedural edge texture.
+	For now, creates a simple colored quad. 
+	TODO: Replace with extracted OpenRCT2 cliff sprites.
+	"""
+	
+	# Edge dimensions
+	var width = 64  # Width in pixels (matches tile width)
+	var height = max(int(height_pixels), 4)  # Minimum 4 pixels tall
+	
+	# Create image
+	var img = Image.create(width, height, false, Image.FORMAT_RGBA8)
+	
+	# Dark brown/gray color for cliff face
+	var base_color = Color(0.3, 0.25, 0.2, 1.0)  # Dark brownish cliff
+	
+	# Fill with gradient (darker at bottom, lighter at top)
+	for y in range(height):
+		var brightness = 0.7 + (float(y) / float(height)) * 0.3  # 0.7 to 1.0
+		var pixel_color = base_color * brightness
+		
+		for x in range(width):
+			# Add subtle horizontal variation
+			var x_var = 1.0 - abs(float(x - width/2) / float(width/2)) * 0.1
+			img.set_pixel(x, y, pixel_color * x_var)
+	
+	return ImageTexture.create_from_image(img)
 
 ## Placeholder for edge texture loading
 ## TODO: Extract vertical cliff sprites from OpenRCT2's g1.dat

@@ -142,6 +142,10 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 
 	print("🎨 Painted ", tiles_painted, " terrain tiles for chunk ", chunk_key)
 	print("🎨 Total sprites: ", tile_sprites.size())
+	
+	# Second pass: Add edge faces where height differences exist
+	if has_heights and has_slopes:
+		_paint_chunk_edges(chunk_key, terrain_data, height_data, slope_data)
 
 # Paint a single terrain tile as Sprite2D with height-based positioning
 func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: int = 0, height: int = 0):
@@ -225,6 +229,84 @@ func _load_water_texture() -> Texture2D:
 
 	push_warning("🌊 Could not load water texture: " + file_path)
 	return null
+
+# Paint edge faces for a chunk (called after base terrain)
+func _paint_chunk_edges(chunk_key: String, terrain_data: Array, height_data: Array, slope_data: Array):
+	var chunk_origin = WorldDataCache.chunk_key_to_world_origin(chunk_key)
+	
+	# Create edge renderer if not exists
+	if not has_node("EdgeRenderer"):
+		var edge_renderer = EdgeRenderer.new()
+		edge_renderer.name = "EdgeRenderer"
+		add_child(edge_renderer)
+	
+	var edge_renderer = get_node("EdgeRenderer")
+	var edges_painted = 0
+	
+	for y in range(terrain_data.size()):
+		if not terrain_data[y] is Array:
+			continue
+			
+		for x in range(terrain_data[y].size()):
+			var world_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
+			
+			# Get this tile's corner heights
+			var height = int(height_data[y][x]) if (y < height_data.size() and x < height_data[y].size()) else 0
+			var slope_index = int(slope_data[y][x]) if (y < slope_data.size() and x < slope_data[y].size()) else 0
+			slope_index = SlopeCalculator.rotate_slope_index(slope_index, Config.slope_rotation)
+			
+			var tile_corners = SlopeCalculator.get_corner_heights(height, slope_index)
+			
+			# Get neighbor corner heights
+			var neighbors = _get_neighbor_corners(world_pos, height_data, slope_data)
+			
+			# Paint edge faces for this tile
+			if neighbors.size() > 0:
+				edge_renderer.paint_edge_faces(tile_container, world_pos, tile_corners, neighbors)
+				edges_painted += 1
+	
+	if edges_painted > 0:
+		print("🏔️ Painted edge faces for %d tiles in chunk %s" % [edges_painted, chunk_key])
+
+# Get corner heights for neighboring tiles
+func _get_neighbor_corners(tile_pos: Vector2i, height_data: Array, slope_data: Array) -> Dictionary:
+	var neighbors = {}
+	
+	# North neighbor (y-1)
+	var north_pos = tile_pos + Vector2i(0, -1)
+	neighbors["north"] = _get_tile_corners_from_world(north_pos, height_data, slope_data)
+	
+	# East neighbor (x+1)
+	var east_pos = tile_pos + Vector2i(1, 0)
+	neighbors["east"] = _get_tile_corners_from_world(east_pos, height_data, slope_data)
+	
+	# South neighbor (y+1)
+	var south_pos = tile_pos + Vector2i(0, 1)
+	neighbors["south"] = _get_tile_corners_from_world(south_pos, height_data, slope_data)
+	
+	# West neighbor (x-1)
+	var west_pos = tile_pos + Vector2i(0, -1)
+	neighbors["west"] = _get_tile_corners_from_world(west_pos, height_data, slope_data)
+	
+	return neighbors
+
+# Get corner heights for a tile at world position
+func _get_tile_corners_from_world(world_pos: Vector2i, height_data: Array, slope_data: Array) -> Dictionary:
+	# Get height from cache
+	var height = WorldDataCache.get_height_at(world_pos)
+	if height == null:
+		return {} # No data
+	
+	# Get slope from cache
+	var slope_index = WorldDataCache.get_slope_index_at(world_pos)
+	if slope_index == null:
+		slope_index = 0
+	
+	# Apply rotation
+	slope_index = SlopeCalculator.rotate_slope_index(slope_index, Config.slope_rotation)
+	
+	# Return corner heights
+	return SlopeCalculator.get_corner_heights(height, slope_index)
 
 # Clear a chunk's tiles from the TileMap
 func clear_chunk(chunk_key: String):
