@@ -574,7 +574,7 @@ impl WorldGenerator {
         let mut slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
         let mut slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
 
-        // Constants for diagonal slope detection
+        // Constants for slope detection
         const TILE_SLOPE_DIAGONAL_FLAG: u8 = 0b0001_0000;
         const TILE_SLOPE_RAISED_CORNERS_MASK: u8 = 0b0000_1111;
         const TILE_SLOPE_W_CORNER_DOWN: u8 =
@@ -585,6 +585,12 @@ impl WorldGenerator {
             TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_E_CORNER_UP;
         const TILE_SLOPE_N_CORNER_DOWN: u8 =
             TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_N_CORNER_UP;
+
+        // Side constants (orthogonal neighbors raise two corners)
+        const TILE_SLOPE_NE_SIDE_UP: u8 = TILE_SLOPE_N_CORNER_UP | TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_SE_SIDE_UP: u8 = TILE_SLOPE_S_CORNER_UP | TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_SW_SIDE_UP: u8 = TILE_SLOPE_S_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
+        const TILE_SLOPE_NW_SIDE_UP: u8 = TILE_SLOPE_N_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
 
         for local_y in 0..CHUNK_SIZE {
             let tile_y = local_y as i32;
@@ -603,7 +609,7 @@ impl WorldGenerator {
                 let final_height = final_heights_border[border_y][border_x];
                 heights[local_y][local_x] = final_height as u8;
 
-                // Get all 8 neighbor heights (OpenRCT2 uses all neighbors, not just diagonals)
+                // Get all 8 neighbor heights
                 let h_n = final_heights_border[border_y.saturating_sub(1)][border_x];
                 let h_e = final_heights_border[border_y][border_x + 1];
                 let h_s = final_heights_border[border_y + 1][border_x];
@@ -614,35 +620,40 @@ impl WorldGenerator {
                 let h_se = final_heights_border[border_y + 1][border_x + 1];
                 let h_sw = final_heights_border[border_y + 1][border_x.saturating_sub(1)];
 
-                // OpenRCT2 threshold system: Count how many of 3 neighbors on each side are higher
-                // If 1+ neighbors on a side are higher, raise the opposite corner
-                let threshold_w = ((h_sw > final_height) as i32)
-                    + ((h_w > final_height) as i32)
-                    + ((h_nw > final_height) as i32);
-                let threshold_n = ((h_nw > final_height) as i32)
-                    + ((h_n > final_height) as i32)
-                    + ((h_ne > final_height) as i32);
-                let threshold_e = ((h_ne > final_height) as i32)
-                    + ((h_e > final_height) as i32)
-                    + ((h_se > final_height) as i32);
-                let threshold_s = ((h_se > final_height) as i32)
-                    + ((h_s > final_height) as i32)
-                    + ((h_sw > final_height) as i32);
+                // OpenRCT2 exact algorithm from smoothTileStrong:
+                // 1. Check diagonal neighbors - each raises ONE corner
+                // 2. Check orthogonal neighbors - each raises TWO corners (a side)
+                // 3. Use |= to accumulate flags (corners can be raised by multiple neighbors)
 
-                // Build slope mask from thresholds
-                // Note: W neighbors raise E corner, N neighbors raise S corner, etc.
                 let mut slope_bits = 0u8;
-                if threshold_w >= 1 {
-                    slope_bits |= TILE_SLOPE_E_CORNER_UP; // West neighbors raise east corner
+
+                // Step 1: Diagonal neighbors raise individual corners
+                if h_se > final_height {
+                    slope_bits |= TILE_SLOPE_N_CORNER_UP; // SE diagonal → N corner
                 }
-                if threshold_n >= 1 {
-                    slope_bits |= TILE_SLOPE_S_CORNER_UP; // North neighbors raise south corner
+                if h_sw > final_height {
+                    slope_bits |= TILE_SLOPE_E_CORNER_UP; // SW diagonal → E corner
                 }
-                if threshold_e >= 1 {
-                    slope_bits |= TILE_SLOPE_W_CORNER_UP; // East neighbors raise west corner
+                if h_ne > final_height {
+                    slope_bits |= TILE_SLOPE_W_CORNER_UP; // NE diagonal → W corner
                 }
-                if threshold_s >= 1 {
-                    slope_bits |= TILE_SLOPE_N_CORNER_UP; // South neighbors raise north corner
+                if h_nw > final_height {
+                    slope_bits |= TILE_SLOPE_S_CORNER_UP; // NW diagonal → S corner
+                }
+
+                // Step 2: Orthogonal neighbors raise SIDES (two corners each)
+                // This creates smooth slopes instead of individual peaks
+                if h_e > final_height {
+                    slope_bits |= TILE_SLOPE_NE_SIDE_UP; // East neighbor → NE side (N+E corners)
+                }
+                if h_s > final_height {
+                    slope_bits |= TILE_SLOPE_SE_SIDE_UP; // South neighbor → SE side (S+E corners)
+                }
+                if h_w > final_height {
+                    slope_bits |= TILE_SLOPE_SW_SIDE_UP; // West neighbor → SW side (S+W corners)
+                }
+                if h_n > final_height {
+                    slope_bits |= TILE_SLOPE_NW_SIDE_UP; // North neighbor → NW side (N+W corners)
                 }
 
                 slope_masks[local_y][local_x] = slope_bits;
