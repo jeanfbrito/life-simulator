@@ -251,6 +251,9 @@ func _paint_chunk_edges(chunk_key: String, terrain_data: Array, height_data: Arr
 		for x in range(terrain_data[y].size()):
 			var world_pos = Vector2i(chunk_origin.x + x, chunk_origin.y + y)
 			
+			# Get terrain type for this tile
+			var terrain_type = terrain_data[y][x] if (y < terrain_data.size() and x < terrain_data[y].size()) else "grass"
+			
 			# Get this tile's corner heights
 			var height = int(height_data[y][x]) if (y < height_data.size() and x < height_data[y].size()) else 0
 			var slope_index = int(slope_data[y][x]) if (y < slope_data.size() and x < slope_data[y].size()) else 0
@@ -261,9 +264,9 @@ func _paint_chunk_edges(chunk_key: String, terrain_data: Array, height_data: Arr
 			# Get neighbor corner heights
 			var neighbors = _get_neighbor_corners(world_pos, height_data, slope_data)
 			
-			# Paint edge faces for this tile
+			# Paint edge faces for this tile (pass terrain type)
 			if neighbors.size() > 0:
-				edge_renderer.paint_edge_faces(tile_container, world_pos, tile_corners, neighbors)
+				edge_renderer.paint_edge_faces(tile_container, world_pos, tile_corners, neighbors, terrain_type)
 				edges_painted += 1
 	
 	if edges_painted > 0:

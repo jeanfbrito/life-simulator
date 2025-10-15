@@ -46,8 +46,16 @@ static func should_draw_edge(tile_corners: Dictionary, neighbor_corners: Diction
 		"west": {"left": "right", "top": "bottom"}
 	}
 	
+	# Check if neighbor data exists
+	if neighbor_corners.is_empty():
+		return false  # No neighbor = edge of map, draw edge
+	
 	var neighbor_corner_a = NEIGHBOR_MAP[edge_direction][corner_a]
 	var neighbor_corner_b = NEIGHBOR_MAP[edge_direction][corner_b]
+	
+	# Check if neighbor has the required corner keys
+	if not neighbor_corners.has(neighbor_corner_a) or not neighbor_corners.has(neighbor_corner_b):
+		return false  # Missing data, skip edge
 	
 	# Check height difference at both corners
 	var height_diff_a = abs(tile_corners[corner_a] - neighbor_corners[neighbor_corner_a])
@@ -152,7 +160,7 @@ static func compute_edge_render_data(tile_pos: Vector2i, tile_corners: Dictionar
 	}
 
 ## Draw edge sprites for a tile (to be called after base terrain is painted)
-func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: Dictionary, neighbors: Dictionary, coord_helper = null) -> void:
+func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: Dictionary, neighbors: Dictionary, terrain_type: String = "grass", coord_helper = null) -> void:
 	"""
 	Add edge sprites for vertical faces between this tile and its neighbors.
 	
@@ -161,6 +169,7 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 		tile_pos: World position of this tile
 		tile_corners: {top, right, bottom, left} heights for this tile
 		neighbors: Dictionary of neighbor corner data keyed by direction
+		terrain_type: Type of terrain (grass, dirt, sand, rock, ice, etc.)
 		coord_helper: Optional coordinate helper (unused, kept for signature compatibility)
 	"""
 	
@@ -188,8 +197,8 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 		edge_sprite.name = "Edge_%s_%d_%d" % [direction, tile_pos.x, tile_pos.y]
 		edge_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		
-		# Load or create edge texture
-		var edge_texture = _load_edge_texture(edge_data.height_pixels, direction)
+		# Load or create edge texture (pass terrain type)
+		var edge_texture = _load_edge_texture(edge_data.height_pixels, direction, terrain_type)
 		if not edge_texture:
 			edge_texture = _create_edge_texture(edge_data.height_pixels, direction)
 		
@@ -204,37 +213,28 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 			tile_container.add_child(edge_sprite)
 
 ## Load actual OpenRCT2 edge sprite
-func _load_edge_texture(height_pixels: float, direction: String) -> Texture2D:
+func _load_edge_texture(height_pixels: float, direction: String, terrain_type: String = "grass") -> Texture2D:
 	"""
-	Load OpenRCT2 cliff/edge sprite based on height and direction.
+	Load OpenRCT2 cliff/edge sprite based on height, direction, and terrain type.
 	Edge sprites start at sprite 1579 (SPR_EDGE_ROCK_BASE) in g1.dat.
-	There are 84 sprites per terrain edge type (rock, wood, ice).
+	There are 84 sprites per terrain edge type (rock, wood_black, wood_red, ice).
 	"""
 	
 	# OpenRCT2 has 84 edge sprites per terrain type
 	# Sprites are organized by: [direction (4)] x [height variants (21)]
-	# For now, use rock edges (1579-1662)
 	
-	# Map height to sprite variant (simplified for now)
-	# Each height level has 4 directional variants
-	var height_level = min(int(height_pixels / 16.0), 19)  # 0-19 supported
+	# Map terrain type to edge style
+	var edge_style = _get_edge_style_for_terrain(terrain_type)
 	
-	# Map direction to offset (0-3)
-	# For now, use simplified mapping - will refine based on actual usage
-	var dir_offset = 0
-	match direction:
-		"north": dir_offset = 0
-		"east": dir_offset = 1
-		"south": dir_offset = 2
-		"west": dir_offset = 3
+	# Map height to sprite variant
+	# Each height level has multiple directional/style variants within the 84 sprites
+	var height_level = min(int(height_pixels / 16.0), 20)  # 0-20 supported
 	
-	# Calculate sprite index: base + (height_level * 4) + dir_offset
-	# But for simplicity, just use height_level for now
-	var edge_index = height_level
+	# For now, use simplified index based on height
+	# The 84 sprites include various combinations of height and edge configurations
+	var edge_index = min(height_level, 83)
 	
-	# Use rock edges (SPR_EDGE_ROCK_BASE = 1579)
-	# TODO: Add terrain-specific edge loading (wood, ice, etc.)
-	var base_path = "res://assets/tiles/edges/rock/edge_%02d.png" % edge_index
+	var base_path = "res://assets/tiles/edges/%s/edge_%02d.png" % [edge_style, edge_index]
 	
 	if ResourceLoader.exists(base_path):
 		var texture = load(base_path)
@@ -242,6 +242,26 @@ func _load_edge_texture(height_pixels: float, direction: String) -> Texture2D:
 			return texture
 	
 	return null
+
+## Map terrain type to edge style
+static func _get_edge_style_for_terrain(terrain_type: String) -> String:
+	"""
+	Determine which edge sprite set to use based on terrain type.
+	Returns: "rock", "wood_black", "wood_red", or "ice"
+	"""
+	match terrain_type.to_lower():
+		"grass", "dirt", "sand":
+			return "rock"  # Natural terrain uses rock edges
+		"rock", "stone", "grey":
+			return "rock"
+		"ice", "snow":
+			return "ice"
+		"wood", "wooden":
+			return "wood_red"
+		"dark", "dark_wood":
+			return "wood_black"
+		_:
+			return "rock"  # Default to rock edges
 
 ## Create a simple colored edge texture (fallback if OpenRCT2 sprites not found)
 func _create_edge_texture(height_pixels: float, direction: String) -> Texture2D:
