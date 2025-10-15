@@ -112,3 +112,70 @@ static func _rotate_mask_clockwise(mask: int) -> int:
 	if mask & CORNER_W:
 		rotated |= CORNER_N
 	return rotated
+
+## Get relative corner heights for a slope (0-2 units per corner)
+## Mirrors OpenRCT2's kSlopeRelativeCornerHeights table from Slope.cpp
+## Returns Dictionary with keys: top (north), right (east), bottom (south), left (west)
+static func get_relative_corner_heights(slope_index: int) -> Dictionary:
+	# OpenRCT2 table: each entry is {top, right, bottom, left} = {north, east, south, west}
+	# Indexed by slope & kTileSlopeMask (0-31)
+	const RELATIVE_CORNER_HEIGHTS = [
+		[0, 0, 0, 0],  # 0  flat
+		[0, 0, 1, 0],  # 1  north corner up
+		[0, 0, 0, 1],  # 2  east corner up
+		[0, 0, 1, 1],  # 3  north-east side up
+		[1, 0, 0, 0],  # 4  south corner up
+		[1, 0, 1, 0],  # 5  north-south valley
+		[1, 0, 0, 1],  # 6  south-east side up
+		[1, 0, 1, 1],  # 7  three corners up (west down)
+		[0, 1, 0, 0],  # 8  west corner up
+		[0, 1, 1, 0],  # 9  north-west side up
+		[0, 1, 0, 1],  # 10 east-west valley
+		[0, 1, 1, 1],  # 11 three corners up (south down)
+		[1, 1, 0, 0],  # 12 south-west side up
+		[1, 1, 1, 0],  # 13 three corners up (east down)
+		[1, 1, 0, 1],  # 14 three corners up (north down)
+		[1, 1, 1, 1],  # 15 all corners up
+		[0, 0, 0, 0],  # 16 diagonal NE-SW (base)
+		[0, 0, 1, 0],  # 17 diagonal NE-SW variant
+		[0, 0, 0, 1],  # 18 diagonal NW-SE
+		[0, 0, 1, 1],  # 19 diagonal NW-SE variant
+		[1, 0, 0, 0],  # 20
+		[1, 0, 1, 0],  # 21
+		[1, 0, 0, 1],  # 22
+		[1, 0, 1, 2],  # 23 steep diagonal
+		[0, 1, 0, 0],  # 24
+		[0, 1, 1, 0],  # 25
+		[0, 1, 0, 1],  # 26
+		[0, 1, 2, 1],  # 27 steep diagonal
+		[1, 1, 0, 0],  # 28
+		[1, 2, 1, 0],  # 29 steep diagonal
+		[2, 1, 0, 1],  # 30 steep diagonal
+		[1, 1, 1, 1],  # 31 all corners up (alternate)
+	]
+	
+	var clamped = clampi(slope_index, 0, RELATIVE_CORNER_HEIGHTS.size() - 1)
+	var heights = RELATIVE_CORNER_HEIGHTS[clamped]
+	
+	return {
+		"top": heights[0],      # north
+		"right": heights[1],    # east
+		"bottom": heights[2],   # south
+		"left": heights[3]      # west
+	}
+
+## Get absolute corner heights in tiny-Z units
+## base_height: tile base height (0-255 tiny-Z)
+## slope_index: slope index (0-18)
+## Returns Dictionary with keys: top, right, bottom, left (absolute tiny-Z values)
+static func get_corner_heights(base_height: int, slope_index: int) -> Dictionary:
+	const LAND_HEIGHT_STEP = 16  # kCoordsZPerTinyZ - height per slope step
+	
+	var rel = get_relative_corner_heights(slope_index)
+	
+	return {
+		"top": base_height + rel.top * LAND_HEIGHT_STEP,
+		"right": base_height + rel.right * LAND_HEIGHT_STEP,
+		"bottom": base_height + rel.bottom * LAND_HEIGHT_STEP,
+		"left": base_height + rel.left * LAND_HEIGHT_STEP
+	}

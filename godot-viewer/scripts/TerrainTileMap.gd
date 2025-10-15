@@ -82,6 +82,23 @@ func local_to_map(pixel_pos: Vector2) -> Vector2i:
 	"""Convert pixel coordinates to tile coordinates."""
 	return coord_helper.local_to_map(pixel_pos)
 
+# Compute screen Y offsets for each corner (in pixels)
+# Returns Dictionary with keys: top, right, bottom, left
+func compute_corner_offsets_screen(base_height: int, slope_index: int) -> Dictionary:
+	"""Calculate per-corner screen Y offsets using OpenRCT2 corner-height logic."""
+	var corner_heights = SlopeCalculator.get_corner_heights(base_height, slope_index)
+	
+	# Convert each corner's tiny-Z to screen pixels
+	# Formula: (tiny_z * kCoordsZStep) / kCoordsZPerTinyZ * RENDERING_SCALE
+	# Simplifies to: tiny_z / 2.0 * RENDERING_SCALE
+	var offsets = {}
+	for corner in ["top", "right", "bottom", "left"]:
+		var tiny_z = corner_heights[corner]
+		var screen_offset = float(tiny_z * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z) * RENDERING_SCALE
+		offsets[corner] = screen_offset
+	
+	return offsets
+
 # Paint a chunk's terrain using individual Sprite2D nodes
 func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = [], slope_data: Array = []):
 	if terrain_data.size() == 0:
@@ -160,35 +177,27 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# Calculate isometric position using OpenRCT2 EXACT formula
 	var base_pos = map_to_local(world_pos)  # Uses custom OpenRCT2 formula, NOT Godot's TileMap
 
-	# OpenRCT2 Pipeline Step 3: Divide by 2 when rendering (EXACT match)
-	# From: src/openrct2/paint/tile_element/Paint.Surface.cpp
-	# Formula: screen_y -= (height * kCoordsZStep) / kCoordsZPerTinyZ
-	# Simplifies to: height / 2.0
-	var height_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
-	# Result: [0, 254] / 2 → [0, 127] pixels of elevation
-
-	# Apply rendering scale (like OpenRCT2's sprite scale feature)
-	# This is INDEPENDENT of camera zoom - it's a rendering multiplier
-	# OpenRCT2 uses 2x-3x scale by default for modern displays
-	height_offset *= RENDERING_SCALE  # Multiply by rendering scale!
-
-	# Apply additional slope offset so raised corners align with neighbors
-	if slope_index != 0:
-		height_offset += float(COORDS_Z_STEP * RENDERING_SCALE * 0.5)
-
-	var final_pos = Vector2(base_pos.x, base_pos.y - height_offset)
+	# OpenRCT2 corner-based positioning: anchor sprite at north (top) corner
+	# This ensures tiles align seamlessly at shared corners
+	var corner_offsets = compute_corner_offsets_screen(height, slope_index)
+	var north_corner_offset = corner_offsets["top"]  # North corner = top in our coordinate system
+	
+	# Sprite Y position: base position minus the north corner height
+	# This anchors the sprite so its visual "north corner" sits at the correct screen Y
+	var final_pos = Vector2(base_pos.x, base_pos.y - north_corner_offset)
 
 	sprite.position = final_pos
 
 	# Set Z index for Y-sorting based on final Y position
 	sprite.z_index = int(final_pos.y)
 
-	# Debug output for first few tiles - ENHANCED
+	# Debug output for first few tiles - corner-based
 	if tile_sprites.size() <= 10:
 		var slope_info = " slope=%d" % slope_index if slope_index > 0 else ""
-		var base_offset = float(height * COORDS_Z_STEP) / float(COORDS_Z_PER_TINY_Z)
-		print("🏔️ POSITION DEBUG: tile %s, height=%d → base_y=%.1f, base_offset=%.1f, SCALED_offset=%.1f (×%.1f), final_y=%.1f (Δ=%.1f px)%s → %s" %
-		      [world_pos, height, base_pos.y, base_offset, height_offset, RENDERING_SCALE, final_pos.y, base_pos.y - final_pos.y, slope_info, terrain_type])
+		var corner_heights = SlopeCalculator.get_corner_heights(height, slope_index)
+		print("🏔️ CORNER DEBUG: tile %s, height=%d, slope=%d → corners(N=%d,E=%d,S=%d,W=%d) → north_offset=%.1f px → final_y=%.1f%s → %s" %
+		      [world_pos, height, slope_index, corner_heights.top, corner_heights.right, corner_heights.bottom, corner_heights.left, 
+		       north_corner_offset, final_pos.y, slope_info, terrain_type])
 
 func _should_use_rct2_texture(terrain_type: String) -> bool:
 	"""Check if this terrain type should use RCT2 textures."""

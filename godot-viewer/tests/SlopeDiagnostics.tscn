@@ -1,0 +1,62 @@
+[gd_scene load_steps=2 format=3 uid="uid://c5v8r3m9xh2yw"]
+
+[ext_resource type="Script" path="res://tests/SlopeDiagnostics.gd" id="1_slope_diagnostics"]
+
+[node name="SlopeDiagnostics" type="Node2D"]
+script = ExtResource("1_slope_diagnostics")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(0.5, 0.5)
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+
+[node name="ControlPanel" type="VBoxContainer" parent="UILayer"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 320.0
+offset_bottom = 300.0
+
+[node name="Title" type="Label" parent="UILayer/ControlPanel"]
+layout_mode = 2
+text = "Slope Diagnostics"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="UILayer/ControlPanel"]
+layout_mode = 2
+
+[node name="ShowCornerHeights" type="CheckButton" parent="UILayer/ControlPanel"]
+layout_mode = 2
+text = "Show Corner Heights (tiny-Z)"
+
+[node name="ShowScreenOffsets" type="CheckButton" parent="UILayer/ControlPanel"]
+layout_mode = 2
+text = "Show Screen Offsets (pixels)"
+
+[node name="ShowCornerMarkers" type="CheckButton" parent="UILayer/ControlPanel"]
+layout_mode = 2
+button_pressed = true
+text = "Show Corner Markers"
+
+[node name="HSeparator2" type="HSeparator" parent="UILayer/ControlPanel"]
+layout_mode = 2
+
+[node name="BaseHeightLabel" type="Label" parent="UILayer/ControlPanel"]
+layout_mode = 2
+text = "Base Height: 0"
+
+[node name="BaseHeightSlider" type="HSlider" parent="UILayer/ControlPanel"]
+layout_mode = 2
+max_value = 255.0
+step = 16.0
+
+[node name="HSeparator3" type="HSeparator" parent="UILayer/ControlPanel"]
+layout_mode = 2
+
+[node name="RegenerateButton" type="Button" parent="UILayer/ControlPanel"]
+layout_mode = 2
+text = "Regenerate Grid"
+
+[node name="TerrainContainer" type="Node2D" parent="."]
+
+[node name="DebugOverlay" type="Node2D" parent="."]
+
