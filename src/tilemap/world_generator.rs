@@ -665,6 +665,13 @@ impl WorldGenerator {
                     slope_bits |= TILE_SLOPE_NW_SIDE_UP;
                 }
 
+                // Step 3: If all four corners are raised, the tile should be flat
+                // (its base height should have been raised instead)
+                // This handles transitions between different height levels
+                if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
+                    slope_bits = 0; // Flat
+                }
+
                 slope_masks[local_y][local_x] = slope_bits;
 
                 // Check for diagonal (steep) slopes
