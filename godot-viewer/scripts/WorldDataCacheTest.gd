@@ -35,9 +35,16 @@ func _ready():
 		["", "", "", "Bush"],
 		["", "Flower", "", ""]
 	]
+	var test_slopes = [
+		[0, 1, 2, 3],
+		[4, 5, 6, 7],
+		[8, 9, 10, 11],
+		[12, 13, 14, 15]
+	]
 
 	WorldDataCache.store_terrain_chunk(test_chunk_key, test_terrain)
 	WorldDataCache.store_resource_chunk(test_chunk_key, test_resources)
+	WorldDataCache.store_slope_chunk(test_chunk_key, test_slopes)
 
 	print("   Stored test data for chunk: ", test_chunk_key)
 	print()
@@ -45,24 +52,27 @@ func _ready():
 	# Test 3: Data retrieval
 	print("3. Testing data retrieval...")
 	var test_retrievals = [
-		{"x": 0, "y": 0, "expected_terrain": "Grass", "expected_resource": ""},
-		{"x": 1, "y": 0, "expected_terrain": "Grass", "expected_resource": "TreeOak"},
-		{"x": 2, "y": 1, "expected_terrain": "Forest", "expected_resource": ""},
-		{"x": 2, "y": 2, "expected_terrain": "Grass", "expected_resource": "Bush"},
-		{"x": 3, "y": 0, "expected_terrain": "Water", "expected_resource": ""},
-		{"x": 0, "y": 1, "expected_terrain": "Grass", "expected_resource": "Flower"}
+		{"x": 0, "y": 0, "expected_terrain": "Grass", "expected_resource": "", "expected_slope": 0},
+		{"x": 1, "y": 0, "expected_terrain": "Grass", "expected_resource": "TreeOak", "expected_slope": 1},
+		{"x": 2, "y": 1, "expected_terrain": "Forest", "expected_resource": "", "expected_slope": 6},
+		{"x": 2, "y": 2, "expected_terrain": "Grass", "expected_resource": "Bush", "expected_slope": 10},
+		{"x": 3, "y": 0, "expected_terrain": "Water", "expected_resource": "", "expected_slope": 3},
+		{"x": 0, "y": 1, "expected_terrain": "Grass", "expected_resource": "Flower", "expected_slope": 4}
 	]
 
 	for test in test_retrievals:
 		var terrain = WorldDataCache.get_terrain_at(test.x, test.y)
 		var resource = WorldDataCache.get_resource_at(test.x, test.y)
+		var slope = WorldDataCache.get_slope_index_at(test.x, test.y)
 		var terrain_match = terrain == test.expected_terrain
 		var resource_match = resource == test.expected_resource
+ 		var slope_match = slope == test.expected_slope
 
-		print("   (%d,%d): Terrain='%s' %s, Resource='%s' %s" % [
+		print("   (%d,%d): Terrain='%s' %s, Resource='%s' %s, Slope=%s %s" % [
 			test.x, test.y,
 			terrain, "✓" if terrain_match else "✗",
-			resource, "✓" if resource_match else "✗"
+			resource, "✓" if resource_match else "✗",
+			str(slope), "✓" if slope_match else "✗"
 		])
 	print()
 

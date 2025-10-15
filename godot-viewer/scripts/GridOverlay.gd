@@ -1,24 +1,39 @@
-# GridOverlay.gd - Draws a grid over the isometric tilemap
+# GridOverlay.gd - Draws a slope-following grid over the isometric tilemap (OpenRCT2 style)
 extends Node2D
 
-@export var grid_color: Color = Color(1.0, 1.0, 1.0, 0.3)  # White with transparency
+@export var grid_color: Color = Color(1.0, 0.0, 0.0, 0.8)  # Red with high visibility
 @export var grid_thickness: float = 1.0
-@export var grid_enabled: bool = false  # Disabled by default with heightmap terrain (grid doesn't follow elevation)
+@export var grid_enabled: bool = false
 
-# Reference to the coord_helper tilemap for coordinate conversion
+# References
 var tilemap: Node2D = null
 var camera: Camera2D = null
+var world_data_cache: Node = null
 
 # Grid bounds (in tile coordinates)
 var grid_min: Vector2i = Vector2i(-100, -100)
 var grid_max: Vector2i = Vector2i(100, 100)
 
+# OpenRCT2 constants (match TerrainTileMap and HeightMarkerOverlay)
+const COORDS_Z_STEP = 8
+const COORDS_Z_PER_TINY_Z = 16
+const RENDERING_SCALE = 2.0
+
+# Tile dimensions (must match TerrainTileMap rendering scale)
+const TILE_WIDTH = 64   # Base tile width
+const TILE_HEIGHT = 32  # Base tile height
+const RENDERED_TILE_WIDTH = TILE_WIDTH * RENDERING_SCALE   # 128 pixels
+const RENDERED_TILE_HEIGHT = TILE_HEIGHT * RENDERING_SCALE  # 64 pixels
+
 func _ready():
 	# Set high z-index to draw on top of everything
-	z_index = 100
+	z_index = 1000  # Very high to ensure it's above all terrain
+	z_as_relative = false  # Make z-index absolute, not relative to parent
+	y_sort_enabled = false  # Disable Y-sorting to prevent depth issues
+
 	# Ensure GridOverlay is at origin (no position offset)
 	position = Vector2(0, 0)
-	print("🔲 GridOverlay initialized - Press 'G' to toggle")
+	print("📐 GridOverlay initialized - draws in world space with high z-index!")
 
 func set_tilemap(p_tilemap: Node2D):
 	tilemap = p_tilemap
@@ -26,52 +41,106 @@ func set_tilemap(p_tilemap: Node2D):
 func set_camera(p_camera: Camera2D):
 	camera = p_camera
 
+func set_world_data_cache(cache: Node):
+	world_data_cache = cache
+	print("✅ GridOverlay: WorldDataCache reference set")
+
 func toggle_grid():
 	grid_enabled = not grid_enabled
-	queue_redraw()
-	print("🔲 Grid ", "enabled" if grid_enabled else "disabled")
+	Config.show_grid = grid_enabled
+	queue_redraw()  # Always redraw to clear old lines when disabling
+	print("📐 Grid ", "enabled" if grid_enabled else "disabled")
 
 func _draw():
-	if not grid_enabled or tilemap == null:
+	if not grid_enabled or tilemap == null or world_data_cache == null:
 		return
 
 	# Get visible tile range based on camera viewport
 	var visible_tiles = _get_visible_tile_range()
 
-	# Draw horizontal and vertical grid lines for isometric tiles
-	# For isometric tiles, we draw parallelograms
+	# Draw grid for each visible tile with height-aware corners
 	for tile_x in range(visible_tiles.min_x, visible_tiles.max_x + 1):
 		for tile_y in range(visible_tiles.min_y, visible_tiles.max_y + 1):
-			_draw_tile_border(Vector2i(tile_x, tile_y))
+			_draw_tile_border_with_height(Vector2i(tile_x, tile_y))
 
-func _draw_tile_border(tile_pos: Vector2i):
-	# Get the isometric tile center position
-	var center = tilemap.map_to_local(tile_pos)
+func _draw_tile_border_with_height(tile_pos: Vector2i):
+	# Get tile height and neighbor heights
+	var tile_height = _get_tile_height(tile_pos)
+	if tile_height < 0:
+		return  # Tile not loaded
 
-	# OpenRCT2 tile constants (64×32 isometric diamond)
-	const TILE_WIDTH = 64
-	const TILE_HEIGHT = 32
+	var north_height = _get_tile_height(Vector2i(tile_pos.x, tile_pos.y - 1))
+	var east_height = _get_tile_height(Vector2i(tile_pos.x + 1, tile_pos.y))
+	var south_height = _get_tile_height(Vector2i(tile_pos.x, tile_pos.y + 1))
+	var west_height = _get_tile_height(Vector2i(tile_pos.x - 1, tile_pos.y))
 
-	# For OpenRCT2 isometric tiles (64×32), the corners form a diamond
-	# In Godot's isometric layout, map_to_local() returns the TOP corner of the diamond
-	# We need to offset by half_height to get the actual center
-	var half_width = TILE_WIDTH / 2.0  # 64 / 2 = 32
-	var half_height = TILE_HEIGHT / 2.0  # 32 / 2 = 16
+	# Calculate corner heights (average with neighbors for smooth slopes)
+	var ne_height = tile_height
+	var se_height = tile_height
+	var sw_height = tile_height
+	var nw_height = tile_height
 
-	# Adjust center: map_to_local() gives the top point, move to visual center
-	var visual_center = center + Vector2(0, half_height)
+	if north_height >= 0 and east_height >= 0:
+		ne_height = (tile_height + north_height + east_height) / 3.0
+	if south_height >= 0 and east_height >= 0:
+		se_height = (tile_height + south_height + east_height) / 3.0
+	if south_height >= 0 and west_height >= 0:
+		sw_height = (tile_height + south_height + west_height) / 3.0
+	if north_height >= 0 and west_height >= 0:
+		nw_height = (tile_height + north_height + west_height) / 3.0
 
-	# Diamond corners: top, right, bottom, left (relative to visual center)
-	var top = visual_center + Vector2(0, -half_height)
-	var right = visual_center + Vector2(half_width, 0)
-	var bottom = visual_center + Vector2(0, half_height)
-	var left = visual_center + Vector2(-half_width, 0)
+	# map_to_local() returns the TOP vertex of the diamond (see TooltipOverlay.gd)
+	var top_vertex = tilemap.map_to_local(tile_pos)
 
-	# Draw the four edges of the diamond
-	draw_line(top, right, grid_color, grid_thickness)
-	draw_line(right, bottom, grid_color, grid_thickness)
-	draw_line(bottom, left, grid_color, grid_thickness)
-	draw_line(left, top, grid_color, grid_thickness)
+	# Convert to diamond centre so horizontal offsets stay consistent with TerrainTileMap
+	var half_width = TILE_WIDTH / 2.0
+	var half_height = TILE_HEIGHT / 2.0
+	var center_pixel = top_vertex + Vector2(0, half_height)
+
+	# Base positions for each corner before height adjustment
+	var ne_base = center_pixel + Vector2(0, -half_height)            # Top corner
+	var se_base = center_pixel + Vector2(half_width, 0)              # Right corner
+	var sw_base = center_pixel + Vector2(0, half_height)             # Bottom corner
+	var nw_base = center_pixel + Vector2(-half_width, 0)             # Left corner
+
+	# Apply height offsets to each corner
+	var ne_pixel = _apply_height_offset(ne_base, ne_height)
+	var se_pixel = _apply_height_offset(se_base, se_height)
+	var sw_pixel = _apply_height_offset(sw_base, sw_height)
+	var nw_pixel = _apply_height_offset(nw_base, nw_height)
+
+	# Draw the four edges of the diamond with slope-following corners
+	# Only draw right and bottom edges to avoid duplicates
+	draw_line(ne_pixel, se_pixel, grid_color, grid_thickness)  # Right edge (NE -> SE)
+	draw_line(se_pixel, sw_pixel, grid_color, grid_thickness)  # Bottom edge (SE -> SW)
+
+func _apply_height_offset(pixel_pos: Vector2, height: float) -> Vector2:
+	# Same height offset calculation as HeightMarkerOverlay and TerrainTileMap
+	var base_offset = (height * COORDS_Z_STEP) / COORDS_Z_PER_TINY_Z
+	var height_offset = base_offset * RENDERING_SCALE
+
+	return Vector2(pixel_pos.x, pixel_pos.y - height_offset)
+
+func _get_tile_height(tile_pos: Vector2i) -> float:
+	# Get chunk and local position
+	var chunk_x = floori(float(tile_pos.x) / 16.0)
+	var chunk_y = floori(float(tile_pos.y) / 16.0)
+	var chunk_key = "%d,%d" % [chunk_x, chunk_y]
+
+	# Check if chunk is loaded
+	var height_chunk = world_data_cache.get_height_chunk(chunk_key)
+	if height_chunk.size() == 0:
+		return -1.0  # Chunk not loaded
+
+	# Calculate local position in chunk
+	var local_x = ((tile_pos.x % 16) + 16) % 16
+	var local_y = ((tile_pos.y % 16) + 16) % 16
+
+	# Get height value
+	if local_y < height_chunk.size() and local_x < height_chunk[local_y].size():
+		return float(height_chunk[local_y][local_x])
+
+	return -1.0  # Out of bounds
 
 func _get_visible_tile_range() -> Dictionary:
 	if camera == null:
@@ -121,6 +190,5 @@ func _get_visible_tile_range() -> Dictionary:
 	}
 
 func _process(_delta):
-	# Continuously redraw to update with camera movement
-	if grid_enabled:
-		queue_redraw()
+	# Always redraw to update with camera movement and clear when disabled
+	queue_redraw()

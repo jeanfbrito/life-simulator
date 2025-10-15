@@ -14,6 +14,9 @@ var grid_overlay: Node2D = null
 # Tooltip overlay (will be created dynamically)
 var tooltip_overlay: CanvasLayer = null
 
+# Height marker overlay (will be created dynamically)
+var height_marker_overlay: CanvasLayer = null
+
 # UI References
 var top_bar: CanvasLayer = null
 var statistics_hud: Control = null
@@ -43,6 +46,9 @@ func _ready():
 
 	# Create and initialize tooltip overlay
 	_initialize_tooltip_overlay()
+
+	# Create and initialize height marker overlay
+	_initialize_height_marker_overlay()
 
 	# Initialize UI references (wait one frame for UI nodes to be ready)
 	await get_tree().process_frame
@@ -207,7 +213,8 @@ func _add_visible_chunks(visible_chunks: Array[String]) -> Array[String]:
 		if terrain_data.size() > 0 and not current_chunk_keys.has(chunk_key):
 			# Get height data for slope rendering
 			var height_data = WorldDataCache.get_height_chunk(chunk_key)
-			terrain_tilemap.paint_chunk(chunk_key, terrain_data, height_data)
+			var slope_data = WorldDataCache.get_slope_chunk(chunk_key)
+			terrain_tilemap.paint_chunk(chunk_key, terrain_data, height_data, slope_data)
 
 			# Paint resources too!
 			var resource_data = WorldDataCache.get_resource_chunk(chunk_key)
@@ -293,6 +300,18 @@ func _on_timer_timeout():
 
 # Initialize grid overlay
 func _initialize_grid_overlay():
+	# Clean up any existing grid overlay first
+	if grid_overlay != null:
+		print("🧹 Removing existing grid overlay...")
+		grid_overlay.queue_free()
+		grid_overlay = null
+
+	# Also check for any orphaned GridOverlay nodes
+	for child in get_children():
+		if child.name == "GridOverlay":
+			print("🧹 Removing orphaned GridOverlay...")
+			child.queue_free()
+
 	# Load the GridOverlay script
 	var GridOverlay = load("res://scripts/GridOverlay.gd")
 	if GridOverlay == null:
@@ -301,13 +320,15 @@ func _initialize_grid_overlay():
 
 	# Create grid overlay instance
 	grid_overlay = GridOverlay.new()
+	grid_overlay.name = "GridOverlay"  # Set unique name for detection
 	grid_overlay.set_tilemap(terrain_tilemap)  # Use TerrainTileMap with OpenRCT2 exact formula
 	grid_overlay.set_camera(camera)
+	grid_overlay.set_world_data_cache(WorldDataCache)  # Pass cache for height queries
 
-	# Add as child of TerrainTileMap so it inherits transformations
-	terrain_tilemap.add_child(grid_overlay)
+	# Add as direct child of WorldRenderer (NOT TerrainTileMap) to avoid transform inheritance issues
+	add_child(grid_overlay)
 
-	print("✅ Grid overlay initialized (Press 'G' to toggle)")
+	print("✅ Grid overlay initialized with slope-following (Press 'G' to toggle)")
 
 # Initialize tooltip overlay
 func _initialize_tooltip_overlay():
@@ -326,6 +347,25 @@ func _initialize_tooltip_overlay():
 	add_child(tooltip_overlay)
 
 	print("✅ Tooltip overlay initialized (Press 'T' to toggle)")
+
+# Initialize height marker overlay
+func _initialize_height_marker_overlay():
+	# Load the HeightMarkerOverlay script
+	var HeightMarkerOverlay = load("res://scripts/HeightMarkerOverlay.gd")
+	if HeightMarkerOverlay == null:
+		print("⚠️ Failed to load HeightMarkerOverlay script")
+		return
+
+	# Create height marker overlay instance
+	height_marker_overlay = HeightMarkerOverlay.new()
+	height_marker_overlay.set_terrain_tilemap(terrain_tilemap)
+	height_marker_overlay.set_world_data_cache(WorldDataCache)
+	height_marker_overlay.set_camera(camera)
+
+	# Add as child of root World node to be in screen space (not world space)
+	add_child(height_marker_overlay)
+
+	print("✅ Height marker overlay initialized (Press 'M' or click 📏 button to toggle)")
 
 # Initialize UI component references
 func _initialize_ui_references():
@@ -370,6 +410,7 @@ func set_ui_references(p_top_bar: CanvasLayer, p_statistics_hud: Control, p_cont
 		top_bar.set_world_renderer(self)
 		top_bar.set_statistics_hud(statistics_hud)
 		top_bar.set_controls_overlay(controls_overlay)
+		top_bar.set_height_marker_overlay(height_marker_overlay)
 		print("✅ UI references set in WorldRenderer and TopBar")
 
 # Reset camera to origin (0,0) with default zoom

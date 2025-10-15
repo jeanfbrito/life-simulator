@@ -92,7 +92,7 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -290.0
+offset_left = -428.0
 offset_top = -16.0
 offset_right = -15.0
 offset_bottom = 16.0
@@ -134,3 +134,17 @@ layout_mode = 2
 tooltip_text = "Refresh Chunks"
 theme_override_font_sizes/font_size = 16
 text = "🔄"
+
+[node name="RotationButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(75, 32)
+layout_mode = 2
+tooltip_text = "Cycle Slope Rotation (Test)"
+theme_override_font_sizes/font_size = 12
+text = "Rot: 90°"
+
+[node name="HeightButton" type="Button" parent="Container/ActionsContainer"]
+custom_minimum_size = Vector2(45, 32)
+layout_mode = 2
+tooltip_text = "Toggle Height Markers (M)"
+theme_override_font_sizes/font_size = 16
+text = "📏"

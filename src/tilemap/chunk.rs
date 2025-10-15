@@ -60,6 +60,12 @@ impl ChunkCoordinate {
 pub struct Chunk {
     pub coordinate: ChunkCoordinate,
     pub tiles: [[TerrainType; CHUNK_SIZE]; CHUNK_SIZE],
+    #[serde(skip)]
+    pub heights: [[u8; CHUNK_SIZE]; CHUNK_SIZE],
+    #[serde(skip)]
+    pub slope_masks: [[u8; CHUNK_SIZE]; CHUNK_SIZE],
+    #[serde(skip)]
+    pub slope_indices: [[u8; CHUNK_SIZE]; CHUNK_SIZE],
     pub biome: BiomeType,
     pub is_dirty: bool,
     pub generation_seed: u64,
@@ -74,6 +80,9 @@ impl Chunk {
         let mut chunk = Self {
             coordinate,
             tiles: [[TerrainType::Grass; CHUNK_SIZE]; CHUNK_SIZE],
+            heights: [[0; CHUNK_SIZE]; CHUNK_SIZE],
+            slope_masks: [[0; CHUNK_SIZE]; CHUNK_SIZE],
+            slope_indices: [[0; CHUNK_SIZE]; CHUNK_SIZE],
             biome,
             is_dirty: true,
             generation_seed: seed,

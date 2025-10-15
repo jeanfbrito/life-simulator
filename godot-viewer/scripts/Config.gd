@@ -18,6 +18,9 @@ var VIEW_SIZE_Y: int = 100  # Dynamic view height based on container
 
 # Debug flags
 var debug_show_position_markers: bool = false  # Show red cross at entity/resource origin
+var slope_rotation: int = 1  # Slope corner rotation: 0=0°, 1=90°, 2=180°, 3=270° (TEST MODE)
+var show_height_markers: bool = false  # Show height numbers on tiles (like OpenRCT2)
+var show_grid: bool = false  # Show slope-following grid overlay (OpenRCT2 style)
 
 # Performance settings
 var target_fps: int = 60

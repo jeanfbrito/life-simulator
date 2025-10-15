@@ -40,7 +40,9 @@ func request_chunks_in_area(center_x: int, center_y: int, radius: int) -> Dictio
 	var needed_chunks: Array[String] = []
 	var all_loaded_data: Dictionary = {
 		"chunks": {},
-		"resources": {}
+		"resources": {},
+		"heights": {},
+		"slope_indices": {}
 	}
 
 	# Calculate which chunks we need
@@ -76,6 +78,11 @@ func request_chunks_in_area(center_x: int, center_y: int, radius: int) -> Dictio
 				all_loaded_data.chunks[key] = batch_data.chunks[key]
 			for key in batch_data.resources:
 				all_loaded_data.resources[key] = batch_data.resources[key]
+			for key in batch_data.heights:
+				all_loaded_data.heights[key] = batch_data.heights[key]
+			if "slope_indices" in batch_data:
+				for key in batch_data.slope_indices:
+					all_loaded_data.slope_indices[key] = batch_data.slope_indices[key]
 
 	return all_loaded_data
 
@@ -86,7 +93,8 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 	var new_world_data: Dictionary = {
 		"chunks": {},
 		"resources": {},
-		"heights": {}
+		"heights": {},
+		"slope_indices": {}
 	}
 
 	for chunk_key in batch:
@@ -148,7 +156,6 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 			if chunk_data.has("resources"):
 				new_world_data.resources[chunk_key] = chunk_data.resources
 			if chunk_data.has("heights"):
-				# Convert height strings to integers
 				var heights_int = []
 				for row in chunk_data.heights:
 					var row_int = []
@@ -156,6 +163,15 @@ func load_chunk_batch(batch: Array[String]) -> Dictionary:
 						row_int.append(int(height_str))
 					heights_int.append(row_int)
 				new_world_data.heights[chunk_key] = heights_int
+
+			if chunk_data.has("slope_indices"):
+				var slopes_int = []
+				for row in chunk_data.slope_indices:
+					var row_int = []
+					for slope_str in row:
+						row_int.append(int(slope_str))
+					slopes_int.append(row_int)
+				new_world_data.slope_indices[chunk_key] = slopes_int
 
 			# Mark as loaded
 			loaded_chunks[chunk_key] = true
@@ -311,6 +327,15 @@ func fetch_data(endpoint: String) -> Dictionary:
 
 # Merge new chunk data into existing world data
 func merge_chunk_data(new_data: Dictionary, existing_world_data: Dictionary):
+	if not existing_world_data.has("chunks"):
+		existing_world_data["chunks"] = {}
+	if not existing_world_data.has("resources"):
+		existing_world_data["resources"] = {}
+	if not existing_world_data.has("heights"):
+		existing_world_data["heights"] = {}
+	if not existing_world_data.has("slope_indices"):
+		existing_world_data["slope_indices"] = {}
+
 	if new_data.has("chunks"):
 		for key in new_data.chunks:
 			existing_world_data.chunks[key] = new_data.chunks[key]
@@ -322,6 +347,10 @@ func merge_chunk_data(new_data: Dictionary, existing_world_data: Dictionary):
 	if new_data.has("heights"):
 		for key in new_data.heights:
 			existing_world_data.heights[key] = new_data.heights[key]
+
+	if new_data.has("slope_indices"):
+		for key in new_data.slope_indices:
+			existing_world_data.slope_indices[key] = new_data.slope_indices[key]
 
 # Update connection status
 func update_connection_status(connected: bool):

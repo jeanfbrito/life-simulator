@@ -83,18 +83,15 @@ func local_to_map(pixel_pos: Vector2) -> Vector2i:
 	return coord_helper.local_to_map(pixel_pos)
 
 # Paint a chunk's terrain using individual Sprite2D nodes
-func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []):
+func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = [], slope_data: Array = []):
 	if terrain_data.size() == 0:
 		print("⚠️ No terrain data for chunk ", chunk_key)
 		return
 
 	var chunk_origin = WorldDataCache.chunk_key_to_world_origin(chunk_key)
 	var has_heights = height_data.size() > 0
+	var has_slopes = slope_data.size() > 0
 	print("🎨 Painting chunk ", chunk_key, " with origin ", chunk_origin, " (heights: ", has_heights, ")")
-
-	# Get chunk coordinates for slope calculation
-	var parts = chunk_key.split(",")
-	var chunk_coord = Vector2i(int(parts[0]), int(parts[1]))
 
 	var tiles_painted = 0
 	for y in range(terrain_data.size()):
@@ -117,18 +114,11 @@ func paint_chunk(chunk_key: String, terrain_data: Array, height_data: Array = []
 			if has_heights and y < height_data.size() and x < height_data[y].size():
 				height = int(height_data[y][x])
 
-			# Calculate slope index from height differences
-			# Slope sprites are 64×32 pixels (base size), matching our TILE dimensions
-			# With RENDERING_SCALE applied, they'll match the scaled elevation
 			var slope_index = 0
-			if has_heights:
-				var world_cache = get_node("/root/WorldDataCache")
-				slope_index = SlopeCalculator.calculate_slope_index(
-					height_data,
-					Vector2i(x, y),
-					chunk_coord,
-					world_cache
-				)
+			if has_slopes and y < slope_data.size() and x < slope_data[y].size():
+				slope_index = int(slope_data[y][x])
+
+			slope_index = SlopeCalculator.rotate_slope_index(slope_index, Config.slope_rotation)
 
 			paint_terrain_tile(world_pos, terrain_type, slope_index, height)
 			tiles_painted += 1
@@ -181,6 +171,10 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	# This is INDEPENDENT of camera zoom - it's a rendering multiplier
 	# OpenRCT2 uses 2x-3x scale by default for modern displays
 	height_offset *= RENDERING_SCALE  # Multiply by rendering scale!
+
+	# Apply additional slope offset so raised corners align with neighbors
+	if slope_index != 0:
+		height_offset += float(COORDS_Z_STEP * RENDERING_SCALE * 0.5)
 
 	var final_pos = Vector2(base_pos.x, base_pos.y - height_offset)
 

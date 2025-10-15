@@ -10,10 +10,12 @@ signal cache_cleared()
 var terrain_cache: Dictionary = {}  # chunk_key -> 2D array of terrain strings
 var resource_cache: Dictionary = {}  # chunk_key -> 2D array of resource strings
 var height_cache: Dictionary = {}  # chunk_key -> 2D array of height ints (u8, 0-255)
+var slope_index_cache: Dictionary = {}  # chunk_key -> 2D array of slope indices (0-18)
 var cache_stats: Dictionary = {
 	"terrain_chunks": 0,
 	"resource_chunks": 0,
 	"height_chunks": 0,
+	"slope_chunks": 0,
 	"total_tiles": 0
 }
 
@@ -56,6 +58,8 @@ func store_chunk_data(chunk_key: String, chunk_data: Dictionary):
 		store_resource_chunk(chunk_key, chunk_data.resources)
 	if chunk_data.has("heights"):
 		store_height_chunk(chunk_key, chunk_data.heights)
+	if chunk_data.has("slope_indices"):
+		store_slope_chunk(chunk_key, chunk_data.slope_indices)
 
 # Merge chunk data from ChunkManager response
 func merge_chunk_data(chunk_data_response: Dictionary):
@@ -70,6 +74,10 @@ func merge_chunk_data(chunk_data_response: Dictionary):
 	if chunk_data_response.has("heights"):
 		for chunk_key in chunk_data_response.heights:
 			store_height_chunk(chunk_key, chunk_data_response.heights[chunk_key])
+
+	if chunk_data_response.has("slope_indices"):
+		for chunk_key in chunk_data_response.slope_indices:
+			store_slope_chunk(chunk_key, chunk_data_response.slope_indices[chunk_key])
 
 # Get terrain type at world coordinates
 func get_terrain_at(world_x: int, world_y: int) -> String:
@@ -122,6 +130,14 @@ func get_cached_chunk_keys() -> Array[String]:
 		if not all_keys.has(key):
 			all_keys.append(key)
 
+	for key in height_cache.keys():
+		if not all_keys.has(key):
+			all_keys.append(key)
+
+	for key in slope_index_cache.keys():
+		if not all_keys.has(key):
+			all_keys.append(key)
+
 	return all_keys
 
 # Get cached terrain chunk data
@@ -135,6 +151,16 @@ func get_resource_chunk(chunk_key: String) -> Array:
 # Get cached height chunk data
 func get_height_chunk(chunk_key: String) -> Array:
 	return height_cache.get(chunk_key, [])
+
+func store_slope_chunk(chunk_key: String, slope_data: Array):
+	if slope_data is Array and slope_data.size() > 0:
+		slope_index_cache[chunk_key] = slope_data
+		update_stats()
+		print("⛰️ Stored slope chunk: ", chunk_key, " (", slope_data.size(), "x", slope_data[0].size() if slope_data[0] is Array else "?", ")")
+		cache_updated.emit(chunk_key)
+
+func get_slope_chunk(chunk_key: String) -> Array:
+	return slope_index_cache.get(chunk_key, [])
 
 # Get height at specific world coordinates
 func get_height_at(world_x: int, world_y: int) -> int:
@@ -169,7 +195,28 @@ func get_chunk(chunk_key: String) -> Dictionary:
 	if height_cache.has(chunk_key):
 		chunk_data["heights"] = height_cache[chunk_key]
 
+	if slope_index_cache.has(chunk_key):
+		chunk_data["slope_indices"] = slope_index_cache[chunk_key]
+
 	return chunk_data
+
+func get_slope_index_at(world_x: int, world_y: int) -> int:
+	var chunk_key = get_chunk_key(world_x, world_y)
+	var slope_chunk = get_slope_chunk(chunk_key)
+
+	if slope_chunk.is_empty():
+		return -1
+
+	var local_coords = get_local_coords(world_x, world_y)
+
+	if local_coords.y < 0 or local_coords.y >= slope_chunk.size():
+		return -1
+
+	var row = slope_chunk[local_coords.y]
+	if local_coords.x < 0 or local_coords.x >= row.size():
+		return -1
+
+	return row[local_coords.x]
 
 # Convert world coordinates to chunk key
 func get_chunk_key(world_x: int, world_y: int) -> String:
@@ -232,6 +279,7 @@ func update_stats():
 	cache_stats.terrain_chunks = terrain_cache.size()
 	cache_stats.resource_chunks = resource_cache.size()
 	cache_stats.height_chunks = height_cache.size()
+	cache_stats.slope_chunks = slope_index_cache.size()
 
 	# Calculate total tiles
 	var total_tiles = 0
@@ -250,6 +298,7 @@ func clear_cache():
 	terrain_cache.clear()
 	resource_cache.clear()
 	height_cache.clear()
+	slope_index_cache.clear()
 	update_stats()
 
 	cache_cleared.emit()
@@ -269,6 +318,10 @@ func clear_chunk(chunk_key: String):
 
 	if height_cache.has(chunk_key):
 		height_cache.erase(chunk_key)
+		was_cached = true
+
+	if slope_index_cache.has(chunk_key):
+		slope_index_cache.erase(chunk_key)
 		was_cached = true
 
 	if was_cached:
@@ -291,6 +344,12 @@ func get_cache_memory_usage() -> int:
 		if chunk is Array:
 			size += chunk.size() * 8  # Rough estimate per string reference
 
+	# Estimate slope cache size
+	for chunk_key in slope_index_cache:
+		var chunk = slope_index_cache[chunk_key]
+		if chunk is Array:
+			size += chunk.size() * 4  # Rough estimate per byte value
+
 	return size
 
 # Print cache information for debugging
@@ -298,6 +357,7 @@ func debug_print_cache():
 	print("=== World Data Cache Debug ===")
 	print("Terrain chunks cached: ", terrain_cache.size())
 	print("Resource chunks cached: ", resource_cache.size())
+	print("Slope chunks cached: ", slope_index_cache.size())
 	print("Total unique chunks: ", get_cached_chunk_keys().size())
 	print("Estimated memory usage: ", get_cache_memory_usage(), " bytes")
 	print("Cached chunk keys: ", get_cached_chunk_keys())

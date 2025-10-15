@@ -19,11 +19,14 @@ class_name TopBar
 @onready var stats_button: Button = $Container/ActionsContainer/StatsButton
 @onready var help_button: Button = $Container/ActionsContainer/HelpButton
 @onready var refresh_button: Button = $Container/ActionsContainer/RefreshButton
+@onready var rotation_button: Button = $Container/ActionsContainer/RotationButton
+@onready var height_button: Button = $Container/ActionsContainer/HeightButton
 
 # References to other components
 var world_renderer: Node2D = null
 var statistics_hud: Control = null
 var controls_overlay: Control = null
+var height_marker_overlay = null  # HeightMarkerOverlay reference
 
 # Update timing
 var update_interval: float = 0.5  # Update statistics every 0.5 seconds
@@ -77,6 +80,8 @@ func setup_button_tooltips() -> void:
 		help_button.tooltip_text = "Toggle Help (H)"
 	if refresh_button:
 		refresh_button.tooltip_text = "Reload World (Full Refresh)"
+	if rotation_button:
+		_update_rotation_button_text()  # Set initial text
 
 # Connect all button signals
 func connect_button_signals() -> void:
@@ -90,6 +95,10 @@ func connect_button_signals() -> void:
 		help_button.pressed.connect(_on_help_toggle_pressed)
 	if refresh_button:
 		refresh_button.pressed.connect(_on_refresh_pressed)
+	if rotation_button:
+		rotation_button.pressed.connect(_on_rotation_button_pressed)
+	if height_button:
+		height_button.pressed.connect(_on_height_button_pressed)
 
 # Update all statistics displays
 func update_statistics() -> void:
@@ -169,6 +178,11 @@ func set_controls_overlay(overlay) -> void:
 	controls_overlay = overlay
 	print("✅ TopBar: ControlsOverlay reference set")
 
+# Set reference to HeightMarkerOverlay
+func set_height_marker_overlay(overlay) -> void:
+	height_marker_overlay = overlay
+	print("✅ TopBar: HeightMarkerOverlay reference set")
+
 # Button Action Handlers
 
 func _on_grid_button_pressed() -> void:
@@ -205,6 +219,39 @@ func _on_refresh_pressed() -> void:
 		world_renderer.force_refresh_chunks()
 	else:
 		print("⚠️ TopBar: WorldRenderer not available")
+
+func _on_rotation_button_pressed() -> void:
+	print("🔄 TopBar: Rotation test button pressed")
+	# Cycle through rotations: 0 → 1 → 2 → 3 → 0
+	Config.slope_rotation = (Config.slope_rotation + 1) % 4
+	_update_rotation_button_text()
+
+	# Force refresh to apply new rotation
+	if world_renderer:
+		print("   Rotation changed to: ", Config.slope_rotation, " (", _get_rotation_degrees(), "°)")
+		world_renderer.force_refresh_chunks()
+	else:
+		print("⚠️ TopBar: WorldRenderer not available")
+
+func _update_rotation_button_text() -> void:
+	if rotation_button:
+		rotation_button.text = "Rot: " + _get_rotation_degrees() + "°"
+		rotation_button.tooltip_text = "Cycle Slope Rotation (Testing: " + _get_rotation_degrees() + "°)"
+
+func _get_rotation_degrees() -> String:
+	match Config.slope_rotation:
+		0: return "0"
+		1: return "90"
+		2: return "180"
+		3: return "270"
+		_: return "?"
+
+func _on_height_button_pressed() -> void:
+	print("📏 TopBar: Height markers toggle button pressed")
+	if height_marker_overlay:
+		height_marker_overlay.toggle_visibility()
+	else:
+		print("⚠️ TopBar: HeightMarkerOverlay not available")
 
 # Handle keyboard shortcuts (R for reset camera)
 func _input(event: InputEvent) -> void:

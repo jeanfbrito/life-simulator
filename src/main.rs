@@ -70,7 +70,14 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
 
     // Load the world
     println!("🗺️ LIFE_SIMULATOR: Loading world...");
-    let world_loader = match WorldLoader::load_default() {
+    let requested_map_name =
+        std::env::var("WORLD_MAP_NAME").unwrap_or_else(|_| "slopes_demo".to_string());
+    println!(
+        "🗺️ LIFE_SIMULATOR: Attempting to load world '{}'",
+        requested_map_name
+    );
+
+    let world_loader = match WorldLoader::load_by_name(&requested_map_name) {
         Ok(loader) => {
             println!(
                 "✅ LIFE_SIMULATOR: World loaded: {} (seed: {})",
@@ -79,10 +86,28 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
             );
             loader
         }
-        Err(e) => {
-            eprintln!("❌ LIFE_SIMULATOR: Failed to load world: {}", e);
-            eprintln!("💡 LIFE_SIMULATOR: Please generate a world first using: cargo run --bin map_generator");
-            std::process::exit(1);
+        Err(err) => {
+            eprintln!(
+                "⚠️ LIFE_SIMULATOR: Could not load '{}': {}. Falling back to most recent map...",
+                requested_map_name, err
+            );
+            match WorldLoader::load_default() {
+                Ok(loader) => {
+                    println!(
+                        "✅ LIFE_SIMULATOR: World loaded: {} (seed: {})",
+                        loader.get_name(),
+                        loader.get_seed()
+                    );
+                    loader
+                }
+                Err(e) => {
+                    eprintln!("❌ LIFE_SIMULATOR: Failed to load world: {}", e);
+                    eprintln!(
+                        "💡 LIFE_SIMULATOR: Please generate a world first using: cargo run --bin map_generator"
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
     };
 

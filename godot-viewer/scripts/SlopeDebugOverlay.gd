@@ -122,20 +122,19 @@ func _process(_delta):
 	if chunk_data.has("terrain"):
 		terrain = chunk_data["terrain"][local_pos.y][local_pos.x]
 
-	# Calculate slope
-	var slope_idx = SlopeCalculator.calculate_slope_index(
-		heights,
-		local_pos,
-		chunk_coord,
-		world_cache
-	)
-	var slope_name = SlopeCalculator.get_slope_name(slope_idx)
+	# Slope indices
+	var base_slope_raw = world_cache.get_slope_index_at(tile_pos.x, tile_pos.y)
+	var base_slope_idx = base_slope_raw if base_slope_raw >= 0 else 0
+	var rotated_slope_idx = SlopeCalculator.rotate_slope_index(base_slope_idx, Config.slope_rotation)
+	var slope_name = "Unknown"
+	if base_slope_raw >= 0:
+		slope_name = SlopeCalculator.get_slope_name(rotated_slope_idx)
 
-	# Get neighbor heights
-	var h_n = _get_safe_height(heights, local_pos, Vector2i(0, -1), chunk_coord)
-	var h_e = _get_safe_height(heights, local_pos, Vector2i(1, 0), chunk_coord)
-	var h_s = _get_safe_height(heights, local_pos, Vector2i(0, 1), chunk_coord)
-	var h_w = _get_safe_height(heights, local_pos, Vector2i(-1, 0), chunk_coord)
+	# Get neighbor heights using world cache for accuracy
+	var h_n = world_cache.get_height_at(tile_pos.x, tile_pos.y - 1)
+	var h_e = world_cache.get_height_at(tile_pos.x + 1, tile_pos.y)
+	var h_s = world_cache.get_height_at(tile_pos.x, tile_pos.y + 1)
+	var h_w = world_cache.get_height_at(tile_pos.x - 1, tile_pos.y)
 
 	# Build debug text
 	var debug_text = """
@@ -146,7 +145,8 @@ Local: (%d, %d)
 Terrain: %s
 Height: %d / 255
 
-Slope: %d - %s
+Slope (rotated): %d - %s
+Base slope index: %s
 
 Neighbor Heights:
   N: %d  (%+d)
@@ -159,7 +159,8 @@ Neighbor Heights:
 		local_pos.x, local_pos.y,
 		terrain,
 		current_height,
-		slope_idx, slope_name,
+		rotated_slope_idx, slope_name,
+		"%d" % base_slope_raw if base_slope_raw >= 0 else "N/A",
 		h_n, h_n - current_height,
 		h_e, h_e - current_height,
 		h_s, h_s - current_height,
@@ -176,15 +177,4 @@ func _world_pos_to_tile(world_pos: Vector2) -> Vector2i:
 	return Vector2i(
 		int(floor(world_pos.x / 128.0)),
 		int(floor(world_pos.y / 64.0))
-	)
-
-
-func _get_safe_height(heights: Array, local_pos: Vector2i, offset: Vector2i, chunk_coord: Vector2i) -> int:
-	"""Get neighbor height safely using SlopeCalculator"""
-	return SlopeCalculator.get_neighbor_height(
-		heights,
-		local_pos,
-		offset,
-		chunk_coord,
-		world_cache
 	)

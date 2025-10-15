@@ -28,6 +28,8 @@ func update_controls_text() -> void:
 
 🖱️ [b]Mouse Wheel[/b] - Zoom in/out
 🖱️ [b]Middle Mouse + Drag[/b] - Pan camera
+🖱️ [b]Cmd + Click + Drag[/b] - Pan camera (trackpad)
+🖱️ [b]Space + Click + Drag[/b] - Pan camera (trackpad)
 
 ⌨️ [b]Arrow Keys / WASD[/b] - Move camera
 ⌨️ [+/- Keys[/b] - Zoom in/out

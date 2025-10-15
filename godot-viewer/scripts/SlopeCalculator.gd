@@ -1,147 +1,114 @@
 extends RefCounted
 class_name SlopeCalculator
 
-## SlopeCalculator - Determines slope variation from height map data
-## Matches OpenRCT2's 19 slope variations (0-18)
+## SlopeCalculator - Utilities for working with OpenRCT2 slope indices (0-18)
 
-# Corner bit flags (N/E/S/W)
-const CORNER_N = 0b0001  # North corner elevated
-const CORNER_E = 0b0010  # East corner elevated
-const CORNER_S = 0b0100  # South corner elevated
-const CORNER_W = 0b1000  # West corner elevated
+const CORNER_N := 0b0001
+const CORNER_E := 0b0010
+const CORNER_S := 0b0100
+const CORNER_W := 0b1000
 
-# OpenRCT2 height constants - EXACT MATCH
-const LAND_HEIGHT_STEP = 16  # kLandHeightStep from MapLimits.h (2 * kCoordsZStep)
-const HEIGHT_THRESHOLD = 8   # Half of LAND_HEIGHT_STEP for reliable slope detection
+const INDEX_TO_MASK := [
+	0b0000,  # 0  flat
+	0b0001,  # 1  north corner up
+	0b0010,  # 2  east corner up
+	0b0011,  # 3  north-east side up
+	0b0100,  # 4  south corner up
+	0b0101,  # 5  north-south valley
+	0b0110,  # 6  south-east side up
+	0b0111,  # 7  three corners up (west down)
+	0b1000,  # 8  west corner up
+	0b1001,  # 9  north-west side up
+	0b1010,  # 10 east-west valley
+	0b1011,  # 11 three corners up (south down)
+	0b1100,  # 12 south-west side up
+	0b1101,  # 13 three corners up (east down)
+	0b1110,  # 14 three corners up (north down)
+	0b1111   # 15 all corners up
+]
 
-## Calculate slope index for a tile based on neighbor heights
-## Returns slope index 0-18 (0 = flat, 1-18 = various slopes)
-static func calculate_slope_index(
-	heights: Array,           # 16x16 height data for current chunk
-	local_pos: Vector2i,      # Position within chunk (0-15, 0-15)
-	chunk_coord: Vector2i,    # Current chunk coordinates
-	world_cache: Node         # WorldDataCache singleton for neighbor fetching
-) -> int:
-	# Get current tile height
-	if local_pos.y >= heights.size() or local_pos.x >= heights[local_pos.y].size():
-		return 0  # Out of bounds = flat
+const SLOPE_NAMES := [
+	"Flat",
+	"North corner up",
+	"East corner up",
+	"North-east side up",
+	"South corner up",
+	"North-south valley",
+	"South-east side up",
+	"Three corners up (W down)",
+	"West corner up",
+	"North-west side up",
+	"East-west valley",
+	"Three corners up (S down)",
+	"South-west side up",
+	"Three corners up (E down)",
+	"Three corners up (N down)",
+	"All corners up",
+	"Diagonal NE-SW",
+	"Diagonal NW-SE",
+	"Peak"
+]
 
-	var current_height = heights[local_pos.y][local_pos.x]
+static func rotate_slope_index(index: int, rotation: int) -> int:
+	if index < 0:
+		return 0
 
-	# Get DIAGONAL neighbor heights for corner detection (OpenRCT2 EXACT MATCH)
-	# In isometric tiles, corners touch diagonal neighbors, not orthogonal ones
-	# From OpenRCT2 MapHelpers.cpp smoothTileStrong():
-	#   North corner checks (x+1, y+1)
-	#   East corner checks (x+1, y-1)
-	#   South corner checks (x-1, y-1)
-	#   West corner checks (x-1, y+1)
-	var h_n = get_neighbor_height(heights, local_pos, Vector2i(1, 1), chunk_coord, world_cache)    # NE diagonal
-	var h_e = get_neighbor_height(heights, local_pos, Vector2i(1, -1), chunk_coord, world_cache)   # SE diagonal
-	var h_s = get_neighbor_height(heights, local_pos, Vector2i(-1, -1), chunk_coord, world_cache)  # SW diagonal
-	var h_w = get_neighbor_height(heights, local_pos, Vector2i(-1, 1), chunk_coord, world_cache)   # NW diagonal
+	rotation = int(rotation) % 4
+	if rotation == 0:
+		return clamp_index(index)
 
-	# Build slope bitfield based on which corners are elevated
-	var slope = 0
-	if h_n > current_height + HEIGHT_THRESHOLD:
-		slope |= CORNER_N
-	if h_e > current_height + HEIGHT_THRESHOLD:
-		slope |= CORNER_E
-	if h_s > current_height + HEIGHT_THRESHOLD:
-		slope |= CORNER_S
-	if h_w > current_height + HEIGHT_THRESHOLD:
-		slope |= CORNER_W
+	if index == 18:
+		return 18  # Peaks are rotation invariant
+	if index == 16:
+		return 16 if rotation % 2 == 0 else 17
+	if index == 17:
+		return 17 if rotation % 2 == 0 else 16
 
-	# Convert bitfield to slope index (0-18)
-	return slope_to_index(slope, h_n, h_e, h_s, h_w, current_height)
+	if index >= 0 and index < INDEX_TO_MASK.size():
+		var mask = INDEX_TO_MASK[index]
+		var rotated_mask = mask
+		for i in rotation:
+			rotated_mask = _rotate_mask_clockwise(rotated_mask)
+		return mask_to_index(rotated_mask)
 
-## Get height of a neighboring tile, handling chunk boundaries
-static func get_neighbor_height(
-	heights: Array,
-	local_pos: Vector2i,
-	offset: Vector2i,
-	chunk_coord: Vector2i,
-	world_cache: Node
-) -> int:
-	var neighbor_pos = local_pos + offset
+	return clamp_index(index)
 
-	# Check if neighbor is within current chunk
-	if neighbor_pos.x >= 0 and neighbor_pos.x < 16 and neighbor_pos.y >= 0 and neighbor_pos.y < 16:
-		return heights[neighbor_pos.y][neighbor_pos.x]
-
-	# Neighbor is in different chunk - fetch from cache
-	var world_tile_x = chunk_coord.x * 16 + neighbor_pos.x
-	var world_tile_y = chunk_coord.y * 16 + neighbor_pos.y
-
-	var neighbor_chunk_x = floori(float(world_tile_x) / 16.0)
-	var neighbor_chunk_y = floori(float(world_tile_y) / 16.0)
-	var neighbor_chunk_key = "%d,%d" % [neighbor_chunk_x, neighbor_chunk_y]
-
-	var neighbor_heights = world_cache.get_height_chunk(neighbor_chunk_key)
-	if neighbor_heights.size() == 0:
-		return 0  # Neighbor chunk not loaded, assume flat
-
-	# Calculate local position in neighbor chunk
-	var neighbor_local_x = ((world_tile_x % 16) + 16) % 16
-	var neighbor_local_y = ((world_tile_y % 16) + 16) % 16
-
-	if neighbor_local_y < neighbor_heights.size() and neighbor_local_x < neighbor_heights[neighbor_local_y].size():
-		return neighbor_heights[neighbor_local_y][neighbor_local_x]
-
-	return 0
-
-## Convert slope bitfield to OpenRCT2 slope index (0-18)
-static func slope_to_index(slope: int, h_n: int, h_e: int, h_s: int, h_w: int, current: int) -> int:
-	# Match OpenRCT2 slope indices
-	match slope:
-		0b0000:  # All flat
+static func mask_to_index(mask: int) -> int:
+	match mask:
+		0b0000: return 0
+		0b0001: return 1
+		0b0010: return 2
+		0b0011: return 3
+		0b0100: return 4
+		0b0101: return 5
+		0b0110: return 6
+		0b0111: return 7
+		0b1000: return 8
+		0b1001: return 9
+		0b1010: return 10
+		0b1011: return 11
+		0b1100: return 12
+		0b1101: return 13
+		0b1110: return 14
+		0b1111: return 15
+		_:
 			return 0
-		0b0001:  # North corner up
-			return 1
-		0b0010:  # East corner up
-			return 2
-		0b0011:  # North-East side up
-			return 3
-		0b0100:  # South corner up
-			return 4
-		0b0101:  # North-South valley
-			return 5
-		0b0110:  # South-East side up
-			return 6
-		0b0111:  # North, East, South corners up (W down)
-			return 7
-		0b1000:  # West corner up
-			return 8
-		0b1001:  # North-West side up
-			return 9
-		0b1010:  # East-West valley
-			return 10
-		0b1011:  # North, East, West corners up (S down)
-			return 11
-		0b1100:  # South-West side up
-			return 12
-		0b1101:  # North, West, South corners up (E down)
-			return 13
-		0b1110:  # East, South, West corners up (N down)
-			return 14
-		0b1111:  # All corners up
-			return 15
 
-	# Check for diagonal slopes (indices 16-17) and peak (index 18)
-	# These are special cases not covered by simple bitfield
+static func clamp_index(index: int) -> int:
+	return clampi(index, 0, SLOPE_NAMES.size() - 1)
 
-	# Diagonal NE-SW (opposite corners elevated)
-	if (h_n > current and h_e > current and h_s < current and h_w < current) or \
-	   (h_n < current and h_e < current and h_s > current and h_w > current):
-		return 16
+static func get_slope_name(index: int) -> String:
+	var clamped = clamp_index(index)
+	return SLOPE_NAMES[clamped]
 
-	# Diagonal NW-SE (opposite corners elevated)
-	if (h_n > current and h_w > current and h_s < current and h_e < current) or \
-	   (h_n < current and h_w < current and h_s > current and h_e > current):
-		return 17
-
-	# Peak (all neighbors lower than current)
-	if h_n < current and h_e < current and h_s < current and h_w < current:
-		return 18
-
-	# Default to flat
-	return 0
+static func _rotate_mask_clockwise(mask: int) -> int:
+	var rotated := 0
+	if mask & CORNER_N:
+		rotated |= CORNER_E
+	if mask & CORNER_E:
+		rotated |= CORNER_S
+	if mask & CORNER_S:
+		rotated |= CORNER_W
+	if mask & CORNER_W:
+		rotated |= CORNER_N
+	return rotated

@@ -1,12 +1,28 @@
+use super::openrct2::{
+    generate_simplex_noise, smooth_height_map, HeightMap, OpenRct2Settings,
+};
 use super::{BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
 use bevy::log::debug;
+use bevy::math::IVec2;
 use bevy::prelude::*;
-use noise::{NoiseFn, Perlin, Simplex};
+use noise::{NoiseFn, Perlin};
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
+
+#[derive(Debug, Clone)]
+pub struct ChunkHeightData {
+    pub heights: Vec<Vec<u8>>,
+    pub slope_masks: Vec<Vec<u8>>,
+    pub slope_indices: Vec<Vec<u8>>,
+}
+
+const TILE_SLOPE_N_CORNER_UP: u8 = 0b0000_0001;
+const TILE_SLOPE_E_CORNER_UP: u8 = 0b0000_0010;
+const TILE_SLOPE_S_CORNER_UP: u8 = 0b0000_0100;
+const TILE_SLOPE_W_CORNER_UP: u8 = 0b0000_1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Component, Resource)]
 pub struct WorldConfig {
@@ -116,6 +132,35 @@ impl WorldGenerator {
 
         if self.config.enable_resources {
             self.add_resources_to_chunk(&mut chunk);
+        }
+
+        let height_data = self.generate_height_chunk(coordinate.x, coordinate.y);
+        for (y, row) in height_data.heights.iter().enumerate().take(CHUNK_SIZE) {
+            for (x, value) in row.iter().enumerate().take(CHUNK_SIZE) {
+                chunk.heights[y][x] = *value;
+            }
+        }
+
+        for (y, row) in height_data
+            .slope_masks
+            .iter()
+            .enumerate()
+            .take(CHUNK_SIZE)
+        {
+            for (x, value) in row.iter().enumerate().take(CHUNK_SIZE) {
+                chunk.slope_masks[y][x] = *value;
+            }
+        }
+
+        for (y, row) in height_data
+            .slope_indices
+            .iter()
+            .enumerate()
+            .take(CHUNK_SIZE)
+        {
+            for (x, value) in row.iter().enumerate().take(CHUNK_SIZE) {
+                chunk.slope_indices[y][x] = *value;
+            }
         }
 
         chunk
@@ -315,7 +360,8 @@ impl WorldGenerator {
         let mut chunk = Vec::with_capacity(16);
 
         // Generate heights first (using existing fBm method)
-        let heights = self.generate_height_chunk(chunk_x, chunk_y);
+        let height_data = self.generate_height_chunk(chunk_x, chunk_y);
+        let heights = height_data.heights;
 
         // Create noise generators for terrain variety
         let perlin = Perlin::new(self.config.seed as u32);
@@ -438,7 +484,7 @@ impl WorldGenerator {
     /// Island mode: Noise + circular island pattern for backward compatibility
     ///
     /// Perlin noise adds natural variation to create hills/valleys
-    pub fn generate_height_chunk(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
+    pub fn generate_height_chunk(&self, chunk_x: i32, chunk_y: i32) -> ChunkHeightData {
         match self.config.terrain_generation_mode {
             TerrainGenerationMode::CircularIsland => {
                 self.generate_height_chunk_island(chunk_x, chunk_y)
@@ -451,98 +497,149 @@ impl WorldGenerator {
 
     /// Pure OpenRCT2-style height generation using Fractional Brownian Motion
     /// No circular island bias - pure procedural terrain
-    fn generate_height_chunk_openrct2(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
-        let mut heights = Vec::with_capacity(16);
-        let perlin = Perlin::new(self.config.seed as u32);
+    fn generate_height_chunk_openrct2(&self, chunk_x: i32, chunk_y: i32) -> ChunkHeightData {
+        const DENSITY: i32 = 2;
+        const COORDS_Z_STEP: i32 = 8;
 
-        // OpenRCT2-style Fractional Brownian Motion (fBm) parameters
-        // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:194
-        let base_freq = 0.015; // Base frequency (lower = larger features)
-        let octaves = 6; // Number of noise layers (OpenRCT2 uses 6)
-        let lacunarity = 2.0; // Frequency multiplier per octave
-        let persistence = 0.65; // Amplitude multiplier per octave
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+        let world_min_x = world_origin_x - 1;
+        let world_min_y = world_origin_y - 1;
 
-        // Height range for normalization
-        // OpenRCT2 Pipeline Step 1: Generate heightmap in smaller range [0, 127]
-        // (OpenRCT2 divides settings by 2: heightmapHigh/2 = 100/2 = 50)
-        let min_height = 0.0;
-        let max_height = 127.0;  // Half of 255 (like OpenRCT2's division by 2)
+        let width_tiles = CHUNK_SIZE as i32 + 2;
+        let height_tiles = CHUNK_SIZE as i32 + 2;
 
-        // Generate heights with fBm
-        for y in 0..16 {
-            let mut row = Vec::with_capacity(16);
-            for x in 0..16 {
-                let world_x = chunk_x * 16 + x;
-                let world_y = chunk_y * 16 + y;
+        let mut settings = OpenRct2Settings::default();
+        let map_tiles = self.config.world_size_chunks.max(1) * CHUNK_SIZE as i32;
+        settings.map_size = IVec2::new(map_tiles, map_tiles);
 
-                // Apply Fractional Brownian Motion (multiple octaves)
-                let mut noise_value = 0.0;
-                let mut freq = base_freq;
-                let mut amp = 1.0;
-                let mut total_amp = 0.0;
+        let mut height_map = HeightMap::with_density(
+            width_tiles as usize,
+            height_tiles as usize,
+            DENSITY as u8,
+        );
 
-                for _ in 0..octaves {
-                    let sample_x = (world_x as f64) * freq;
-                    let sample_y = (world_y as f64) * freq;
-                    noise_value += perlin.get([sample_x, sample_y]) * amp;
-                    total_amp += amp;
-                    freq *= lacunarity;
-                    amp *= persistence;
+        let origin_samples = IVec2::new(world_min_x * DENSITY, world_min_y * DENSITY);
+        generate_simplex_noise(
+            &settings,
+            self.config.seed,
+            origin_samples,
+            &mut height_map,
+        );
+
+        let chunk_hash =
+            ((chunk_x as i64 as u64) << 32) ^ ((chunk_y as i64 as u64) & 0xFFFF_FFFF);
+        let mut rng = Pcg64::seed_from_u64(self.config.seed ^ chunk_hash);
+        let smooth_iterations = 2 + rng.gen_range(0..6);
+        smooth_height_map(smooth_iterations as u32, &mut height_map);
+
+        let grid_size = (CHUNK_SIZE as i32 + 2) as usize;
+        let mut final_heights_border = vec![vec![0i32; grid_size]; grid_size];
+        let water_level = settings.water_level;
+
+        for tile_y in -1..=CHUNK_SIZE as i32 {
+            let world_y = world_origin_y + tile_y;
+            let y_idx = world_y - world_min_y;
+            let height_y = y_idx * DENSITY;
+
+            for tile_x in -1..=CHUNK_SIZE as i32 {
+                let world_x = world_origin_x + tile_x;
+                let x_idx = world_x - world_min_x;
+                let height_x = x_idx * DENSITY;
+
+                let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
+                let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
+                let q10 = height_map.get(IVec2::new(height_x + 1, height_y)) as i32;
+                let q11 = height_map.get(IVec2::new(height_x + 1, height_y + 1)) as i32;
+
+                let average_height = (q00 + q01 + q10 + q11) / 4;
+                let mut base_height = (average_height * 2).max(2);
+
+                if base_height >= 4 && base_height <= water_level {
+                    base_height -= 2;
                 }
 
-                // Normalize from [-total_amp, total_amp] to [0, 1]
-                let normalized = (noise_value / total_amp + 1.0) / 2.0;
+                let mut final_height = base_height * COORDS_Z_STEP;
+                if final_height > 255 {
+                    final_height = 255;
+                }
 
-                // Apply OpenRCT2-style power curve to create DRAMATIC peaks and deep valleys
-                // This uses a piecewise quadratic function to emphasize extreme values:
-                // - High values (> 0.5) are pushed MUCH higher toward 1.0
-                // - Low values (< 0.5) are pushed MUCH lower toward 0.0
-                // - Creates the characteristic OpenRCT2 dramatic mountain peaks
-                let curved = if normalized < 0.5 {
-                    // Lower half: square to emphasize valleys (push toward 0)
-                    let lower = normalized * 2.0; // Normalize to [0, 1]
-                    (lower * lower) * 0.5 // Square and scale back to [0, 0.5]
-                } else {
-                    // Upper half: inverse square to emphasize peaks (push toward 1)
-                    let upper = (normalized - 0.5) * 2.0; // Normalize to [0, 1]
-                    0.5 + (1.0 - (1.0 - upper) * (1.0 - upper)) * 0.5 // Inverse square and scale to [0.5, 1.0]
-                };
-
-                // Map to heightmap range [0, 127]
-                let heightmap_value = min_height + (curved * (max_height - min_height));
-
-                // OpenRCT2 Pipeline Step 2: Multiply by 2 when storing (like MapGen.cpp:149)
-                // OpenRCT2: surfaceElement->BaseHeight = std::max(2, baseHeight * 2);
-                // This doubles the range: [0, 127] → [0, 254]
-                let base_height = heightmap_value * 2.0;
-
-                // OpenRCT2 Slope Quantization (CRITICAL for slopes):
-                // Slopes represent height differences in multiples of kLandHeightStep = 16
-                // From MapLimits.h: kLandHeightStep = 2 * kCoordsZStep = 2 * 8 = 16
-                // Quantize to multiples of 16: 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
-                // This gives 16 distinct height levels that EXACTLY match slope sprite angles
-                const LAND_HEIGHT_STEP: f64 = 16.0;
-                let quantized_height = (base_height / LAND_HEIGHT_STEP).round() * LAND_HEIGHT_STEP;
-
-                // Clamp to u8 range
-                let final_height = quantized_height.max(0.0).min(255.0) as u8;
-                row.push(final_height);
+                let array_y = (tile_y + 1) as usize;
+                let array_x = (tile_x + 1) as usize;
+                final_heights_border[array_y][array_x] = final_height;
             }
-            heights.push(row);
         }
 
-        // Apply minimal smoothing to preserve dramatic height changes for visible slopes
-        // OpenRCT2 does 2-7 passes, but fewer passes = more dramatic elevation
-        // Reference: OpenRCT2/src/openrct2/world/map_generator/SimplexNoise.cpp:212
-        for _ in 0..1 {
-            heights = self.smooth_heights(heights);
+        let mut heights = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+
+        for local_y in 0..CHUNK_SIZE {
+            let tile_y = local_y as i32;
+            let world_y = world_origin_y + tile_y;
+            let y_idx = world_y - world_min_y;
+            let height_y = y_idx * DENSITY;
+            let border_y = (tile_y + 1) as usize;
+
+            for local_x in 0..CHUNK_SIZE {
+                let tile_x = local_x as i32;
+                let world_x = world_origin_x + tile_x;
+                let x_idx = world_x - world_min_x;
+                let height_x = x_idx * DENSITY;
+                let border_x = (tile_x + 1) as usize;
+
+                let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
+                let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
+                let q10 = height_map.get(IVec2::new(height_x + 1, height_y)) as i32;
+                let q11 = height_map.get(IVec2::new(height_x + 1, height_y + 1)) as i32;
+
+                let average_height = (q00 + q01 + q10 + q11) / 4;
+                let final_height = final_heights_border[border_y][border_x];
+
+                heights[local_y][local_x] = final_height as u8;
+
+                let mut slope_bits = 0u8;
+                if q11 > average_height {
+                    slope_bits |= TILE_SLOPE_N_CORNER_UP;
+                }
+                if q10 > average_height {
+                    slope_bits |= TILE_SLOPE_E_CORNER_UP;
+                }
+                if q00 > average_height {
+                    slope_bits |= TILE_SLOPE_S_CORNER_UP;
+                }
+                if q01 > average_height {
+                    slope_bits |= TILE_SLOPE_W_CORNER_UP;
+                }
+
+                slope_masks[local_y][local_x] = slope_bits;
+
+                let h_n = final_heights_border[border_y + 1][border_x + 1];
+                let h_e = final_heights_border[border_y.saturating_sub(1)][border_x + 1];
+                let h_s = final_heights_border[border_y.saturating_sub(1)][border_x.saturating_sub(1)];
+                let h_w = final_heights_border[border_y + 1][border_x.saturating_sub(1)];
+
+                let slope_index = slope_mask_to_index(
+                    slope_bits,
+                    h_n,
+                    h_e,
+                    h_s,
+                    h_w,
+                    final_height,
+                );
+                slope_indices[local_y][local_x] = slope_index;
+            }
         }
 
-        heights
+        ChunkHeightData {
+            heights,
+            slope_masks,
+            slope_indices,
+        }
     }
 
     /// Legacy height generation with circular island pattern
-    fn generate_height_chunk_island(&self, chunk_x: i32, chunk_y: i32) -> Vec<Vec<u8>> {
+    fn generate_height_chunk_island(&self, chunk_x: i32, chunk_y: i32) -> ChunkHeightData {
         let mut heights = Vec::with_capacity(16);
         let perlin = Perlin::new(self.config.seed as u32);
 
@@ -589,7 +686,14 @@ impl WorldGenerator {
             heights = self.smooth_heights(heights);
         }
 
-        heights
+        let slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+        let slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+
+        ChunkHeightData {
+            heights,
+            slope_masks,
+            slope_indices,
+        }
     }
 
     /// Smooth height map using 3×3 box filter (OpenRCT2 style)
@@ -746,6 +850,42 @@ impl WorldGenerator {
                     // Mostly grass
                     "Grass".to_string()
                 }
+            }
+        }
+    }
+}
+
+fn slope_mask_to_index(mask: u8, h_n: i32, h_e: i32, h_s: i32, h_w: i32, current: i32) -> u8 {
+    match mask {
+        0b0000 => 0,
+        0b0001 => 1,
+        0b0010 => 2,
+        0b0011 => 3,
+        0b0100 => 4,
+        0b0101 => 5,
+        0b0110 => 6,
+        0b0111 => 7,
+        0b1000 => 8,
+        0b1001 => 9,
+        0b1010 => 10,
+        0b1011 => 11,
+        0b1100 => 12,
+        0b1101 => 13,
+        0b1110 => 14,
+        0b1111 => 15,
+        _ => {
+            if (h_n > current && h_e > current && h_s < current && h_w < current)
+                || (h_n < current && h_e < current && h_s > current && h_w > current)
+            {
+                16
+            } else if (h_n > current && h_w > current && h_s < current && h_e < current)
+                || (h_n < current && h_w < current && h_s > current && h_e > current)
+            {
+                17
+            } else if h_n < current && h_e < current && h_s < current && h_w < current {
+                18
+            } else {
+                0
             }
         }
     }

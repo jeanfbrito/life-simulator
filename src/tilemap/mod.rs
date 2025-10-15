@@ -1,6 +1,7 @@
 pub mod biome;
 pub mod chunk;
 pub mod chunk_manager;
+pub mod openrct2;
 pub mod terrain;
 pub mod terrain_query;
 pub mod world_generator;

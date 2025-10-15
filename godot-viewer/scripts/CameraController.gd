@@ -82,7 +82,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Mouse wheel zoom
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
-		
+
 		if mouse_event.is_pressed():
 			match mouse_event.button_index:
 				MOUSE_BUTTON_WHEEL_UP:
@@ -94,11 +94,20 @@ func _unhandled_input(event: InputEvent) -> void:
 					is_dragging = true
 					drag_start_position = mouse_event.position
 					camera_start_position = position
+				MOUSE_BUTTON_LEFT:
+					# Start drag with Cmd+Click (macOS) or Space+Click
+					if mouse_event.is_command_or_control_pressed() or Input.is_key_pressed(KEY_SPACE):
+						is_dragging = true
+						drag_start_position = mouse_event.position
+						camera_start_position = position
 		else:
 			if mouse_event.button_index == MOUSE_BUTTON_MIDDLE:
 				# End middle mouse drag
 				is_dragging = false
-	
+			elif mouse_event.button_index == MOUSE_BUTTON_LEFT and is_dragging:
+				# End Cmd+Click or Space+Click drag
+				is_dragging = false
+
 	# Mouse drag
 	elif event is InputEventMouseMotion and is_dragging:
 		var mouse_event = event as InputEventMouseMotion

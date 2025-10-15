@@ -130,11 +130,18 @@ fn main() {
                 seed,
             );
 
-            // Generate height layer
-            let height_tiles = world_generator.generate_height_chunk(chunk_x, chunk_y);
+            // Generate height and slope data
+            let height_data = world_generator.generate_height_chunk(chunk_x, chunk_y);
 
             // Convert heights (Vec<Vec<u8>>) to Vec<Vec<String>> for serialization
-            let height_tiles_str: Vec<Vec<String>> = height_tiles
+            let height_tiles_str: Vec<Vec<String>> = height_data
+                .heights
+                .iter()
+                .map(|row| row.iter().map(|h| h.to_string()).collect())
+                .collect();
+
+            let slope_tiles_str: Vec<Vec<String>> = height_data
+                .slope_indices
                 .iter()
                 .map(|row| row.iter().map(|h| h.to_string()).collect())
                 .collect();
@@ -144,6 +151,7 @@ fn main() {
             chunk_layers.insert("terrain".to_string(), terrain_tiles);
             chunk_layers.insert("resources".to_string(), resources_tiles);
             chunk_layers.insert("heights".to_string(), height_tiles_str);
+            chunk_layers.insert("slope_indices".to_string(), slope_tiles_str);
 
             multi_layer_chunks.insert((chunk_x, chunk_y), chunk_layers);
             generated_chunks += 1;
