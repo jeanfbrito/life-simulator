@@ -189,7 +189,10 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 		edge_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		
 		# Load or create edge texture
-		var edge_texture = _create_edge_texture(edge_data.height_pixels, direction)
+		var edge_texture = _load_edge_texture(edge_data.height_pixels, direction)
+		if not edge_texture:
+			edge_texture = _create_edge_texture(edge_data.height_pixels, direction)
+		
 		if edge_texture:
 			edge_sprite.texture = edge_texture
 			edge_sprite.position = edge_data.position
@@ -200,7 +203,30 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 			
 			tile_container.add_child(edge_sprite)
 
-## Create a simple colored edge texture (placeholder until OpenRCT2 sprites extracted)
+## Load actual OpenRCT2 edge sprite
+func _load_edge_texture(height_pixels: float, direction: String) -> Texture2D:
+	"""
+	Load OpenRCT2 cliff/edge sprite based on height.
+	Edge sprites are organized by height increments.
+	"""
+	
+	# Map height to edge sprite variant
+	# OpenRCT2 has different sprites for different heights
+	# 0-16px: edge_00, 16-32px: edge_01, 32-48px: edge_02, etc.
+	var edge_index = min(int(height_pixels / 16.0), 3)  # 0-3 for now
+	
+	# For now, use grass edges as default
+	# TODO: Add terrain-specific edge loading
+	var base_path = "res://assets/tiles/edges/grass/edge_%02d.png" % edge_index
+	
+	if ResourceLoader.exists(base_path):
+		var texture = load(base_path)
+		if texture:
+			return texture
+	
+	return null
+
+## Create a simple colored edge texture (fallback if OpenRCT2 sprites not found)
 func _create_edge_texture(height_pixels: float, direction: String) -> Texture2D:
 	"""
 	Create a procedural edge texture.
