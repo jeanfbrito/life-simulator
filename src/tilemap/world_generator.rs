@@ -648,30 +648,21 @@ impl WorldGenerator {
                 }
 
                 // Step 2: Orthogonal neighbors raise SIDES (two corners each)
-                // BUT: We must check the CORNER HEIGHTS where tiles meet, not base heights!
-                // This handles sloped neighbors correctly.
-
-                // East neighbor: shares NE and SE corners with us
-                // If EITHER of those corners is higher, raise the NE side
-                if h_ne > final_height || h_se > final_height {
+                // OpenRCT2 compares BASE HEIGHTS only, not corner/slope heights!
+                // (x+1, y+0) = East neighbor base height
+                if h_e > final_height {
                     slope_bits |= TILE_SLOPE_NE_SIDE_UP;
                 }
-
-                // West neighbor: shares NW and SW corners with us
-                // If EITHER of those corners is higher, raise the SW side
-                if h_nw > final_height || h_sw > final_height {
+                // (x-1, y+0) = West neighbor base height
+                if h_w > final_height {
                     slope_bits |= TILE_SLOPE_SW_SIDE_UP;
                 }
-
-                // North neighbor: shares NW and NE corners with us
-                // If EITHER of those corners is higher, raise the SE side
-                if h_nw > final_height || h_ne > final_height {
+                // (x+0, y-1) = North neighbor base height
+                if h_n > final_height {
                     slope_bits |= TILE_SLOPE_SE_SIDE_UP;
                 }
-
-                // South neighbor: shares SW and SE corners with us
-                // If EITHER of those corners is higher, raise the NW side
-                if h_sw > final_height || h_se > final_height {
+                // (x+0, y+1) = South neighbor base height
+                if h_s > final_height {
                     slope_bits |= TILE_SLOPE_NW_SIDE_UP;
                 }
 
