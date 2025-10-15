@@ -60,8 +60,9 @@ func _paint_test_tile(world_pos: Vector2i, slope_index: int):
 	# Use a temporary TerrainTileMap to leverage existing rendering
 	# Alternatively, duplicate the core logic here for testing
 	
-	# Get corner heights
-	var corner_heights = SlopeCalculator.get_corner_heights(current_base_height, slope_index)
+	# Get corner heights using static method from SlopeCalculator class
+	var slope_calc = load("res://scripts/SlopeCalculator.gd")
+	var corner_heights = slope_calc.get_corner_heights(current_base_height, slope_index)
 	
 	# Calculate screen position (mirroring TerrainTileMap.map_to_local)
 	var pixel_x = float(world_pos.x - world_pos.y) * float(Config.COORDS_XY_STEP)
@@ -99,7 +100,8 @@ func _paint_test_tile(world_pos: Vector2i, slope_index: int):
 
 func _add_debug_markers(world_pos: Vector2i, slope_index: int):
 	"""Add visual debug markers showing corner positions and data."""
-	var corner_heights = SlopeCalculator.get_corner_heights(current_base_height, slope_index)
+	var slope_calc = load("res://scripts/SlopeCalculator.gd")
+	var corner_heights = slope_calc.get_corner_heights(current_base_height, slope_index)
 	
 	# Calculate base screen position
 	var pixel_x = float(world_pos.x - world_pos.y) * float(Config.COORDS_XY_STEP)
