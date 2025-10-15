@@ -1,0 +1,36 @@
+(
+    name: "Test Auto-Load Map",
+    description: "This is a test map to verify auto-loading functionality",
+    width: 50,
+    height: 50,
+    terrain: {
+        default: "Grass",
+        features: [
+            {
+                type: "forest",
+                position: (10, 10),
+                radius: 5
+            },
+            {
+                type: "water",
+                position: (25, 25),
+                radius: 3
+            }
+        ]
+    },
+    resources: {
+        trees: [
+            { species: "oak", position: (5, 5) },
+            { species: "pine", position: (15, 15) },
+            { species: "birch", position: (30, 30) }
+        ],
+        rocks: [
+            { position: (8, 8) },
+            { position: (20, 20) }
+        ]
+    },
+    spawn_points: [
+        { species: "Rabbit", position: (12, 12), count: 3 },
+        { species: "Deer", position: (35, 35), count: 2 }
+    ]
+)

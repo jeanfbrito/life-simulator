@@ -267,7 +267,15 @@ func load_visible_chunks(drag_offset: Vector2, world_data: Dictionary) -> bool:
 func load_world_info() -> bool:
 	print("Loading world info...")
 
-	# Load current world info
+	# First, try to load the latest map if no specific map is requested
+	var latest_map = await get_latest_map_file()
+	if latest_map:
+		print("🗺️ Found latest map: ", latest_map)
+		var success = await load_specific_map(latest_map)
+		if success:
+			return true
+
+	# Fallback to loading current world info
 	var current_data = await fetch_data("/api/world/current")
 	if current_data:
 		print("✅ Current world loaded: ", current_data.get("name", "Unknown"))
@@ -282,6 +290,100 @@ func load_world_info() -> bool:
 
 	print("❌ Failed to load world info")
 	return false
+
+# Get the latest map file from the maps directory
+func get_latest_map_file() -> String:
+	var maps_dir = "res://maps/"
+	var dir = DirAccess.open(maps_dir)
+	if not dir:
+		print("⚠️ Could not open maps directory: ", maps_dir)
+		return ""
+
+	var latest_file = ""
+	var latest_time = 0
+
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	
+	while file_name != "":
+		if file_name.ends_with(".ron"):
+			var file_path = maps_dir + file_name
+			var file_time = FileAccess.get_modified_time(file_path)
+			if file_time > latest_time:
+				latest_time = file_time
+				latest_file = file_name
+		file_name = dir.get_next()
+	
+	dir.list_dir_end()
+	
+	return latest_file
+
+# Load a specific map file
+func load_specific_map(file_name: String) -> bool:
+	print("📂 Loading specific map: ", file_name)
+	
+	var file_path = "res://maps/" + file_name
+	var file = FileAccess.open(file_path, FileAccess.READ)
+	if not file:
+		print("❌ Could not open map file: ", file_path)
+		return false
+	
+	var content = file.get_as_text()
+	file.close()
+	
+	if content.is_empty():
+		print("❌ Map file is empty: ", file_path)
+		return false
+	
+	# Try to parse as RON format (simplified approach)
+	var map_data = _parse_ron_map(content)
+	if map_data.is_empty():
+		print("❌ Failed to parse map file: ", file_path)
+		return false
+	
+	print("✅ Successfully loaded map: ", file_name)
+	
+	# Emit the map data as world info
+	var world_info = {
+		"name": file_name.get_basename(),
+		"source": "file",
+		"file_path": file_path,
+		"map_data": map_data
+	}
+	world_info_loaded.emit(world_info)
+	
+	return true
+
+# Simple RON parser for map files (basic implementation)
+func _parse_ron_map(content: String) -> Dictionary:
+	var map_data = {}
+	
+	# This is a simplified parser - in a real implementation you'd want proper RON parsing
+	# For now, we'll extract basic information
+	
+	# Look for basic patterns in the RON file
+	var lines = content.split("\n")
+	for line in lines:
+		line = line.strip_edges()
+		if line.begins_with("name:") or line.begins_with("title:"):
+			var parts = line.split(":", 1)
+			if parts.size() >= 2:
+				map_data["name"] = parts[1].strip_edges().strip_edges().replace('"', '')
+		elif line.begins_with("width:") or line.begins_with("size:"):
+			var parts = line.split(":", 1)
+			if parts.size() >= 2:
+				map_data["width"] = parts[1].strip_edges().to_int()
+		elif line.begins_with("height:"):
+			var parts = line.split(":", 1)
+			if parts.size() >= 2:
+				map_data["height"] = parts[1].strip_edges().to_int()
+	
+	# If we couldn't extract structured data, at least store the raw content
+	if map_data.is_empty():
+		map_data["raw_content"] = content
+		map_data["name"] = "Unknown Map"
+	
+	return map_data
 
 # Generic data fetching method
 func fetch_data(endpoint: String) -> Dictionary:

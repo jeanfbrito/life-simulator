@@ -81,15 +81,30 @@ func start_world_loading():
 func _load_world_info():
 	print("📊 Loading world info...")
 
+	# Connect to world info signal if not already connected
+	if not ChunkManager.world_info_loaded.is_connected(_on_world_info_loaded):
+		ChunkManager.world_info_loaded.connect(_on_world_info_loaded)
+
 	var success = await ChunkManager.load_world_info()
 	if success:
 		print("✅ World info loading completed successfully")
-		# Since ChunkManager.load_world_info returns bool, we proceed to load chunks
+		# Wait for world info to be processed before loading chunks
+		await get_tree().create_timer(0.5).timeout
 		await _load_chunks_around_position(Vector2i(0, 0))
 		world_loaded = true
 		print("✅ World loading completed - viewer should show terrain")
 	else:
 		print("❌ Failed to load world info")
+
+# Handle world info data
+func _on_world_info_loaded(world_info: Dictionary):
+	print("🗺️ World info received: ", world_info.get("name", "Unknown"))
+	
+	# If this is a file-based map, we might want to update the UI or camera
+	if world_info.get("source") == "file":
+		print("📂 Loaded from file: ", world_info.get("file_path", "Unknown"))
+		# You could add specific handling for file-based maps here
+		# For example, adjusting camera position based on map size
 
 # Load chunks around a specific position
 func _load_chunks_around_position(center_chunk: Vector2i):
@@ -287,6 +302,9 @@ func _unhandled_input(event):
 					# Toggle tooltip
 					if tooltip_overlay != null:
 						tooltip_overlay.toggle_tooltip()
+				KEY_R:
+					# Reload latest map
+					reload_latest_map()
 				KEY_ESCAPE:
 					get_tree().quit()
 
@@ -452,11 +470,20 @@ func force_refresh_chunks():
 	print("📥 Reloading species config...")
 	await Config.load_species_config()
 
-	# 4. Reload world data
+	# 4. Reload world data (will automatically load latest map)
 	print("📥 Reloading world...")
 	start_world_loading()
 
 	print("✅ Full reload initiated")
+
+# Reload the latest map specifically
+func reload_latest_map():
+	print("🗺️ Reloading latest map...")
+	
+	# Clear existing data first
+	force_refresh_chunks()
+	
+	# The latest map will be loaded automatically in start_world_loading()
 
 # Debug: Take screenshot for debugging
 func _take_debug_screenshot():

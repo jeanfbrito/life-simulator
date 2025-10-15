@@ -4,6 +4,7 @@
 extends Node2D
 
 const SlopeCalculator = preload("res://scripts/SlopeCalculator.gd")
+const EdgeRenderer = preload("res://scripts/EdgeRenderer.gd")
 
 # RCT2 terrain texture manager for all terrain types (grass, sand, dirt, etc.)
 var rct2_terrain_manager = null
@@ -293,13 +294,13 @@ func _get_neighbor_corners(tile_pos: Vector2i, height_data: Array, slope_data: A
 # Get corner heights for a tile at world position
 func _get_tile_corners_from_world(world_pos: Vector2i, height_data: Array, slope_data: Array) -> Dictionary:
 	# Get height from cache
-	var height = WorldDataCache.get_height_at(world_pos)
-	if height == null:
+	var height = WorldDataCache.get_height_at(world_pos.x, world_pos.y)
+	if height == null or height < 0:
 		return {} # No data
 	
 	# Get slope from cache
-	var slope_index = WorldDataCache.get_slope_index_at(world_pos)
-	if slope_index == null:
+	var slope_index = WorldDataCache.get_slope_index_at(world_pos.x, world_pos.y)
+	if slope_index == null or slope_index < 0:
 		slope_index = 0
 	
 	# Apply rotation

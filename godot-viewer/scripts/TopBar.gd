@@ -79,7 +79,7 @@ func setup_button_tooltips() -> void:
 	if help_button:
 		help_button.tooltip_text = "Toggle Help (H)"
 	if refresh_button:
-		refresh_button.tooltip_text = "Reload World (Full Refresh)"
+		refresh_button.tooltip_text = "Reload World (Full Refresh - R)"
 	if rotation_button:
 		_update_rotation_button_text()  # Set initial text
 
@@ -112,8 +112,16 @@ func update_world_name() -> void:
 	if not world_name_label:
 		return
 
-	# TODO: Get world name from backend API
-	world_name_label.text = "🌍 Life Simulator"
+	# Try to get current map name from ChunkManager or use default
+	var map_name = "🌍 Life Simulator"
+	
+	# Check if we have recent world info
+	if ChunkManager:
+		# You could store the last loaded world name in ChunkManager
+		# For now, we'll use a default that indicates auto-loading
+		map_name = "🗺️ Latest Map"
+	
+	world_name_label.text = map_name
 
 # Update FPS display
 func update_fps() -> void:
@@ -214,9 +222,9 @@ func _on_help_toggle_pressed() -> void:
 		print("⚠️ TopBar: ControlsOverlay not available")
 
 func _on_refresh_pressed() -> void:
-	print("🔄 TopBar: Reload button pressed - initiating full world refresh")
+	print("🔄 TopBar: Reload button pressed - reloading latest map")
 	if world_renderer:
-		world_renderer.force_refresh_chunks()
+		world_renderer.reload_latest_map()
 	else:
 		print("⚠️ TopBar: WorldRenderer not available")
 

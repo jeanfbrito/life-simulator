@@ -206,18 +206,35 @@ func paint_edge_faces(tile_container: Node2D, tile_pos: Vector2i, tile_corners: 
 ## Load actual OpenRCT2 edge sprite
 func _load_edge_texture(height_pixels: float, direction: String) -> Texture2D:
 	"""
-	Load OpenRCT2 cliff/edge sprite based on height.
-	Edge sprites are organized by height increments.
+	Load OpenRCT2 cliff/edge sprite based on height and direction.
+	Edge sprites start at sprite 1579 (SPR_EDGE_ROCK_BASE) in g1.dat.
+	There are 84 sprites per terrain edge type (rock, wood, ice).
 	"""
 	
-	# Map height to edge sprite variant
-	# OpenRCT2 has different sprites for different heights
-	# 0-16px: edge_00, 16-32px: edge_01, 32-48px: edge_02, etc.
-	var edge_index = min(int(height_pixels / 16.0), 3)  # 0-3 for now
+	# OpenRCT2 has 84 edge sprites per terrain type
+	# Sprites are organized by: [direction (4)] x [height variants (21)]
+	# For now, use rock edges (1579-1662)
 	
-	# For now, use grass edges as default
-	# TODO: Add terrain-specific edge loading
-	var base_path = "res://assets/tiles/edges/grass/edge_%02d.png" % edge_index
+	# Map height to sprite variant (simplified for now)
+	# Each height level has 4 directional variants
+	var height_level = min(int(height_pixels / 16.0), 19)  # 0-19 supported
+	
+	# Map direction to offset (0-3)
+	# For now, use simplified mapping - will refine based on actual usage
+	var dir_offset = 0
+	match direction:
+		"north": dir_offset = 0
+		"east": dir_offset = 1
+		"south": dir_offset = 2
+		"west": dir_offset = 3
+	
+	# Calculate sprite index: base + (height_level * 4) + dir_offset
+	# But for simplicity, just use height_level for now
+	var edge_index = height_level
+	
+	# Use rock edges (SPR_EDGE_ROCK_BASE = 1579)
+	# TODO: Add terrain-specific edge loading (wood, ice, etc.)
+	var base_path = "res://assets/tiles/edges/rock/edge_%02d.png" % edge_index
 	
 	if ResourceLoader.exists(base_path):
 		var texture = load(base_path)
