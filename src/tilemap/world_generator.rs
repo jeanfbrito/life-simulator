@@ -614,10 +614,11 @@ impl WorldGenerator {
 
                 slope_masks[local_y][local_x] = slope_bits;
 
-                let h_n = final_heights_border[border_y + 1][border_x + 1];
-                let h_e = final_heights_border[border_y.saturating_sub(1)][border_x + 1];
-                let h_s = final_heights_border[border_y.saturating_sub(1)][border_x.saturating_sub(1)];
-                let h_w = final_heights_border[border_y + 1][border_x.saturating_sub(1)];
+                // Get orthogonal neighbor heights (N/E/S/W, not diagonals)
+                let h_n = final_heights_border[border_y.saturating_sub(1)][border_x];
+                let h_e = final_heights_border[border_y][border_x + 1];
+                let h_s = final_heights_border[border_y + 1][border_x];
+                let h_w = final_heights_border[border_y][border_x.saturating_sub(1)];
 
                 let slope_index = slope_mask_to_index(
                     slope_bits,
