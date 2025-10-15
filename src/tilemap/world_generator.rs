@@ -666,6 +666,19 @@ impl WorldGenerator {
                     slope_bits |= TILE_SLOPE_NW_SIDE_UP;
                 }
 
+                // Step 3: If all four corners are raised, raise the base height and flatten
+                // This is EXACTLY what OpenRCT2 does in smoothTileStrong:
+                // if (slope == kTileSlopeRaisedCornersMask) {
+                //     slope = kTileSlopeFlat;
+                //     surfaceElement->BaseHeight = surfaceElement->ClearanceHeight += 2;
+                // }
+                if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
+                    // Raise base height by 2 units (OpenRCT2 exact behavior)
+                    // This prevents holes when surrounded by higher terrain
+                    heights[local_y][local_x] = heights[local_y][local_x].saturating_add(2);
+                    slope_bits = 0; // Flat
+                }
+
                 slope_masks[local_y][local_x] = slope_bits;
 
                 // Check for diagonal (steep) slopes
