@@ -627,33 +627,42 @@ impl WorldGenerator {
 
                 let mut slope_bits = 0u8;
 
+                // OpenRCT2 EXACT mapping from MapHelpers.cpp lines 155-186
+
                 // Step 1: Diagonal neighbors raise individual corners
+                // (x+1, y+1) = SE diagonal
                 if h_se > final_height {
-                    slope_bits |= TILE_SLOPE_N_CORNER_UP; // SE diagonal → N corner
+                    slope_bits |= TILE_SLOPE_N_CORNER_UP;
                 }
+                // (x-1, y+1) = SW diagonal
                 if h_sw > final_height {
-                    slope_bits |= TILE_SLOPE_E_CORNER_UP; // SW diagonal → E corner
+                    slope_bits |= TILE_SLOPE_W_CORNER_UP;
                 }
+                // (x+1, y-1) = NE diagonal
                 if h_ne > final_height {
-                    slope_bits |= TILE_SLOPE_W_CORNER_UP; // NE diagonal → W corner
+                    slope_bits |= TILE_SLOPE_E_CORNER_UP;
                 }
+                // (x-1, y-1) = NW diagonal
                 if h_nw > final_height {
-                    slope_bits |= TILE_SLOPE_S_CORNER_UP; // NW diagonal → S corner
+                    slope_bits |= TILE_SLOPE_S_CORNER_UP;
                 }
 
                 // Step 2: Orthogonal neighbors raise SIDES (two corners each)
-                // This creates smooth slopes instead of individual peaks
+                // (x+1, y+0) = East neighbor
                 if h_e > final_height {
-                    slope_bits |= TILE_SLOPE_NE_SIDE_UP; // East neighbor → NE side (N+E corners)
+                    slope_bits |= TILE_SLOPE_NE_SIDE_UP;
                 }
-                if h_s > final_height {
-                    slope_bits |= TILE_SLOPE_SE_SIDE_UP; // South neighbor → SE side (S+E corners)
-                }
+                // (x-1, y+0) = West neighbor
                 if h_w > final_height {
-                    slope_bits |= TILE_SLOPE_SW_SIDE_UP; // West neighbor → SW side (S+W corners)
+                    slope_bits |= TILE_SLOPE_SW_SIDE_UP;
                 }
+                // (x+0, y-1) = North neighbor
                 if h_n > final_height {
-                    slope_bits |= TILE_SLOPE_NW_SIDE_UP; // North neighbor → NW side (N+W corners)
+                    slope_bits |= TILE_SLOPE_SE_SIDE_UP;
+                }
+                // (x+0, y+1) = South neighbor
+                if h_s > final_height {
+                    slope_bits |= TILE_SLOPE_NW_SIDE_UP;
                 }
 
                 slope_masks[local_y][local_x] = slope_bits;
