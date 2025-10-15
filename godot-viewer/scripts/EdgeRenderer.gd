@@ -46,6 +46,10 @@ static func should_draw_edge(tile_corners: Dictionary, neighbor_corners: Diction
 		"west": {"left": "right", "top": "bottom"}
 	}
 	
+	# Check if tile data exists and has required corners
+	if tile_corners.is_empty() or not tile_corners.has(corner_a) or not tile_corners.has(corner_b):
+		return false  # Tile missing required corner data
+	
 	# Check if neighbor data exists
 	if neighbor_corners.is_empty():
 		return false  # No neighbor = edge of map, draw edge
