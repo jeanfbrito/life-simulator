@@ -574,6 +574,15 @@ impl WorldGenerator {
         let mut slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
         let mut slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
 
+        // Initialize heights from the height map first
+        for local_y in 0..CHUNK_SIZE {
+            let border_y = local_y + 1;
+            for local_x in 0..CHUNK_SIZE {
+                let border_x = local_x + 1;
+                heights[local_y][local_x] = final_heights_border[border_y][border_x] as u8;
+            }
+        }
+
         // Constants for slope detection
         const TILE_SLOPE_DIAGONAL_FLAG: u8 = 0b0001_0000;
         const TILE_SLOPE_RAISED_CORNERS_MASK: u8 = 0b0000_1111;
@@ -592,6 +601,15 @@ impl WorldGenerator {
         const TILE_SLOPE_SW_SIDE_UP: u8 = TILE_SLOPE_S_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
         const TILE_SLOPE_NW_SIDE_UP: u8 = TILE_SLOPE_N_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
 
+        // OpenRCT2 iterative smoothing: run until no tiles change
+        // This allows terrain to "propagate" and settle
+        let mut iteration = 0;
+        loop {
+            iteration += 1;
+            let mut num_tiles_changed = 0;
+            let mut heights_raised = 0;
+            let mut slopes_changed = 0;
+
         for local_y in 0..CHUNK_SIZE {
             let tile_y = local_y as i32;
             let world_y = world_origin_y + tile_y;
@@ -606,19 +624,52 @@ impl WorldGenerator {
                 let height_x = x_idx * DENSITY;
                 let border_x = (tile_x + 1) as usize;
 
-                let final_height = final_heights_border[border_y][border_x];
-                heights[local_y][local_x] = final_height as u8;
+                // Use the potentially-modified height from previous iterations
+                let final_height = heights[local_y][local_x] as i32;
 
-                // Get all 8 neighbor heights
-                let h_n = final_heights_border[border_y.saturating_sub(1)][border_x];
-                let h_e = final_heights_border[border_y][border_x + 1];
-                let h_s = final_heights_border[border_y + 1][border_x];
-                let h_w = final_heights_border[border_y][border_x.saturating_sub(1)];
+                // Get all 8 neighbor heights from the potentially-modified heights array
+                // Need to check bounds and fall back to border heights for edge tiles
+                let h_n = if local_y > 0 {
+                    heights[local_y - 1][local_x] as i32
+                } else {
+                    final_heights_border[border_y.saturating_sub(1)][border_x]
+                };
+                let h_s = if local_y < CHUNK_SIZE - 1 {
+                    heights[local_y + 1][local_x] as i32
+                } else {
+                    final_heights_border[border_y + 1][border_x]
+                };
+                let h_w = if local_x > 0 {
+                    heights[local_y][local_x - 1] as i32
+                } else {
+                    final_heights_border[border_y][border_x.saturating_sub(1)]
+                };
+                let h_e = if local_x < CHUNK_SIZE - 1 {
+                    heights[local_y][local_x + 1] as i32
+                } else {
+                    final_heights_border[border_y][border_x + 1]
+                };
 
-                let h_nw = final_heights_border[border_y.saturating_sub(1)][border_x.saturating_sub(1)];
-                let h_ne = final_heights_border[border_y.saturating_sub(1)][border_x + 1];
-                let h_se = final_heights_border[border_y + 1][border_x + 1];
-                let h_sw = final_heights_border[border_y + 1][border_x.saturating_sub(1)];
+                let h_nw = if local_y > 0 && local_x > 0 {
+                    heights[local_y - 1][local_x - 1] as i32
+                } else {
+                    final_heights_border[border_y.saturating_sub(1)][border_x.saturating_sub(1)]
+                };
+                let h_ne = if local_y > 0 && local_x < CHUNK_SIZE - 1 {
+                    heights[local_y - 1][local_x + 1] as i32
+                } else {
+                    final_heights_border[border_y.saturating_sub(1)][border_x + 1]
+                };
+                let h_sw = if local_y < CHUNK_SIZE - 1 && local_x > 0 {
+                    heights[local_y + 1][local_x - 1] as i32
+                } else {
+                    final_heights_border[border_y + 1][border_x.saturating_sub(1)]
+                };
+                let h_se = if local_y < CHUNK_SIZE - 1 && local_x < CHUNK_SIZE - 1 {
+                    heights[local_y + 1][local_x + 1] as i32
+                } else {
+                    final_heights_border[border_y + 1][border_x + 1]
+                };
 
                 // OpenRCT2 exact algorithm from smoothTileStrong:
                 // 1. Check diagonal neighbors - each raises ONE corner
@@ -672,6 +723,9 @@ impl WorldGenerator {
                 //     slope = kTileSlopeFlat;
                 //     surfaceElement->BaseHeight = surfaceElement->ClearanceHeight += 2;
                 // }
+                let old_height = heights[local_y][local_x];
+                let old_slope = slope_masks[local_y][local_x];
+
                 if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
                     // Raise base height by 2 units (OpenRCT2 exact behavior)
                     // This prevents holes when surrounded by higher terrain
@@ -680,6 +734,18 @@ impl WorldGenerator {
                 }
 
                 slope_masks[local_y][local_x] = slope_bits;
+
+                // Track if this tile changed (for iteration convergence)
+                if heights[local_y][local_x] != old_height {
+                    heights_raised += 1;
+                    num_tiles_changed += 1;
+                }
+                if slope_bits != old_slope {
+                    slopes_changed += 1;
+                    if heights[local_y][local_x] == old_height {
+                        num_tiles_changed += 1;
+                    }
+                }
 
                 // Check for diagonal (steep) slopes
                 // When 3 corners are raised (one corner down) and orthogonal neighbor is >=4 units higher
@@ -695,6 +761,33 @@ impl WorldGenerator {
                 slope_indices[local_y][local_x] = slope_index;
             }
         }
+
+            // Log iteration statistics
+            if iteration == 1 || num_tiles_changed > 0 {
+                println!(
+                    "  Chunk ({}, {}) iteration {}: {} tiles changed ({} heights raised, {} slopes changed)",
+                    chunk_x, chunk_y, iteration, num_tiles_changed, heights_raised, slopes_changed
+                );
+            }
+
+            // Check if we've converged (no more changes)
+            if num_tiles_changed == 0 {
+                println!(
+                    "  Chunk ({}, {}) converged after {} iterations",
+                    chunk_x, chunk_y, iteration
+                );
+                break;
+            }
+
+            // Safety limit: prevent infinite loops
+            if iteration >= 100 {
+                println!(
+                    "  WARNING: Chunk ({}, {}) did not converge after 100 iterations!",
+                    chunk_x, chunk_y
+                );
+                break;
+            }
+        } // end of smoothing loop
 
         ChunkHeightData {
             heights,
