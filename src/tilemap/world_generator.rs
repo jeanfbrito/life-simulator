@@ -103,6 +103,39 @@ pub struct WorldGenerator {
     openrct2_config: OpenRCT2TerrainConfig,
 }
 
+/// Whole-map height storage for OpenRCT2-style generation
+/// Stores ALL tile heights before smoothing, allowing cross-chunk propagation
+pub struct WholeMapHeights {
+    /// All tile heights indexed by world coordinates
+    /// Key: (world_x, world_y), Value: height (0-255 units)
+    heights: HashMap<(i32, i32), u8>,
+    /// Bounding box of the map
+    min_x: i32,
+    min_y: i32,
+    max_x: i32,
+    max_y: i32,
+}
+
+impl WholeMapHeights {
+    pub fn new(min_x: i32, min_y: i32, max_x: i32, max_y: i32) -> Self {
+        Self {
+            heights: HashMap::new(),
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
+    }
+
+    pub fn get_height(&self, x: i32, y: i32) -> i32 {
+        self.heights.get(&(x, y)).copied().unwrap_or(0) as i32
+    }
+
+    pub fn set_height(&mut self, x: i32, y: i32, height: u8) {
+        self.heights.insert((x, y), height);
+    }
+}
+
 impl WorldGenerator {
     pub fn new(config: WorldConfig) -> Self {
         let rng = Pcg64::seed_from_u64(config.seed);
@@ -388,6 +421,36 @@ impl WorldGenerator {
         chunk
     }
 
+    /// Generate terrain types from pre-computed heights (for whole-map generation)
+    /// Used after Phase 2 whole-map smoothing to avoid regenerating heights
+    pub fn generate_openrct2_chunk_from_heights(&self, chunk_x: i32, chunk_y: i32, heights: &Vec<Vec<u8>>) -> Vec<Vec<String>> {
+        let mut chunk = Vec::with_capacity(16);
+
+        // Create noise generators for terrain variety
+        let perlin = Perlin::new(self.config.seed as u32);
+
+        for y in 0..16 {
+            let mut row = Vec::with_capacity(16);
+            for x in 0..16 {
+                let world_x = chunk_x * 16 + x;
+                let world_y = chunk_y * 16 + y;
+                let height = heights[y as usize][x as usize];
+
+                // Generate terrain type from height and noise
+                let terrain_type = self.generate_terrain_from_height(
+                    height,
+                    world_x,
+                    world_y,
+                    &perlin,
+                );
+                row.push(terrain_type);
+            }
+            chunk.push(row);
+        }
+
+        chunk
+    }
+
     /// Map height to terrain type using OpenRCT2-style thresholds
     /// Uses additional noise layers for natural terrain variety
     fn generate_terrain_from_height(
@@ -476,6 +539,384 @@ impl WorldGenerator {
                 "Grass".to_string()
             }
         }
+    }
+
+    /// Generate initial heights for ALL chunks BEFORE smoothing
+    /// Phase 1 of OpenRCT2-exact generation
+    pub fn generate_all_initial_heights(&self, chunks: &[(i32, i32)]) -> WholeMapHeights {
+        const DENSITY: i32 = 2;
+        const COORDS_Z_STEP: i32 = 8;
+
+        println!("🌍 Phase 1: Generating initial heights for {} chunks...", chunks.len());
+
+        // Calculate bounding box
+        let min_chunk_x = chunks.iter().map(|(x, _)| *x).min().unwrap_or(0);
+        let max_chunk_x = chunks.iter().map(|(x, _)| *x).max().unwrap_or(0);
+        let min_chunk_y = chunks.iter().map(|(_, y)| *y).min().unwrap_or(0);
+        let max_chunk_y = chunks.iter().map(|(_, y)| *y).max().unwrap_or(0);
+
+        let min_world_x = min_chunk_x * CHUNK_SIZE as i32;
+        let max_world_x = (max_chunk_x + 1) * CHUNK_SIZE as i32;
+        let min_world_y = min_chunk_y * CHUNK_SIZE as i32;
+        let max_world_y = (max_chunk_y + 1) * CHUNK_SIZE as i32;
+
+        let mut whole_map = WholeMapHeights::new(min_world_x, min_world_y, max_world_x, max_world_y);
+
+        // Generate simplex noise settings
+        let mut settings = OpenRct2Settings::default();
+        let map_tiles = self.config.world_size_chunks.max(1) * CHUNK_SIZE as i32;
+        settings.map_size = IVec2::new(map_tiles, map_tiles);
+
+        // Generate heights for all chunks
+        for &(chunk_x, chunk_y) in chunks {
+            let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+            let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+            // Generate height map for this chunk (with simplex noise + blur)
+            let width_tiles = CHUNK_SIZE as i32;
+            let height_tiles = CHUNK_SIZE as i32;
+
+            let mut height_map = HeightMap::with_density(
+                width_tiles as usize,
+                height_tiles as usize,
+                DENSITY as u8,
+            );
+
+            let origin_samples = IVec2::new(world_origin_x * DENSITY, world_origin_y * DENSITY);
+            generate_simplex_noise(&settings, self.config.seed, origin_samples, &mut height_map);
+
+            // Blur height map (2-7 iterations like OpenRCT2)
+            let chunk_hash = ((chunk_x as i64 as u64) << 32) ^ ((chunk_y as i64 as u64) & 0xFFFF_FFFF);
+            let mut rng = Pcg64::seed_from_u64(self.config.seed ^ chunk_hash);
+            let smooth_iterations = 2 + rng.gen_range(0..6);
+            smooth_height_map(smooth_iterations as u32, &mut height_map);
+
+            // Convert to tile heights
+            let water_level = settings.water_level;
+            for tile_y in 0..CHUNK_SIZE as i32 {
+                let world_y = world_origin_y + tile_y;
+                let y_idx = tile_y;
+
+                for tile_x in 0..CHUNK_SIZE as i32 {
+                    let world_x = world_origin_x + tile_x;
+                    let x_idx = tile_x;
+
+                    let height_x = x_idx * DENSITY;
+                    let height_y = y_idx * DENSITY;
+
+                    let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
+                    let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
+                    let q10 = height_map.get(IVec2::new(height_x + 1, height_y)) as i32;
+                    let q11 = height_map.get(IVec2::new(height_x + 1, height_y + 1)) as i32;
+
+                    let average_height = (q00 + q01 + q10 + q11) / 4;
+                    let mut base_height = (average_height * 2).max(2);
+
+                    if base_height >= 4 && base_height <= water_level {
+                        base_height -= 2;
+                    }
+
+                    let mut final_height = base_height * COORDS_Z_STEP;
+                    if final_height > 255 {
+                        final_height = 255;
+                    }
+
+                    whole_map.set_height(world_x, world_y, final_height as u8);
+                }
+            }
+        }
+
+        println!("✅ Phase 1 complete: {} tiles initialized", whole_map.heights.len());
+        whole_map
+    }
+
+    /// Run whole-map smoothing EXACTLY like OpenRCT2's smoothMap function
+    /// Phase 2 of OpenRCT2-exact generation
+    pub fn smooth_whole_map(&self, whole_map: &mut WholeMapHeights) {
+        println!("🏔️ Phase 2: Smoothing entire map (OpenRCT2 exact algorithm)...");
+
+        let mut iteration = 0;
+        loop {
+            iteration += 1;
+            let mut num_tiles_changed = 0;
+
+            // Process all tiles (OpenRCT2: for y in 1..mapSize.y-1, for x in 1..mapSize.x-1)
+            for world_y in (whole_map.min_y + 1)..(whole_map.max_y - 1) {
+                for world_x in (whole_map.min_x + 1)..(whole_map.max_x - 1) {
+                    let old_height = whole_map.get_height(world_x, world_y);
+
+                    // Get 8 neighbors
+                    let h_n = whole_map.get_height(world_x, world_y - 1);
+                    let h_s = whole_map.get_height(world_x, world_y + 1);
+                    let h_e = whole_map.get_height(world_x + 1, world_y);
+                    let h_w = whole_map.get_height(world_x - 1, world_y);
+                    let h_nw = whole_map.get_height(world_x - 1, world_y - 1);
+                    let h_ne = whole_map.get_height(world_x + 1, world_y - 1);
+                    let h_sw = whole_map.get_height(world_x - 1, world_y + 1);
+                    let h_se = whole_map.get_height(world_x + 1, world_y + 1);
+
+                    // Apply smoothTileStrong HEIGHT RAISING logic (no slopes yet)
+                    let new_height = self.smooth_tile_strong_height_only(
+                        old_height, h_n, h_s, h_e, h_w, h_nw, h_ne, h_sw, h_se
+                    );
+
+                    if new_height != old_height {
+                        whole_map.set_height(world_x, world_y, new_height as u8);
+                        num_tiles_changed += 1;
+                    }
+                }
+            }
+
+            if iteration == 1 || num_tiles_changed > 0 {
+                println!("  Iteration {}: {} tiles changed", iteration, num_tiles_changed);
+            }
+
+            // Converged when no tiles change (OpenRCT2: if (numTilesChanged == 0) break)
+            if num_tiles_changed == 0 {
+                println!("✅ Phase 2 complete: Converged after {} iterations", iteration);
+                break;
+            }
+
+            // Safety limit
+            if iteration >= 100 {
+                println!("⚠️  WARNING: Did not converge after 100 iterations!");
+                break;
+            }
+        }
+    }
+
+    /// Apply smoothTile Strong height raising logic ONLY (no slope calculation)
+    /// Used during Phase 2 whole-map smoothing
+    fn smooth_tile_strong_height_only(
+        &self,
+        mut current_height: i32,
+        h_n: i32, h_s: i32, h_e: i32, h_w: i32,
+        h_nw: i32, h_ne: i32, h_sw: i32, h_se: i32,
+    ) -> i32 {
+        // EXACT copy of lines 695-773 from generate_height_chunk_openrct2
+        // but ONLY the height raising parts, NO slope calculation
+
+        // Step 1: Raise to edge height - 2 levels (16 units)
+        let mut highest_orthogonal = current_height;
+        highest_orthogonal = highest_orthogonal.max(h_w);
+        highest_orthogonal = highest_orthogonal.max(h_e);
+        highest_orthogonal = highest_orthogonal.max(h_n);
+        highest_orthogonal = highest_orthogonal.max(h_s);
+
+        if current_height < highest_orthogonal - 16 {
+            current_height = (highest_orthogonal - 16).max(0);
+        }
+
+        // Step 2: Check diagonal corners
+        let corner_heights = [h_nw, h_ne, h_se, h_sw];
+
+        let mut highest_corner = current_height;
+        for &corner_h in &corner_heights {
+            highest_corner = highest_corner.max(corner_h);
+        }
+
+        // Step 3: If highest corner >= current + 4 levels (32 units), check for diagonal
+        if highest_corner >= current_height + 32 {
+            let mut count = 0;
+            let mut corner_idx = 0;
+            let mut can_compensate = true;
+
+            for (i, &corner_h) in corner_heights.iter().enumerate() {
+                if corner_h == highest_corner {
+                    count += 1;
+                    corner_idx = i;
+
+                    let highest_on_lowest_side = match i {
+                        0 => h_e.max(h_s),
+                        1 => h_w.max(h_s),
+                        2 => h_w.max(h_n),
+                        3 => h_e.max(h_n),
+                        _ => current_height,
+                    };
+
+                    if highest_on_lowest_side > current_height {
+                        current_height = highest_on_lowest_side;
+                        can_compensate = false;
+                    }
+                }
+            }
+
+            if count == 1 && can_compensate {
+                if current_height < highest_corner - 32 {
+                    current_height = (highest_corner - 32).max(0);
+                }
+                // Note: We DON'T set diagonal flag here - that's done in finalization
+            } else {
+                if current_height < highest_corner - 16 {
+                    current_height = (highest_corner - 16).max(0);
+                }
+            }
+        }
+
+        current_height
+    }
+
+    /// Extract final chunk data from whole map after smoothing (Phase 3)
+    pub fn finalize_chunk_from_whole_map(
+        &self,
+        chunk_x: i32,
+        chunk_y: i32,
+        whole_map: &WholeMapHeights,
+    ) -> ChunkHeightData {
+        let mut heights = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+        let mut slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
+
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+        // Copy final heights from whole map
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+                heights[local_y][local_x] = whole_map.get_height(world_x, world_y) as u8;
+            }
+        }
+
+        // Calculate slopes based on final smoothed heights
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+                let final_height = whole_map.get_height(world_x, world_y);
+
+                // Get all 8 neighbors
+                let h_n = whole_map.get_height(world_x, world_y - 1);
+                let h_s = whole_map.get_height(world_x, world_y + 1);
+                let h_e = whole_map.get_height(world_x + 1, world_y);
+                let h_w = whole_map.get_height(world_x - 1, world_y);
+                let h_nw = whole_map.get_height(world_x - 1, world_y - 1);
+                let h_ne = whole_map.get_height(world_x + 1, world_y - 1);
+                let h_sw = whole_map.get_height(world_x - 1, world_y + 1);
+                let h_se = whole_map.get_height(world_x + 1, world_y + 1);
+
+                // Calculate slope using the FULL logic (both PATH 1 diagonal + PATH 2 normal)
+                let slope_bits = self.calculate_slope_for_tile(
+                    final_height, h_n, h_s, h_e, h_w, h_nw, h_ne, h_sw, h_se
+                );
+
+                slope_masks[local_y][local_x] = slope_bits;
+                slope_indices[local_y][local_x] = slope_mask_to_index(slope_bits);
+            }
+        }
+
+        ChunkHeightData {
+            heights,
+            slope_masks,
+            slope_indices,
+        }
+    }
+
+    /// Calculate slope bits for a tile (both diagonal and normal slopes)
+    /// Used during Phase 3 finalization
+    fn calculate_slope_for_tile(
+        &self,
+        final_height: i32,
+        h_n: i32, h_s: i32, h_e: i32, h_w: i32,
+        h_nw: i32, h_ne: i32, h_sw: i32, h_se: i32,
+    ) -> u8 {
+        const TILE_SLOPE_DIAGONAL_FLAG: u8 = 0b0001_0000;
+        const TILE_SLOPE_RAISED_CORNERS_MASK: u8 = 0b0000_1111;
+        const TILE_SLOPE_N_CORNER_UP: u8 = 0b0000_0001;
+        const TILE_SLOPE_E_CORNER_UP: u8 = 0b0000_0010;
+        const TILE_SLOPE_S_CORNER_UP: u8 = 0b0000_0100;
+        const TILE_SLOPE_W_CORNER_UP: u8 = 0b0000_1000;
+        const TILE_SLOPE_W_CORNER_DOWN: u8 = TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_W_CORNER_UP;
+        const TILE_SLOPE_S_CORNER_DOWN: u8 = TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_S_CORNER_UP;
+        const TILE_SLOPE_E_CORNER_DOWN: u8 = TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_N_CORNER_DOWN: u8 = TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_N_CORNER_UP;
+        const TILE_SLOPE_NE_SIDE_UP: u8 = TILE_SLOPE_N_CORNER_UP | TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_SE_SIDE_UP: u8 = TILE_SLOPE_S_CORNER_UP | TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_SW_SIDE_UP: u8 = TILE_SLOPE_S_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
+        const TILE_SLOPE_NW_SIDE_UP: u8 = TILE_SLOPE_N_CORNER_UP | TILE_SLOPE_W_CORNER_UP;
+
+        // Check for diagonal slope first (PATH 1)
+        let corner_heights = [h_nw, h_ne, h_se, h_sw];
+        let mut highest_corner = final_height;
+        for &corner_h in &corner_heights {
+            highest_corner = highest_corner.max(corner_h);
+        }
+
+        if highest_corner >= final_height + 32 {
+            let mut count = 0;
+            let mut corner_idx = 0;
+
+            for (i, &corner_h) in corner_heights.iter().enumerate() {
+                if corner_h == highest_corner {
+                    count += 1;
+                    corner_idx = i;
+                }
+            }
+
+            if count == 1 {
+                // Check opposite corner
+                let opposite_corner_low = match corner_idx {
+                    0 => corner_heights[2] <= corner_heights[0] - 32,
+                    1 => corner_heights[3] <= corner_heights[1] - 32,
+                    2 => corner_heights[0] <= corner_heights[2] - 32,
+                    3 => corner_heights[1] <= corner_heights[3] - 32,
+                    _ => false,
+                };
+
+                if opposite_corner_low {
+                    // This is a diagonal slope!
+                    let mut slope_bits = TILE_SLOPE_DIAGONAL_FLAG;
+                    match corner_idx {
+                        0 => slope_bits |= TILE_SLOPE_N_CORNER_DOWN,
+                        1 => slope_bits |= TILE_SLOPE_W_CORNER_DOWN,
+                        2 => slope_bits |= TILE_SLOPE_S_CORNER_DOWN,
+                        3 => slope_bits |= TILE_SLOPE_E_CORNER_DOWN,
+                        _ => {}
+                    }
+                    return slope_bits;
+                }
+            }
+        }
+
+        // PATH 2: Normal slope calculation
+        let mut slope_bits = 0u8;
+
+        // Diagonal neighbors raise individual corners
+        if h_se > final_height {
+            slope_bits |= TILE_SLOPE_N_CORNER_UP;
+        }
+        if h_sw > final_height {
+            slope_bits |= TILE_SLOPE_W_CORNER_UP;
+        }
+        if h_ne > final_height {
+            slope_bits |= TILE_SLOPE_E_CORNER_UP;
+        }
+        if h_nw > final_height {
+            slope_bits |= TILE_SLOPE_S_CORNER_UP;
+        }
+
+        // Orthogonal neighbors raise sides
+        if h_e > final_height {
+            slope_bits |= TILE_SLOPE_NE_SIDE_UP;
+        }
+        if h_w > final_height {
+            slope_bits |= TILE_SLOPE_SW_SIDE_UP;
+        }
+        if h_n > final_height {
+            slope_bits |= TILE_SLOPE_SE_SIDE_UP;
+        }
+        if h_s > final_height {
+            slope_bits |= TILE_SLOPE_NW_SIDE_UP;
+        }
+
+        // If all corners raised, this should have been raised during smoothing
+        // (we don't raise here because heights are already final)
+        if slope_bits == TILE_SLOPE_RAISED_CORNERS_MASK {
+            slope_bits = 0; // Flat (height should already be raised)
+        }
+
+        slope_bits
     }
 
     /// Generate height map for a chunk using Perlin noise

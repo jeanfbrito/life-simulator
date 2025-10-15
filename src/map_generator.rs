@@ -117,10 +117,40 @@ fn main() {
     let total_chunks = ((args.radius * 2 + 1) * (args.radius * 2 + 1)) as usize;
     let mut generated_chunks = 0;
 
-    for chunk_x in (-args.radius)..=(args.radius) {
-        for chunk_y in (-args.radius)..=(args.radius) {
-            // Generate terrain layer
-            let terrain_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
+    // OpenRCT2 mode uses 3-phase whole-map generation for exact smoothing behavior
+    if terrain_mode == TerrainGenerationMode::OpenRCT2Heights {
+        println!("🌍 Using OpenRCT2 exact 3-phase generation (whole-map smoothing)");
+
+        // Collect all chunk coordinates
+        let mut all_chunks = Vec::new();
+        for chunk_x in (-args.radius)..=(args.radius) {
+            for chunk_y in (-args.radius)..=(args.radius) {
+                all_chunks.push((chunk_x, chunk_y));
+            }
+        }
+
+        // PHASE 1: Generate ALL initial heights (simplex noise + blur)
+        let mut whole_map = world_generator.generate_all_initial_heights(&all_chunks);
+
+        // PHASE 2: Smooth entire map until convergence (OpenRCT2 exact)
+        world_generator.smooth_whole_map(&mut whole_map);
+
+        // PHASE 3: Finalize each chunk (extract heights, calculate slopes)
+        println!("🎨 Finalizing chunks and generating terrain/resources...");
+        for (chunk_x, chunk_y) in all_chunks {
+            // Extract final heights and slopes from whole map
+            let height_data = world_generator.finalize_chunk_from_whole_map(
+                chunk_x,
+                chunk_y,
+                &whole_map,
+            );
+
+            // Generate terrain layer from pre-computed heights (NO height regeneration!)
+            let terrain_tiles = world_generator.generate_openrct2_chunk_from_heights(
+                chunk_x,
+                chunk_y,
+                &height_data.heights,
+            );
 
             // Generate resources layer
             let resources_tiles = ResourceGenerator::create_resources_for_chunk(
@@ -129,9 +159,6 @@ fn main() {
                 chunk_y,
                 seed,
             );
-
-            // Generate height and slope data
-            let height_data = world_generator.generate_height_chunk(chunk_x, chunk_y);
 
             // Convert heights (Vec<Vec<u8>>) to Vec<Vec<String>> for serialization
             let height_tiles_str: Vec<Vec<String>> = height_data
@@ -165,9 +192,62 @@ fn main() {
                 );
             }
         }
+    } else {
+        // Legacy island mode uses per-chunk generation
+        println!("🏝️  Using legacy island generation (per-chunk)");
+
+        for chunk_x in (-args.radius)..=(args.radius) {
+            for chunk_y in (-args.radius)..=(args.radius) {
+                // Generate terrain layer
+                let terrain_tiles = world_generator.generate_procedural_chunk(chunk_x, chunk_y);
+
+                // Generate resources layer
+                let resources_tiles = ResourceGenerator::create_resources_for_chunk(
+                    &terrain_tiles,
+                    chunk_x,
+                    chunk_y,
+                    seed,
+                );
+
+                // Generate height and slope data
+                let height_data = world_generator.generate_height_chunk(chunk_x, chunk_y);
+
+                // Convert heights (Vec<Vec<u8>>) to Vec<Vec<String>> for serialization
+                let height_tiles_str: Vec<Vec<String>> = height_data
+                    .heights
+                    .iter()
+                    .map(|row| row.iter().map(|h| h.to_string()).collect())
+                    .collect();
+
+                let slope_tiles_str: Vec<Vec<String>> = height_data
+                    .slope_indices
+                    .iter()
+                    .map(|row| row.iter().map(|h| h.to_string()).collect())
+                    .collect();
+
+                // Create multi-layer chunk
+                let mut chunk_layers = HashMap::new();
+                chunk_layers.insert("terrain".to_string(), terrain_tiles);
+                chunk_layers.insert("resources".to_string(), resources_tiles);
+                chunk_layers.insert("heights".to_string(), height_tiles_str);
+                chunk_layers.insert("slope_indices".to_string(), slope_tiles_str);
+
+                multi_layer_chunks.insert((chunk_x, chunk_y), chunk_layers);
+                generated_chunks += 1;
+
+                if args.verbose && generated_chunks % 10 == 0 {
+                    println!(
+                        "Progress: {}/{} chunks ({}%)",
+                        generated_chunks,
+                        total_chunks,
+                        (generated_chunks * 100) / total_chunks
+                    );
+                }
+            }
+        }
     }
 
-    println!("Generated {} chunks", total_chunks);
+    println!("✅ Generated {} chunks", total_chunks);
 
     // Create serialized world
     println!("Serializing world data...");
