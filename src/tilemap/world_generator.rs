@@ -610,7 +610,10 @@ impl WorldGenerator {
                     let q11 = height_map.get(IVec2::new(height_x + 1, height_y + 1)) as i32;
 
                     let average_height = (q00 + q01 + q10 + q11) / 4;
-                    let mut base_height = (average_height * 2).max(2);
+                    // Note: Don't multiply by 2 here - simplex noise already has proper range
+                    // OpenRCT2 divides heightmap_low/high by 2 in noise generation,
+                    // so we get values like [7, 30] which map directly to levels
+                    let mut base_height = average_height.max(2);
 
                     if base_height >= 4 && base_height <= water_level {
                         base_height -= 2;
@@ -626,7 +629,18 @@ impl WorldGenerator {
             }
         }
 
+        // Sample initial heights for debugging
+        let sample_heights: Vec<i32> = whole_map.heights.values().take(100).map(|&h| h as i32).collect();
+        let min_h = sample_heights.iter().min().unwrap_or(&0);
+        let max_h = sample_heights.iter().max().unwrap_or(&0);
+        let avg_h = if !sample_heights.is_empty() {
+            sample_heights.iter().sum::<i32>() / sample_heights.len() as i32
+        } else {
+            0
+        };
+
         println!("✅ Phase 1 complete: {} tiles initialized", whole_map.heights.len());
+        println!("   Initial height range: min={}, max={}, avg={} (sample of 100 tiles)", min_h, max_h, avg_h);
         whole_map
     }
 
@@ -673,7 +687,18 @@ impl WorldGenerator {
 
             // Converged when no tiles change (OpenRCT2: if (numTilesChanged == 0) break)
             if num_tiles_changed == 0 {
+                // Sample final heights for debugging
+                let sample_heights: Vec<i32> = whole_map.heights.values().take(100).map(|&h| h as i32).collect();
+                let min_h = sample_heights.iter().min().unwrap_or(&0);
+                let max_h = sample_heights.iter().max().unwrap_or(&0);
+                let avg_h = if !sample_heights.is_empty() {
+                    sample_heights.iter().sum::<i32>() / sample_heights.len() as i32
+                } else {
+                    0
+                };
+
                 println!("✅ Phase 2 complete: Converged after {} iterations", iteration);
+                println!("   Final height range: min={}, max={}, avg={} (sample of 100 tiles)", min_h, max_h, avg_h);
                 break;
             }
 
@@ -753,7 +778,8 @@ impl WorldGenerator {
             }
         }
 
-        current_height
+        // Clamp to valid range [0, 255]
+        current_height.clamp(0, 255)
     }
 
     /// Extract final chunk data from whole map after smoothing (Phase 3)
