@@ -574,6 +574,18 @@ impl WorldGenerator {
         let mut slope_masks = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
         let mut slope_indices = vec![vec![0u8; CHUNK_SIZE]; CHUNK_SIZE];
 
+        // Constants for diagonal slope detection
+        const TILE_SLOPE_DIAGONAL_FLAG: u8 = 0b0001_0000;
+        const TILE_SLOPE_RAISED_CORNERS_MASK: u8 = 0b0000_1111;
+        const TILE_SLOPE_W_CORNER_DOWN: u8 =
+            TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_W_CORNER_UP;
+        const TILE_SLOPE_S_CORNER_DOWN: u8 =
+            TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_S_CORNER_UP;
+        const TILE_SLOPE_E_CORNER_DOWN: u8 =
+            TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_E_CORNER_UP;
+        const TILE_SLOPE_N_CORNER_DOWN: u8 =
+            TILE_SLOPE_RAISED_CORNERS_MASK & !TILE_SLOPE_N_CORNER_UP;
+
         for local_y in 0..CHUNK_SIZE {
             let tile_y = local_y as i32;
             let world_y = world_origin_y + tile_y;
@@ -588,46 +600,64 @@ impl WorldGenerator {
                 let height_x = x_idx * DENSITY;
                 let border_x = (tile_x + 1) as usize;
 
-                let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
-                let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
-                let q10 = height_map.get(IVec2::new(height_x + 1, height_y)) as i32;
-                let q11 = height_map.get(IVec2::new(height_x + 1, height_y + 1)) as i32;
-
-                let average_height = (q00 + q01 + q10 + q11) / 4;
                 let final_height = final_heights_border[border_y][border_x];
-
                 heights[local_y][local_x] = final_height as u8;
 
-                let mut slope_bits = 0u8;
-                if q11 > average_height {
-                    slope_bits |= TILE_SLOPE_N_CORNER_UP;
-                }
-                if q10 > average_height {
-                    slope_bits |= TILE_SLOPE_E_CORNER_UP;
-                }
-                if q00 > average_height {
-                    slope_bits |= TILE_SLOPE_S_CORNER_UP;
-                }
-                if q01 > average_height {
-                    slope_bits |= TILE_SLOPE_W_CORNER_UP;
-                }
-
-                slope_masks[local_y][local_x] = slope_bits;
-
-                // Get orthogonal neighbor heights (N/E/S/W, not diagonals)
+                // Get all 8 neighbor heights (OpenRCT2 uses all neighbors, not just diagonals)
                 let h_n = final_heights_border[border_y.saturating_sub(1)][border_x];
                 let h_e = final_heights_border[border_y][border_x + 1];
                 let h_s = final_heights_border[border_y + 1][border_x];
                 let h_w = final_heights_border[border_y][border_x.saturating_sub(1)];
 
-                let slope_index = slope_mask_to_index(
-                    slope_bits,
-                    h_n,
-                    h_e,
-                    h_s,
-                    h_w,
-                    final_height,
-                );
+                let h_nw = final_heights_border[border_y.saturating_sub(1)][border_x.saturating_sub(1)];
+                let h_ne = final_heights_border[border_y.saturating_sub(1)][border_x + 1];
+                let h_se = final_heights_border[border_y + 1][border_x + 1];
+                let h_sw = final_heights_border[border_y + 1][border_x.saturating_sub(1)];
+
+                // OpenRCT2 threshold system: Count how many of 3 neighbors on each side are higher
+                // If 1+ neighbors on a side are higher, raise the opposite corner
+                let threshold_w = ((h_sw > final_height) as i32)
+                    + ((h_w > final_height) as i32)
+                    + ((h_nw > final_height) as i32);
+                let threshold_n = ((h_nw > final_height) as i32)
+                    + ((h_n > final_height) as i32)
+                    + ((h_ne > final_height) as i32);
+                let threshold_e = ((h_ne > final_height) as i32)
+                    + ((h_e > final_height) as i32)
+                    + ((h_se > final_height) as i32);
+                let threshold_s = ((h_se > final_height) as i32)
+                    + ((h_s > final_height) as i32)
+                    + ((h_sw > final_height) as i32);
+
+                // Build slope mask from thresholds
+                // Note: W neighbors raise E corner, N neighbors raise S corner, etc.
+                let mut slope_bits = 0u8;
+                if threshold_w >= 1 {
+                    slope_bits |= TILE_SLOPE_E_CORNER_UP; // West neighbors raise east corner
+                }
+                if threshold_n >= 1 {
+                    slope_bits |= TILE_SLOPE_S_CORNER_UP; // North neighbors raise south corner
+                }
+                if threshold_e >= 1 {
+                    slope_bits |= TILE_SLOPE_W_CORNER_UP; // East neighbors raise west corner
+                }
+                if threshold_s >= 1 {
+                    slope_bits |= TILE_SLOPE_N_CORNER_UP; // South neighbors raise north corner
+                }
+
+                slope_masks[local_y][local_x] = slope_bits;
+
+                // Check for diagonal (steep) slopes
+                // When 3 corners are raised (one corner down) and orthogonal neighbor is >=4 units higher
+                if (slope_bits == TILE_SLOPE_W_CORNER_DOWN && h_w >= final_height + 32)
+                    || (slope_bits == TILE_SLOPE_S_CORNER_DOWN && h_s >= final_height + 32)
+                    || (slope_bits == TILE_SLOPE_E_CORNER_DOWN && h_e >= final_height + 32)
+                    || (slope_bits == TILE_SLOPE_N_CORNER_DOWN && h_n >= final_height + 32)
+                {
+                    slope_bits |= TILE_SLOPE_DIAGONAL_FLAG;
+                }
+
+                let slope_index = slope_mask_to_index(slope_bits);
                 slope_indices[local_y][local_x] = slope_index;
             }
         }
@@ -856,38 +886,40 @@ impl WorldGenerator {
     }
 }
 
-fn slope_mask_to_index(mask: u8, h_n: i32, h_e: i32, h_s: i32, h_w: i32, current: i32) -> u8 {
-    match mask {
-        0b0000 => 0,
-        0b0001 => 1,
-        0b0010 => 2,
-        0b0011 => 3,
-        0b0100 => 4,
-        0b0101 => 5,
-        0b0110 => 6,
-        0b0111 => 7,
-        0b1000 => 8,
-        0b1001 => 9,
-        0b1010 => 10,
-        0b1011 => 11,
-        0b1100 => 12,
-        0b1101 => 13,
-        0b1110 => 14,
-        0b1111 => 15,
-        _ => {
-            if (h_n > current && h_e > current && h_s < current && h_w < current)
-                || (h_n < current && h_e < current && h_s > current && h_w > current)
-            {
-                16
-            } else if (h_n > current && h_w > current && h_s < current && h_e < current)
-                || (h_n < current && h_w < current && h_s > current && h_e > current)
-            {
-                17
-            } else if h_n < current && h_e < current && h_s < current && h_w < current {
-                18
-            } else {
-                0
-            }
+fn slope_mask_to_index(mask: u8) -> u8 {
+    // OpenRCT2 slope index system:
+    // - Bits 0-3: Corner flags (N/E/S/W raised)
+    // - Bit 4: Diagonal flag (steep slope)
+    //
+    // Without diagonal flag (0-15): Maps directly to index
+    // With diagonal flag (16-31): Different slope types
+    //
+    // The mask already contains the correct bits from our threshold calculation
+
+    const DIAGONAL_FLAG: u8 = 0b0001_0000;
+    const CORNER_MASK: u8 = 0b0000_1111;
+
+    let corners = mask & CORNER_MASK;
+    let is_diagonal = (mask & DIAGONAL_FLAG) != 0;
+
+    if !is_diagonal {
+        // Normal slopes (0-15): Direct mapping
+        corners
+    } else {
+        // Diagonal/steep slopes (16-31)
+        // In OpenRCT2, these have special rendering for double-height corners
+        // The Godot viewer uses indices 16-18 for special cases:
+        // - 16: Diagonal NE-SW
+        // - 17: Diagonal NW-SE
+        // - 18: Peak
+        //
+        // For now, map diagonal flag to index 16/17 based on which corner is down
+        match corners {
+            0b0111 => 16, // W corner down -> NE-SW diagonal
+            0b1011 => 16, // S corner down -> NE-SW diagonal
+            0b1101 => 17, // E corner down -> NW-SE diagonal
+            0b1110 => 17, // N corner down -> NW-SE diagonal
+            _ => corners, // Fallback to normal slope
         }
     }
 }
