@@ -282,75 +282,61 @@ impl Default for BiomeResourceMultipliers {
 impl BiomeResourceMultipliers {
     pub fn for_biome(biome: BiomeType) -> Self {
         match biome {
-            BiomeType::Forest => Self {
-                tree_multiplier: 2.5,   // Increased from 2.0 for denser forests
-                shrub_multiplier: 1.2, // Reduced from 1.5, less undergrowth
-                collectable_multiplier: 2.2, // Increased from 1.8, more mushrooms
-                flower_multiplier: 0.4, // Reduced from 0.5, darker forest floor
-                rock_multiplier: 0.3,
-            },
-            BiomeType::Plains => Self {
-                tree_multiplier: 0.3,   // Reduced from 0.4, more open plains
-                shrub_multiplier: 1.5,  // Increased from 1.2, more shrubs in grasslands
-                collectable_multiplier: 0.8, // Increased from 0.6, some foraging
-                flower_multiplier: 2.0,  // Increased from 1.5, meadow flowers
-                rock_multiplier: 0.5,
-            },
-            BiomeType::Swamp => Self {
-                tree_multiplier: 0.6,   // Reduced from 0.8, fewer trees in swamps
-                shrub_multiplier: 0.8,  // Increased from 0.6, some swamp shrubs
-                collectable_multiplier: 3.0, // Increased from 2.2, excellent mushroom habitat
-                flower_multiplier: 0.2,  // Reduced from 0.3, fewer flowers
-                rock_multiplier: 0.1,
-            },
-            BiomeType::Taiga => Self {
-                tree_multiplier: 1.8,
-                shrub_multiplier: 0.8,
-                collectable_multiplier: 1.2,
-                flower_multiplier: 0.2,
-                rock_multiplier: 0.6,
-            },
-            BiomeType::Rainforest => Self {
-                tree_multiplier: 2.5,
-                shrub_multiplier: 1.8,
-                collectable_multiplier: 2.5, // High biodiversity
-                flower_multiplier: 0.8,
-                rock_multiplier: 0.1,
-            },
-            BiomeType::Desert => Self {
-                tree_multiplier: 0.05,
-                shrub_multiplier: 0.2,
-                collectable_multiplier: 0.1,
-                flower_multiplier: 0.1,
-                rock_multiplier: 1.5,
-            },
-            BiomeType::Mountain => Self {
-                tree_multiplier: 0.2,
-                shrub_multiplier: 0.4,
-                collectable_multiplier: 0.3,
-                flower_multiplier: 0.2,
-                rock_multiplier: 3.0,
-            },
-            BiomeType::Tundra => Self {
-                tree_multiplier: 0.1,
-                shrub_multiplier: 0.3,
-                collectable_multiplier: 0.4,
-                flower_multiplier: 0.3,
-                rock_multiplier: 2.0,
-            },
-            BiomeType::Savanna => Self {
-                tree_multiplier: 0.6,
-                shrub_multiplier: 1.0,
-                collectable_multiplier: 0.8,
-                flower_multiplier: 1.2,
-                rock_multiplier: 0.8,
-            },
-            BiomeType::Ocean => Self {
+            BiomeType::DeepWater => Self {
                 tree_multiplier: 0.0,
                 shrub_multiplier: 0.0,
                 collectable_multiplier: 0.0,
                 flower_multiplier: 0.0,
                 rock_multiplier: 0.5,
+            },
+            BiomeType::ShallowWater => Self {
+                tree_multiplier: 0.0,
+                shrub_multiplier: 0.0,
+                collectable_multiplier: 0.1, // Some aquatic resources
+                flower_multiplier: 0.0,
+                rock_multiplier: 0.3,
+            },
+            BiomeType::RiparianZone => Self {
+                tree_multiplier: 1.5,   // Riverside trees
+                shrub_multiplier: 1.8,  // Dense riverside vegetation
+                collectable_multiplier: 2.5, // Rich in mushrooms and herbs
+                flower_multiplier: 1.2,  // Riverside flowers
+                rock_multiplier: 0.2,
+            },
+            BiomeType::TemperateForest => Self {
+                tree_multiplier: 2.5,   // Dense forest
+                shrub_multiplier: 1.2,  // Moderate undergrowth
+                collectable_multiplier: 2.2, // Good mushroom habitat
+                flower_multiplier: 0.4,  // Shaded forest floor
+                rock_multiplier: 0.3,
+            },
+            BiomeType::Woodland => Self {
+                tree_multiplier: 1.8,   // Moderate tree density
+                shrub_multiplier: 1.4,  // Good shrub coverage
+                collectable_multiplier: 1.5, // Some foraging resources
+                flower_multiplier: 0.8,  // More light than forest
+                rock_multiplier: 0.4,
+            },
+            BiomeType::Grassland => Self {
+                tree_multiplier: 0.3,   // Few trees
+                shrub_multiplier: 1.5,  // Grasses and small shrubs
+                collectable_multiplier: 0.8, // Some foraging
+                flower_multiplier: 2.0,  // Meadow flowers
+                rock_multiplier: 0.5,
+            },
+            BiomeType::ForestEdge => Self {
+                tree_multiplier: 1.2,   // Edge trees
+                shrub_multiplier: 1.6,  // Edge vegetation
+                collectable_multiplier: 1.8, // Good foraging
+                flower_multiplier: 1.5,  // Edge flowers
+                rock_multiplier: 0.3,
+            },
+            BiomeType::RockyOutcrop => Self {
+                tree_multiplier: 0.1,   // Few trees
+                shrub_multiplier: 0.4,  // Some hardy shrubs
+                collectable_multiplier: 0.3, // Limited resources
+                flower_multiplier: 0.2,  // Some alpine flowers
+                rock_multiplier: 3.0,   // Rocky
             },
         }
     }
@@ -808,26 +794,26 @@ mod tests {
 
     #[test]
     fn test_biome_multipliers() {
-        // Test forest biome multipliers
-        let forest_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::Forest);
+        // Test temperate forest biome multipliers
+        let forest_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::TemperateForest);
         assert!(forest_multipliers.tree_multiplier > 1.0);
         assert!(forest_multipliers.collectable_multiplier > 1.0);
         assert!(forest_multipliers.rock_multiplier < 1.0);
 
-        // Test desert biome multipliers
-        let desert_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::Desert);
-        assert!(desert_multipliers.tree_multiplier < 0.1);
-        assert!(desert_multipliers.rock_multiplier > 1.0);
+        // Test grassland biome multipliers
+        let grassland_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::Grassland);
+        assert!(grassland_multipliers.tree_multiplier < 0.5);
+        assert!(grassland_multipliers.flower_multiplier > 1.0);
 
-        // Test swamp biome multipliers
-        let swamp_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::Swamp);
-        assert!(swamp_multipliers.collectable_multiplier > 2.0);
-        assert!(swamp_multipliers.tree_multiplier < 1.0);
+        // Test riparian zone biome multipliers
+        let riparian_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::RiparianZone);
+        assert!(riparian_multipliers.collectable_multiplier > 2.0);
+        assert!(riparian_multipliers.tree_multiplier > 1.0);
 
-        // Test mountain biome multipliers
-        let mountain_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::Mountain);
-        assert!(mountain_multipliers.rock_multiplier > 2.0);
-        assert!(mountain_multipliers.tree_multiplier < 0.5);
+        // Test rocky outcrop biome multipliers
+        let rocky_multipliers = BiomeResourceMultipliers::for_biome(BiomeType::RockyOutcrop);
+        assert!(rocky_multipliers.rock_multiplier > 2.0);
+        assert!(rocky_multipliers.tree_multiplier < 0.5);
     }
 
     #[test]
@@ -835,10 +821,10 @@ mod tests {
         let config = ResourceConfig::default();
         let generator = ResourceGenerator::new(config);
 
-        // Test forest biome
+        // Test temperate forest biome
         let forest_terrain = vec![vec!["Forest".to_string(); 16]; 16];
         let forest_resources = generator.generate_resource_layer_with_biome(
-            &forest_terrain, 0, 0, 12345, BiomeType::Forest
+            &forest_terrain, 0, 0, 12345, BiomeType::TemperateForest
         );
 
         // Should have some resources in forest
@@ -848,26 +834,26 @@ mod tests {
             .count();
         assert!(forest_resource_count > 0);
 
-        // Test swamp biome should have more mushrooms
-        let swamp_terrain = vec![vec!["Swamp".to_string(); 16]; 16];
-        let swamp_resources = generator.generate_resource_layer_with_biome(
-            &swamp_terrain, 0, 0, 12345, BiomeType::Swamp
+        // Test riparian zone should have more mushrooms
+        let riparian_terrain = vec![vec!["Grass".to_string(); 16]; 16];
+        let riparian_resources = generator.generate_resource_layer_with_biome(
+            &riparian_terrain, 0, 0, 12345, BiomeType::RiparianZone
         );
 
-        // Should have some mushroom patches in swamp
-        let has_mushrooms = swamp_resources.iter()
+        // Should have some mushroom patches in riparian zone
+        let has_mushrooms = riparian_resources.iter()
             .flatten()
             .any(|tile| tile == "MushroomPatch");
         assert!(has_mushrooms);
 
-        // Test mountain biome should have more rocks
-        let mountain_terrain = vec![vec!["Mountain".to_string(); 16]; 16];
-        let mountain_resources = generator.generate_resource_layer_with_biome(
-            &mountain_terrain, 0, 0, 12345, BiomeType::Mountain
+        // Test rocky outcrop should have more rocks
+        let rocky_terrain = vec![vec!["Stone".to_string(); 16]; 16];
+        let rocky_resources = generator.generate_resource_layer_with_biome(
+            &rocky_terrain, 0, 0, 12345, BiomeType::RockyOutcrop
         );
 
-        // Should have some rocks in mountain
-        let has_rocks = mountain_resources.iter()
+        // Should have some rocks in rocky outcrop
+        let has_rocks = rocky_resources.iter()
             .flatten()
             .any(|tile| tile == "Rock");
         assert!(has_rocks);
@@ -887,7 +873,7 @@ mod tests {
 
         let grass_terrain = vec![vec!["Grass".to_string(); 16]; 16];
         let resources = generator.generate_resource_layer_with_biome(
-            &grass_terrain, 0, 0, 12345, BiomeType::Plains
+            &grass_terrain, 0, 0, 12345, BiomeType::Grassland
         );
 
         // Count resource types
@@ -923,30 +909,30 @@ mod tests {
         let config = ResourceConfig::default();
         let generator = ResourceGenerator::new(config);
 
-        // Test swamp terrain handling
-        let swamp_terrain = vec![vec!["Swamp".to_string(); 16]; 16];
-        let swamp_resources = generator.generate_resource_layer_with_biome(
-            &swamp_terrain, 0, 0, 12345, BiomeType::Swamp
+        // Test riparian terrain handling
+        let riparian_terrain = vec![vec!["Grass".to_string(); 16]; 16];
+        let riparian_resources = generator.generate_resource_layer_with_biome(
+            &riparian_terrain, 0, 0, 12345, BiomeType::RiparianZone
         );
 
         // Should primarily have mushrooms and berry bushes
-        let has_swamp_resources = swamp_resources.iter()
+        let has_riparian_resources = riparian_resources.iter()
             .flatten()
             .any(|tile| tile == "MushroomPatch" || tile == "BerryBush");
-        assert!(has_swamp_resources);
+        assert!(has_riparian_resources);
 
-        // Test snow terrain handling
-        let snow_terrain = vec![vec!["Snow".to_string(); 16]; 16];
-        let snow_resources = generator.generate_resource_layer_with_biome(
-            &snow_terrain, 0, 0, 12345, BiomeType::Tundra
+        // Test rocky terrain handling
+        let rocky_terrain = vec![vec!["Stone".to_string(); 16]; 16];
+        let rocky_resources = generator.generate_resource_layer_with_biome(
+            &rocky_terrain, 0, 0, 12345, BiomeType::RockyOutcrop
         );
 
-        // Should rarely have wild roots
-        let snow_resource_count = snow_resources.iter()
+        // Should rarely have resources
+        let rocky_resource_count = rocky_resources.iter()
             .flatten()
             .filter(|tile| !tile.is_empty())
             .count();
-        assert!(snow_resource_count <= 2); // Very few resources in snow
+        assert!(rocky_resource_count <= 2); // Very few resources in rocky areas
     }
 
     #[test]

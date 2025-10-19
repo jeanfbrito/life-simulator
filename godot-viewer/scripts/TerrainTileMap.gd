@@ -194,7 +194,8 @@ func paint_terrain_tile(world_pos: Vector2i, terrain_type: String, slope_index: 
 	sprite.position = final_pos
 
 	# Set Z index for Y-sorting based on final Y position
-	sprite.z_index = int(final_pos.y)
+	# Scale down to prevent overflow for large maps (max z-index is around 1 billion)
+	sprite.z_index = int(final_pos.y / 10.0)  # Divide by 10 to keep within limits
 
 	# Debug output for first few tiles - corner-based
 	if tile_sprites.size() <= 10:
@@ -401,3 +402,49 @@ func debug_print_info():
 	print("Tile container children: ", tile_container.get_child_count() if tile_container else 0)
 	print("Y-sorting enabled: ", tile_container.y_sort_enabled if tile_container else false)
 	print("=== End Debug Info ===")
+
+# Paint multiple loaded chunks from cache
+func paint_loaded_chunks(chunk_keys: Array[String]) -> int:
+	print("🎨 Painting ", chunk_keys.size(), " loaded chunks from cache")
+	var chunks_painted = 0
+
+	for chunk_key in chunk_keys:
+		if paint_chunk_from_cache(chunk_key):
+			chunks_painted += 1
+
+	print("✅ Painted ", chunks_painted, "/", chunk_keys.size(), " chunks successfully")
+	return chunks_painted
+
+# Paint a single chunk from WorldDataCache
+func paint_chunk_from_cache(chunk_key: String) -> bool:
+	var terrain_data = WorldDataCache.get_terrain_chunk(chunk_key)
+	if terrain_data.is_empty():
+		print("⚠️ No terrain data for chunk: ", chunk_key)
+		return false
+
+	var chunk_origin = WorldDataCache.chunk_key_to_world_origin(chunk_key)
+	print("🎨 Painting chunk: ", chunk_key, " at origin ", chunk_origin)
+
+	var tiles_painted = 0
+	for local_y in range(16):
+		if local_y >= terrain_data.size():
+			continue
+
+		var row = terrain_data[local_y]
+		if not row is Array:
+			continue
+
+		for local_x in range(16):
+			if local_x >= row.size():
+				continue
+
+			var world_x = chunk_origin.x + local_x
+			var world_y = chunk_origin.y + local_y
+			var terrain_type = row[local_x]
+
+			if terrain_type != null and terrain_type != "":
+				paint_terrain_tile(Vector2i(world_x, world_y), terrain_type)
+				tiles_painted += 1
+
+	print("   Painted ", tiles_painted, " tiles in chunk ", chunk_key)
+	return true

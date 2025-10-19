@@ -68,14 +68,33 @@ func _ready():
 
 	# Start world loading immediately for testing
 	print("🚀 Starting world loading immediately (timer bypassed)")
-	start_world_loading()
+
+	# Check if we have a park file path parameter
+	var park_file_path = get_tree().current_scene.get_meta("park_file_path", "")
+	if park_file_path != "":
+		print("🎢 Loading park file from command line: ", park_file_path)
+		start_world_loading(park_file_path)
+	else:
+		# Try to load the default park file in project root
+		var default_park_file = "res://../good-generated-map.park"
+		if FileAccess.file_exists(default_park_file):
+			print("🎢 Found default park file: ", default_park_file)
+			start_world_loading(default_park_file)
+		else:
+			print("🌐 No park file found, loading from backend API")
+			start_world_loading()
 
 # Start loading the world
-func start_world_loading():
+func start_world_loading(park_file_path: String = ""):
 	print("🚀 Starting world loading...")
 
-	# Load world info first
-	_load_world_info()
+	# Check if park file path is provided
+	if park_file_path != "":
+		print("🎢 Loading from park file: ", park_file_path)
+		_load_from_park_file(park_file_path)
+	else:
+		# Load world info first
+		_load_world_info()
 
 # Load world information from backend
 func _load_world_info():
@@ -99,12 +118,92 @@ func _load_world_info():
 # Handle world info data
 func _on_world_info_loaded(world_info: Dictionary):
 	print("🗺️ World info received: ", world_info.get("name", "Unknown"))
-	
+
 	# If this is a file-based map, we might want to update the UI or camera
 	if world_info.get("source") == "file":
 		print("📂 Loaded from file: ", world_info.get("file_path", "Unknown"))
 		# You could add specific handling for file-based maps here
 		# For example, adjusting camera position based on map size
+
+# Load world data from an OpenRCT2 park file
+func _load_from_park_file(park_file_path: String):
+	print("🎢 Loading world from park file: ", park_file_path)
+
+	# Load the park file into the world cache
+	if WorldDataCache.load_from_park_file(park_file_path):
+		print("✅ Park file loaded successfully")
+
+		# Get the loaded chunks and update the view
+		var loaded_chunks = WorldDataCache.get_cached_chunk_keys()
+		print("🗺️ Loaded chunks: ", loaded_chunks.size(), " chunks")
+
+		if loaded_chunks.size() > 0:
+			# Update current chunk keys to include all loaded chunks
+			current_chunk_keys = loaded_chunks
+
+			# Paint all loaded chunks immediately
+			var chunks_painted = terrain_tilemap.paint_loaded_chunks(loaded_chunks)
+			print("🎨 Painted ", chunks_painted, " chunks immediately")
+
+			# Update resource manager with loaded resources
+			resource_manager.update_from_cache(loaded_chunks)
+
+			# Center camera on the loaded world
+			_center_camera_on_loaded_world()
+
+			world_loaded = true
+			print("✅ Park file loading completed - terrain should be visible")
+		else:
+			print("⚠️ No chunks were loaded from park file")
+	else:
+		print("❌ Failed to load park file")
+
+# Center camera on the loaded world
+func _center_camera_on_loaded_world():
+	print("📹 Centering camera on loaded world...")
+
+	var loaded_chunks = WorldDataCache.get_cached_chunk_keys()
+	if loaded_chunks.size() == 0:
+		print("⚠️ No chunks loaded, keeping camera at default position")
+		return
+
+	# Calculate bounds of loaded world
+	var min_x = INF
+	var max_x = -INF
+	var min_y = INF
+	var max_y = -INF
+
+	for chunk_key in loaded_chunks:
+		var chunk_origin = WorldDataCache.chunk_key_to_world_origin(chunk_key)
+		min_x = min(min_x, chunk_origin.x)
+		max_x = max(max_x, chunk_origin.x + 16)  # Add chunk size
+		min_y = min(min_y, chunk_origin.y)
+		max_y = max(max_y, chunk_origin.y + 16)  # Add chunk size
+
+	# Calculate center of the loaded world
+	var center_x = (min_x + max_x) / 2
+	var center_y = (min_y + max_y) / 2
+	var center_tile = Vector2i(center_x, center_y)
+
+	print("🗺️ World bounds: (", min_x, ",", min_y, ") to (", max_x, ",", max_y, ")")
+	print("🗺️ Centering on tile: ", center_tile)
+
+	# Convert tile coordinates to pixel coordinates for camera
+	var center_pixel = terrain_tilemap.map_to_local(center_tile)
+	camera.position = center_pixel
+
+	# Adjust zoom based on world size
+	var world_width = max_x - min_x
+	var world_height = max_y - min_y
+	var max_dimension = max(world_width, world_height)
+
+	# Calculate appropriate zoom to fit the entire world
+	var desired_view_size = 50  # tiles visible in each direction
+	var zoom_level = float(desired_view_size) / float(max_dimension)
+	zoom_level = clamp(zoom_level, 0.1, 1.0)  # Clamp between 0.1x and 1.0x
+
+	camera.zoom = Vector2(zoom_level, zoom_level)
+	print("📹 Camera positioned at tile ", center_tile, " = pixel ", center_pixel, " with zoom ", zoom_level, "x")
 
 # Load chunks around a specific position
 func _load_chunks_around_position(center_chunk: Vector2i):

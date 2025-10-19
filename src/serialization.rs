@@ -9,12 +9,130 @@ use serde::{Deserialize, Serialize};
 use crate::cached_world::CachedWorld;
 use crate::tilemap::{ChunkCoordinate, WorldConfig, CHUNK_SIZE};
 
+/// Configuration for biome generation and classification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BiomeConfig {
+    /// Temperature range for world generation (0.0 to 1.0)
+    pub temperature_range: (f32, f32),
+    /// Moisture range for world generation (0.0 to 1.0)
+    pub moisture_range: (f32, f32),
+    /// Elevation range for world generation (0.0 to 1.0)
+    pub elevation_range: (f32, f32),
+    /// Biome type mappings and thresholds
+    pub biome_mappings: HashMap<String, BiomeThresholds>,
+}
+
+/// Thresholds for determining biome types based on climate values
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BiomeThresholds {
+    /// Minimum temperature required for this biome
+    pub min_temperature: f32,
+    /// Maximum temperature for this biome
+    pub max_temperature: f32,
+    /// Minimum moisture required for this biome
+    pub min_moisture: f32,
+    /// Maximum moisture for this biome
+    pub max_moisture: f32,
+    /// Minimum elevation for this biome
+    pub min_elevation: f32,
+    /// Maximum elevation for this biome
+    pub max_elevation: f32,
+}
+
+impl Default for BiomeConfig {
+    fn default() -> Self {
+        let mut biome_mappings = HashMap::new();
+
+        // Add PRD biomes with default thresholds
+        biome_mappings.insert("TemperateForest".to_string(), BiomeThresholds {
+            min_temperature: 0.4,
+            max_temperature: 0.7,
+            min_moisture: 0.5,
+            max_moisture: 0.8,
+            min_elevation: 0.2,
+            max_elevation: 0.6,
+        });
+
+        biome_mappings.insert("Woodland".to_string(), BiomeThresholds {
+            min_temperature: 0.3,
+            max_temperature: 0.6,
+            min_moisture: 0.4,
+            max_moisture: 0.7,
+            min_elevation: 0.2,
+            max_elevation: 0.5,
+        });
+
+        biome_mappings.insert("Grassland".to_string(), BiomeThresholds {
+            min_temperature: 0.2,
+            max_temperature: 0.8,
+            min_moisture: 0.2,
+            max_moisture: 0.5,
+            min_elevation: 0.1,
+            max_elevation: 0.4,
+        });
+
+        biome_mappings.insert("ForestEdge".to_string(), BiomeThresholds {
+            min_temperature: 0.3,
+            max_temperature: 0.7,
+            min_moisture: 0.4,
+            max_moisture: 0.6,
+            min_elevation: 0.1,
+            max_elevation: 0.3,
+        });
+
+        biome_mappings.insert("RiparianZone".to_string(), BiomeThresholds {
+            min_temperature: 0.2,
+            max_temperature: 0.8,
+            min_moisture: 0.7,
+            max_moisture: 1.0,
+            min_elevation: 0.0,
+            max_elevation: 0.3,
+        });
+
+        biome_mappings.insert("RockyOutcrop".to_string(), BiomeThresholds {
+            min_temperature: 0.0,
+            max_temperature: 1.0,
+            min_moisture: 0.0,
+            max_moisture: 0.4,
+            min_elevation: 0.6,
+            max_elevation: 1.0,
+        });
+
+        biome_mappings.insert("ShallowWater".to_string(), BiomeThresholds {
+            min_temperature: 0.0,
+            max_temperature: 1.0,
+            min_moisture: 0.8,
+            max_moisture: 1.0,
+            min_elevation: 0.0,
+            max_elevation: 0.2,
+        });
+
+        biome_mappings.insert("DeepWater".to_string(), BiomeThresholds {
+            min_temperature: 0.0,
+            max_temperature: 1.0,
+            min_moisture: 0.9,
+            max_moisture: 1.0,
+            min_elevation: 0.0,
+            max_elevation: 0.1,
+        });
+
+        Self {
+            temperature_range: (0.0, 1.0),
+            moisture_range: (0.0, 1.0),
+            elevation_range: (0.0, 1.0),
+            biome_mappings,
+        }
+    }
+}
+
 /// Serializable world data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedWorld {
     pub name: String,
     pub seed: u64,
     pub config: WorldConfig,
+    pub biome_config: BiomeConfig,
+    pub elevation_map: HashMap<String, f32>,
     pub chunks: HashMap<String, SerializedChunk>,
     pub version: String,
 }
@@ -37,6 +155,33 @@ impl SerializedChunk {
             coordinate,
             layers,
             biome: "Plains".to_string(),
+        }
+    }
+
+    /// Apply migration helpers to ensure all required layers exist with defaults
+    pub fn migrate_legacy_chunk(&mut self) {
+        // Add biome layer if missing (default to Plains)
+        if !self.layers.contains_key("biome") {
+            let biome_layer = vec![vec![self.biome.clone(); 16]; 16];
+            self.layers.insert("biome".to_string(), biome_layer);
+        }
+
+        // Add elevation layer if missing (default to 64)
+        if !self.layers.contains_key("elevation") {
+            let elevation_layer = vec![vec!["64".to_string(); 16]; 16];
+            self.layers.insert("elevation".to_string(), elevation_layer);
+        }
+
+        // Add vegetation_density layer if missing (default to 0.5)
+        if !self.layers.contains_key("vegetation_density") {
+            let vegetation_layer = vec![vec!["0.5".to_string(); 16]; 16];
+            self.layers.insert("vegetation_density".to_string(), vegetation_layer);
+        }
+
+        // Add moisture layer if missing (default to 0.5)
+        if !self.layers.contains_key("moisture") {
+            let moisture_layer = vec![vec!["0.5".to_string(); 16]; 16];
+            self.layers.insert("moisture".to_string(), moisture_layer);
         }
     }
 
@@ -90,11 +235,33 @@ impl WorldSerializer {
         Ok(())
     }
 
-    /// Load world data from RON file
+    /// Load world data from RON file with migration support
     pub fn load_world(path: &str) -> Result<SerializedWorld, Box<dyn std::error::Error>> {
         let ron_string = fs::read_to_string(path)?;
-        let world: SerializedWorld = ron::from_str(&ron_string)?;
+        let mut world: SerializedWorld = ron::from_str(&ron_string)?;
+
+        // Apply migration logic for backward compatibility
+        WorldSerializer::migrate_world(&mut world);
+
         Ok(world)
+    }
+
+    /// Apply migration logic to ensure world data compatibility
+    pub fn migrate_world(world: &mut SerializedWorld) {
+        // If biome_config is missing (old format), add default
+        if world.biome_config.biome_mappings.is_empty() {
+            world.biome_config = BiomeConfig::default();
+        }
+
+        // Apply migration to all chunks
+        for chunk in world.chunks.values_mut() {
+            chunk.migrate_legacy_chunk();
+        }
+
+        // Update version if it's an old format
+        if world.version == "0.1.0" || world.version == "0.2.0" {
+            world.version = "0.3.0".to_string();
+        }
     }
 
     /// Create a serialized world from current state
@@ -114,13 +281,20 @@ impl WorldSerializer {
             })
             .collect();
 
-        SerializedWorld {
+        let mut world = SerializedWorld {
             name,
             seed,
             config,
+            biome_config: BiomeConfig::default(),
+            elevation_map: HashMap::new(),
             chunks: serialized_chunks,
-            version: "0.2.0".to_string(), // Updated version for multi-layer support
-        }
+            version: "0.3.0".to_string(), // Updated version for biome/elevation support
+        };
+
+        // Apply migration to ensure all chunks have required layers
+        WorldSerializer::migrate_world(&mut world);
+
+        world
     }
 
     /// Convert serialized chunks back to HashMap format (terrain layer only for compatibility)
@@ -197,13 +371,20 @@ impl WorldSerializer {
             })
             .collect();
 
-        SerializedWorld {
+        let mut world = SerializedWorld {
             name,
             seed,
             config,
+            biome_config: BiomeConfig::default(),
+            elevation_map: HashMap::new(),
             chunks: serialized_chunks,
-            version: "0.2.0".to_string(),
-        }
+            version: "0.3.0".to_string(),
+        };
+
+        // Apply migration to ensure all chunks have required layers
+        WorldSerializer::migrate_world(&mut world);
+
+        world
     }
 }
 

@@ -3,6 +3,9 @@
 
 extends Node
 
+# Load ParkFileParser for park file support
+const ParkFileParser = preload("res://scripts/ParkFileParser.gd")
+
 signal cache_updated(chunk_key: String)
 signal cache_cleared()
 
@@ -362,6 +365,49 @@ func debug_print_cache():
 	print("Estimated memory usage: ", get_cache_memory_usage(), " bytes")
 	print("Cached chunk keys: ", get_cached_chunk_keys())
 	print("=== End Debug ===")
+
+# Load world data from an OpenRCT2 .park file
+func load_from_park_file(park_file_path: String) -> bool:
+	print("🎢 Loading world data from park file: ", park_file_path)
+
+	# Create park file parser
+	var parser = ParkFileParser.new()
+
+	# Parse the park file
+	if not parser.parse_park_file(park_file_path):
+		print("❌ Failed to parse park file: ", parser.error_message)
+		return false
+
+	# Generate terrain data compatible with existing viewer
+	var terrain_data = parser.generate_terrain_data()
+	print("🗺️ Generated terrain data for ", terrain_data.size(), " chunks")
+
+	# Clear existing cache
+	clear_cache()
+
+	# Store all chunks in the cache
+	var chunks_loaded = 0
+	for chunk_key in terrain_data:
+		var chunk_data = terrain_data[chunk_key]
+
+		# Store terrain data
+		if chunk_data.has("terrain"):
+			store_terrain_chunk(chunk_key, chunk_data.terrain)
+
+		# Store resource data
+		if chunk_data.has("resources"):
+			store_resource_chunk(chunk_key, chunk_data.resources)
+
+		chunks_loaded += 1
+
+	print("✅ Successfully loaded ", chunks_loaded, " chunks from park file")
+	print("   Park file map size: ", parser.map_size.x, "x", parser.map_size.y)
+	print("   Surface elements processed: ", parser.tile_elements.size())
+
+	# Print debug info
+	print("\n" + parser.get_debug_info())
+
+	return true
 
 # Test cache functionality
 func run_self_test():

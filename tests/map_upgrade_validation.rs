@@ -115,18 +115,18 @@ fn test_resource_metadata_coverage() {
 fn test_biome_resource_multipliers() {
     println!("🧪 Task 2: Testing biome resource multipliers...");
 
-    let forest_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::Forest);
-    assert!(forest_multipliers.tree_multiplier > 1.0, "Forest should have increased tree density");
-    assert!(forest_multipliers.collectable_multiplier > 1.0, "Forest should have increased collectable density");
-    assert!(forest_multipliers.rock_multiplier < 1.0, "Forest should have decreased rock density");
+    let forest_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::TemperateForest);
+    assert!(forest_multipliers.tree_multiplier > 1.0, "TemperateForest should have increased tree density");
+    assert!(forest_multipliers.collectable_multiplier > 1.0, "TemperateForest should have increased collectable density");
+    assert!(forest_multipliers.rock_multiplier < 1.0, "TemperateForest should have decreased rock density");
 
-    let swamp_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::Swamp);
-    assert!(swamp_multipliers.collectable_multiplier > 2.0, "Swamp should have high collectable density");
-    assert!(swamp_multipliers.tree_multiplier < 1.0, "Swamp should have decreased tree density");
+    let riparian_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::RiparianZone);
+    assert!(riparian_multipliers.collectable_multiplier > 2.0, "RiparianZone should have high collectable density");
+    assert!(riparian_multipliers.tree_multiplier > 1.0, "RiparianZone should have good tree density");
 
-    let desert_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::Desert);
-    assert!(desert_multipliers.tree_multiplier < 0.1, "Desert should have very low tree density");
-    assert!(desert_multipliers.rock_multiplier > 1.0, "Desert should have increased rock density");
+    let rocky_multipliers = BiomeResourceMultipliers::for_biome(crate::tilemap::biome::BiomeType::RockyOutcrop);
+    assert!(rocky_multipliers.tree_multiplier < 0.5, "RockyOutcrop should have very low tree density");
+    assert!(rocky_multipliers.rock_multiplier > 2.0, "RockyOutcrop should have increased rock density");
 
     println!("✅ Biome resource multipliers are correctly configured");
 }

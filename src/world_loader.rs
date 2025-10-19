@@ -17,6 +17,16 @@ pub struct WorldLoader {
 }
 
 impl WorldLoader {
+    /// Create a WorldLoader from an existing SerializedWorld (for testing)
+    pub fn from_serialized_world(world: SerializedWorld) -> Self {
+        let config = WorldConfig {
+            seed: world.seed,
+            ..WorldConfig::default()
+        };
+
+        Self { world, config }
+    }
+
     /// Load a world from a file
     pub fn load_from_file(file_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         info!("🗺️ Loading world from: {}", file_path);
@@ -228,6 +238,96 @@ impl WorldLoader {
                     .and_then(|row| row.get(local_x))
                     .cloned()
             })
+    }
+
+    /// Get biome at a specific world tile position
+    pub fn get_biome_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+
+        // Get biome layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "biome")
+            .and_then(|biome| {
+                biome
+                    .get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
+
+    /// Get elevation at a specific world tile position
+    pub fn get_elevation_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+
+        // Get elevation layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "elevation")
+            .and_then(|elevation| {
+                elevation
+                    .get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
+
+    /// Get vegetation density at a specific world tile position
+    pub fn get_vegetation_density_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+
+        // Get vegetation_density layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "vegetation_density")
+            .and_then(|vegetation| {
+                vegetation
+                    .get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
+
+    /// Get moisture at a specific world tile position
+    pub fn get_moisture_at(&self, world_x: i32, world_y: i32) -> Option<String> {
+        // Convert world coordinates to chunk coordinates
+        let chunk_x = world_x.div_euclid(16);
+        let chunk_y = world_y.div_euclid(16);
+
+        // Get local tile coordinates within chunk
+        let local_x = world_x.rem_euclid(16) as usize;
+        let local_y = world_y.rem_euclid(16) as usize;
+
+        // Get moisture layer for this chunk
+        self.get_chunk_layer(chunk_x, chunk_y, "moisture")
+            .and_then(|moisture| {
+                moisture
+                    .get(local_y)
+                    .and_then(|row| row.get(local_x))
+                    .cloned()
+            })
+    }
+
+    /// Get the world's biome configuration
+    pub fn get_biome_config(&self) -> &crate::serialization::BiomeConfig {
+        &self.world.biome_config
+    }
+
+    /// Get the world's elevation map
+    pub fn get_elevation_map(&self) -> &std::collections::HashMap<String, f32> {
+        &self.world.elevation_map
     }
 }
 

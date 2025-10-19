@@ -217,6 +217,19 @@ func _create_emoji_label(resource_type: String, config: Dictionary) -> Label:
 
 	return label
 
+# Update resources from cached data for multiple chunks
+func update_from_cache(chunk_keys: Array[String]):
+	print("🌳 Updating resources from cache for ", chunk_keys.size(), " chunks")
+
+	var chunks_updated = 0
+	for chunk_key in chunk_keys:
+		var resource_data = WorldDataCache.get_resource_chunk(chunk_key)
+		if resource_data.size() > 0:
+			paint_resources(chunk_key, resource_data)
+			chunks_updated += 1
+
+	print("✅ Updated resources for ", chunks_updated, " chunks")
+
 # Debug information
 func debug_print_status():
 	print("=== ResourceManager Status ===")
