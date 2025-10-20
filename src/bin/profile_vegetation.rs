@@ -17,10 +17,11 @@ fn main() {
                     let world_x = chunk_x * constants::performance::CHUNK_SIZE as i32 + local_x;
                     let world_y = chunk_y * constants::performance::CHUNK_SIZE as i32 + local_y;
                     let tile = IVec2::new(world_x, world_y);
-                    let veg = grid.get_or_create_cell(tile, 100.0, 1.0);
-                    // Start most tiles partially depleted so the queue has work to do.
-                    if veg.total_biomass > 20.0 {
-                        veg.total_biomass = 20.0;
+                    if let Ok(mut veg) = grid.get_or_create_cell(tile, 100.0, 1.0) {
+                        // Start most tiles partially depleted so the queue has work to do.
+                        if veg.total_biomass > 20.0 {
+                            veg.total_biomass = 20.0;
+                        }
                     }
                 }
             }

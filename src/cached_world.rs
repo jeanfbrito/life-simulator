@@ -22,32 +22,47 @@ static CACHED_WORLD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 impl CachedWorld {
     /// Get global cached world (for web server access)
     pub fn global_get() -> Option<CachedWorld> {
-        let _lock = CACHED_WORLD_LOCK.lock().unwrap();
-        unsafe { CACHED_WORLD.clone() }
+        if let Ok(_lock) = CACHED_WORLD_LOCK.lock() {
+            unsafe { CACHED_WORLD.clone() }
+        } else {
+            error!("Failed to acquire cached world lock for reading");
+            None
+        }
     }
 
     /// Set global cached world (for web server access)
     pub fn global_set(world: CachedWorld) {
-        let _lock = CACHED_WORLD_LOCK.lock().unwrap();
-        unsafe {
-            CACHED_WORLD = Some(world);
+        if let Ok(_lock) = CACHED_WORLD_LOCK.lock() {
+            unsafe {
+                CACHED_WORLD = Some(world);
+            }
+        } else {
+            error!("Failed to acquire cached world lock for writing");
         }
     }
 
     /// Check if global cached world is loaded
     pub fn global_is_loaded() -> bool {
-        let _lock = CACHED_WORLD_LOCK.lock().unwrap();
-        unsafe { CACHED_WORLD.as_ref().map(|w| w.is_loaded).unwrap_or(false) }
+        if let Ok(_lock) = CACHED_WORLD_LOCK.lock() {
+            unsafe { CACHED_WORLD.as_ref().map(|w| w.is_loaded).unwrap_or(false) }
+        } else {
+            error!("Failed to acquire cached world lock for checking loaded status");
+            false
+        }
     }
 
     /// Get terrain layer from global cached world (for backward compatibility)
     pub fn global_get_chunk(chunk_x: i32, chunk_y: i32) -> Option<Vec<Vec<String>>> {
-        let _lock = CACHED_WORLD_LOCK.lock().unwrap();
-        unsafe {
-            CACHED_WORLD
-                .as_ref()
-                .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)))
-                .and_then(|layers| layers.get("terrain").cloned())
+        if let Ok(_lock) = CACHED_WORLD_LOCK.lock() {
+            unsafe {
+                CACHED_WORLD
+                    .as_ref()
+                    .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)))
+                    .and_then(|layers| layers.get("terrain").cloned())
+            }
+        } else {
+            error!("Failed to acquire cached world lock for terrain access");
+            None
         }
     }
 
@@ -56,11 +71,15 @@ impl CachedWorld {
         chunk_x: i32,
         chunk_y: i32,
     ) -> Option<HashMap<String, Vec<Vec<String>>>> {
-        let _lock = CACHED_WORLD_LOCK.lock().unwrap();
-        unsafe {
-            CACHED_WORLD
-                .as_ref()
-                .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)).cloned())
+        if let Ok(_lock) = CACHED_WORLD_LOCK.lock() {
+            unsafe {
+                CACHED_WORLD
+                    .as_ref()
+                    .and_then(|w| w.chunks.get(&(chunk_x, chunk_y)).cloned())
+            }
+        } else {
+            error!("Failed to acquire cached world lock for chunk layers access");
+            None
         }
     }
 

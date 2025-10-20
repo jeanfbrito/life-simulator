@@ -157,7 +157,11 @@ impl WorldGenerator {
 
     pub fn set_seed(&mut self, seed: u64) {
         self.config.seed = seed;
-        *self.rng.write().unwrap() = Pcg64::seed_from_u64(seed);
+        if let Ok(mut rng) = self.rng.write() {
+            *rng = Pcg64::seed_from_u64(seed);
+        } else {
+            error!("Failed to acquire RNG write lock");
+        }
     }
 
     pub fn generate_chunk(&self, coordinate: ChunkCoordinate) -> Chunk {
@@ -202,16 +206,18 @@ impl WorldGenerator {
     fn add_resources_to_chunk(&self, chunk: &mut Chunk) {
         for y in 0..chunk.tiles.len() {
             for x in 0..chunk.tiles[y].len() {
-                if self.rng.write().unwrap().gen::<f32>() < self.config.resource_density {
+                if let Ok(rng) = self.rng.write() {
+                if rng.gen::<f32>() < self.config.resource_density {
                     // Add resource deposits based on terrain type
-                    let terrain = chunk.tiles[y][x];
-                    if self.can_spawn_resource_on_terrain(terrain) {
-                        // In a full implementation, this would add resource entities
-                        // For now, we just mark the terrain as having resource potential
-                        debug!(
-                            "Resource potential at chunk ({}, {}) local ({}, {}) on {:?}",
-                            chunk.coordinate.x, chunk.coordinate.y, x, y, terrain
-                        );
+                        let terrain = chunk.tiles[y][x];
+                        if self.can_spawn_resource_on_terrain(terrain) {
+                            // In a full implementation, this would add resource entities
+                            // For now, we just mark the terrain as having resource potential
+                            debug!(
+                                "Resource potential at chunk ({}, {}) local ({}, {}) on {:?}",
+                                chunk.coordinate.x, chunk.coordinate.y, x, y, terrain
+                            );
+                        }
                     }
                 }
             }
@@ -276,8 +282,15 @@ impl WorldGenerator {
         let max_attempts = 100;
 
         while attempts < max_attempts {
-            let chunk_x = self.rng.write().unwrap().gen_range(min_x..=max_x);
-            let chunk_y = self.rng.write().unwrap().gen_range(min_y..=max_y);
+            let (chunk_x, chunk_y) = if let Ok(rng) = self.rng.write() {
+                (
+                    rng.gen_range(min_x..=max_x),
+                    rng.gen_range(min_y..=max_y)
+                )
+            } else {
+                error!("Failed to acquire RNG write lock for spawn point");
+                return None;
+            };
             let coord = ChunkCoordinate::new(chunk_x, chunk_y);
 
             let chunk = self.generate_chunk(coord);

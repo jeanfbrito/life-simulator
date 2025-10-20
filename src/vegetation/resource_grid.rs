@@ -8,6 +8,7 @@ use rand;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 use crate::resources::{ResourceType, HarvestProfile, RESOURCE_DEFINITIONS};
+use crate::errors::{LifeSimulatorError, Result};
 
 /// Current simulation tick for event timing
 pub type CurrentTick = u64;
@@ -331,7 +332,9 @@ impl VegetationScheduler {
                 break;
             }
 
-            let Reverse(scheduled_event) = self.event_queue.pop().unwrap();
+            // Safe to unwrap here because we just peeked and confirmed it exists
+            let Reverse(scheduled_event) = self.event_queue.pop()
+                .expect("Event queue peek succeeded but pop failed");
             due_events.push(scheduled_event.event);
         }
 
@@ -418,7 +421,7 @@ impl ResourceGrid {
         pos: IVec2,
         max_biomass: f32,
         growth_modifier: f32,
-    ) -> &mut GrazingCell {
+    ) -> Result<&mut GrazingCell> {
         if !self.cells.contains_key(&pos) {
             let initial_biomass = 5.0_f32.min(max_biomass); // INITIAL_BIOMASS from old system
             let cell = GrazingCell::new(
@@ -431,7 +434,11 @@ impl ResourceGrid {
             self.cells.insert(pos, cell);
             self.metrics.active_cells = self.cells.len();
         }
-        self.cells.get_mut(&pos).unwrap()
+        
+        self.cells.get_mut(&pos)
+            .ok_or_else(|| LifeSimulatorError::resource_grid(
+                format!("Failed to get or create cell at position {:?}", pos)
+            ))
     }
 
     /// Get or create a cell with a specific resource type
@@ -451,15 +458,22 @@ impl ResourceGrid {
     /// Apply a resource profile to an existing cell
     pub fn apply_profile(&mut self, pos: IVec2, resource_type: ResourceType) -> bool {
         if let Some(profile) = RESOURCE_DEFINITIONS.get(&resource_type) {
-            let cell = self.get_or_create_cell(
+            match self.get_or_create_cell(
                 pos,
                 profile.biomass_cap,
                 profile.growth_rate_multiplier,
-            );
-            cell.resource_type = Some(resource_type);
-            cell.max_biomass = profile.biomass_cap;
-            cell.growth_rate_modifier = profile.growth_rate_multiplier;
-            true
+            ) {
+                Ok(mut cell) => {
+                    cell.resource_type = Some(resource_type);
+                    cell.max_biomass = profile.biomass_cap;
+                    cell.growth_rate_modifier = profile.growth_rate_multiplier;
+                    true
+                }
+                Err(e) => {
+                    error!("Failed to get or create cell for resource type {:?}: {}", resource_type, e);
+                    false
+                }
+            }
         } else {
             false
         }
@@ -937,12 +951,12 @@ mod tests {
         assert!(grid.get_cell(pos).is_none());
 
         // Create cell
-        let cell = grid.get_or_create_cell(pos, 100.0, 1.0);
+        let cell = grid.get_or_create_cell(pos, 100.0, 1.0).unwrap();
         assert_eq!(cell.total_biomass, 5.0); // INITIAL_BIOMASS
         assert_eq!(grid.cell_count(), 1);
 
         // Get existing cell
-        let existing_cell = grid.get_or_create_cell(pos, 100.0, 1.0);
+        let existing_cell = grid.get_or_create_cell(pos, 100.0, 1.0).unwrap();
         assert_eq!(existing_cell.total_biomass, 5.0); // Same cell
         assert_eq!(grid.cell_count(), 1); // No new cell created
     }
@@ -978,9 +992,15 @@ mod tests {
         let pos2 = IVec2::new(3, 0);
         let pos3 = IVec2::new(1, 1);
 
-        grid.get_or_create_cell(pos1, 100.0, 1.0).total_biomass = 50.0;
-        grid.get_or_create_cell(pos2, 100.0, 1.0).total_biomass = 80.0;
-        grid.get_or_create_cell(pos3, 100.0, 1.0).total_biomass = 30.0;
+        if let Ok(cell) = grid.get_or_create_cell(pos1, 100.0, 1.0) {
+            cell.total_biomass = 50.0;
+        }
+        if let Ok(cell) = grid.get_or_create_cell(pos2, 100.0, 1.0) {
+            cell.total_biomass = 80.0;
+        }
+        if let Ok(cell) = grid.get_or_create_cell(pos3, 100.0, 1.0) {
+            cell.total_biomass = 30.0;
+        }
 
         // Find best cell near origin
         let best = grid.find_best_cell(IVec2::new(0, 0), 5);
@@ -1000,7 +1020,7 @@ mod tests {
         let pos = IVec2::new(5, 10);
 
         // Create cell and schedule event
-        grid.get_or_create_cell(pos, 100.0, 1.0);
+        grid.get_or_create_cell(pos, 100.0, 1.0).unwrap();
         grid.event_scheduler.schedule(GrowthEvent::Regrow {
             location: pos,
             scheduled_tick: 100,
@@ -1054,7 +1074,7 @@ mod tests {
         ];
 
         for pos in positions {
-            grid.get_or_create_cell(pos, 100.0, 1.0);
+            grid.get_or_create_cell(pos, 100.0, 1.0).unwrap();
         }
 
         // Grid should only store the 4 cells we created
@@ -1135,7 +1155,7 @@ mod tests {
         let pos = IVec2::new(5, 10);
 
         // Create a basic cell first
-        let basic_cell = grid.get_or_create_cell(pos, 50.0, 1.0);
+        let basic_cell = grid.get_or_create_cell(pos, 50.0, 1.0).unwrap();
         assert!(basic_cell.resource_type.is_none());
 
         // Apply a resource profile

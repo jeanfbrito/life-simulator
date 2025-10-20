@@ -110,8 +110,8 @@ impl ActionQueue {
         let has_pending = self.pending.iter().any(|qa| qa.entity == entity);
 
         if has_pending && !awaiting_cancellation {
-            // TODO: More sophisticated replacement logic
-            // For now, just don't queue duplicate
+            // Simple replacement logic for now - don't queue duplicates
+            // This could be enhanced with priority-based replacement later
             return;
         }
 

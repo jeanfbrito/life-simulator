@@ -6,6 +6,25 @@ use std::path::Path;
 use super::WorldConfig;
 use crate::serialization::{SerializedWorld, WorldSerializer};
 
+/// Iterator over chunks in a world
+pub struct ChunkIterator<'a> {
+    pub chunk_x: i32,
+    pub chunk_y: i32,
+    pub chunk_data: &'a HashMap<String, Vec<Vec<String>>>,
+}
+
+/// Parse a chunk key "x,y" into coordinates
+fn parse_chunk_key(key: &str) -> (i32, i32) {
+    let parts: Vec<&str> = key.split(',').collect();
+    if parts.len() != 2 {
+        return (0, 0);
+    }
+    
+    let x = parts[0].parse().unwrap_or(0);
+    let y = parts[1].parse().unwrap_or(0);
+    (x, y)
+}
+
 /// World loader for Life Simulator
 ///
 /// Replaces WorldGenerator to only load pre-generated worlds.
@@ -124,6 +143,18 @@ impl WorldLoader {
     ) -> Option<Vec<Vec<String>>> {
         self.get_chunk_layers(chunk_x, chunk_y)
             .and_then(|layers| layers.get(layer_name).cloned())
+    }
+
+    /// Iterate over all chunks in the world
+    pub fn iter_chunks(&self) -> impl Iterator<Item = ChunkIterator> {
+        self.world.chunks.iter().map(|(key, chunk_data)| {
+            let (chunk_x, chunk_y) = parse_chunk_key(key);
+            ChunkIterator {
+                chunk_x,
+                chunk_y,
+                chunk_data,
+            }
+        })
     }
 
     /// Get the world's metadata

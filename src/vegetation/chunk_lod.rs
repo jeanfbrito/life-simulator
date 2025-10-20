@@ -8,6 +8,7 @@
 
 use crate::tilemap::{ChunkCoordinate, CHUNK_SIZE};
 use crate::vegetation::resource_grid::{GrazingCell, ResourceGrid};
+use bevy::log::warn;
 use bevy::prelude::*;
 use std::collections::{HashMap, HashSet};
 
@@ -440,7 +441,9 @@ impl ChunkLODManager {
                             // Create cell with default values based on some criteria
                             // For now, create a small percentage of cells
                             if (dx + dy) % 4 == 0 {
-                                grid.get_or_create_cell(cell_pos, 50.0, 1.0);
+                                if let Err(e) = grid.get_or_create_cell(cell_pos, 50.0, 1.0) {
+                                    warn!("Failed to create vegetation cell at {:?}: {}", cell_pos, e);
+                                }
                             }
                         }
                     }

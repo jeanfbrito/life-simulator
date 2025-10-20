@@ -1446,13 +1446,14 @@ fn setup_vegetation_system(
                             let distance_from_origin = tile.as_vec2().length();
                             if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
                                 let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
-                                resource_grid
+                                if let Ok(mut cell) = resource_grid
                                     .get_or_create_cell(
                                         tile,
                                         100.0 * terrain_multiplier,
                                         terrain_multiplier,
-                                    )
-                                    .total_biomass = initial_biomass;
+                                    ) {
+                                    cell.total_biomass = initial_biomass;
+                                }
                                 initialized_cells += 1;
                             }
                         }
