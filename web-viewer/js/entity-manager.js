@@ -4,6 +4,7 @@
  */
 
 import { CONFIG } from './config.js';
+import { fetchWithTimeout } from './utils/fetch-timeout.js';
 
 export class EntityManager {
     constructor() {
@@ -11,6 +12,15 @@ export class EntityManager {
         this.isPolling = false;
         this.pollInterval = null;
         this.lastUpdateTime = 0;
+        this.previousCount = 0;
+
+        // Circuit breaker properties
+        this.failureCount = 0;
+        this.maxFailures = 5;
+        this.currentInterval = 1000; // Will be set by startPolling
+        this.baseInterval = 1000; // Store base interval for reset
+        this.maxBackoffInterval = 10000; // Max 10 seconds between retries
+        this.circuitOpen = false;
     }
 
     /**
@@ -24,15 +34,15 @@ export class EntityManager {
         }
 
         this.isPolling = true;
+        this.baseInterval = intervalMs;
+        this.currentInterval = intervalMs;
         console.log(`🎯 ENTITY_MANAGER: Starting entity polling every ${intervalMs}ms`);
 
         // Fetch immediately
         this.fetchEntities();
 
-        // Then poll at regular intervals
-        this.pollInterval = setInterval(() => {
-            this.fetchEntities();
-        }, intervalMs);
+        // Schedule next poll with interval that may be backed off
+        this.scheduleNextPoll();
     }
 
     /**
@@ -40,30 +50,36 @@ export class EntityManager {
      */
     stopPolling() {
         if (this.pollInterval) {
-            clearInterval(this.pollInterval);
+            clearTimeout(this.pollInterval);
             this.pollInterval = null;
             this.isPolling = false;
+            this.circuitOpen = false;
+            this.failureCount = 0;
+            this.currentInterval = this.baseInterval;
             console.log('🎯 ENTITY_MANAGER: Stopped entity polling');
         }
     }
 
     /**
-     * Fetch entities from the server
+     * Fetch entities from the server with circuit breaker and exponential backoff
      */
     async fetchEntities() {
         try {
-            const response = await fetch(`${CONFIG.apiBaseUrl}/api/entities`);
-            
+            const response = await fetchWithTimeout(`${CONFIG.apiBaseUrl}/api/entities`, {}, 5000);
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
-            
+
             if (data.entities && Array.isArray(data.entities)) {
                 this.entities = data.entities;
                 this.lastUpdateTime = Date.now();
-                
+
+                // Success - reset failure count and interval
+                this.resetCircuitBreaker();
+
                 // Log entity count for debugging (only if changed)
                 if (this.previousCount !== this.entities.length) {
                     console.log(`🎯 ENTITY_MANAGER: Fetched ${this.entities.length} entities`);
@@ -71,12 +87,101 @@ export class EntityManager {
                 }
             } else {
                 console.warn('🎯 ENTITY_MANAGER: Invalid entity data format', data);
-                this.entities = [];
+                this.handleFetchFailure('Invalid entity data format');
             }
         } catch (error) {
-            console.error('🎯 ENTITY_MANAGER: Failed to fetch entities:', error);
-            // Don't clear entities on error - keep displaying last known state
+            this.handleFetchFailure(error.message);
         }
+    }
+
+    /**
+     * Handle fetch failure with circuit breaker logic
+     * @param {string} errorMessage - Error message to log
+     */
+    handleFetchFailure(errorMessage) {
+        // Don't clear entities on error - keep displaying last known state
+        this.failureCount++;
+
+        console.warn(`🎯 ENTITY_MANAGER: Fetch failed (${this.failureCount}/${this.maxFailures}): ${errorMessage}`);
+
+        // Check circuit breaker threshold
+        if (this.failureCount >= this.maxFailures && !this.circuitOpen) {
+            this.circuitOpen = true;
+            console.error(`🎯 ENTITY_MANAGER: Circuit breaker OPENED after ${this.failureCount} failures`);
+            this.showErrorUI();
+        }
+
+        // Apply exponential backoff if circuit is open
+        if (this.circuitOpen) {
+            this.currentInterval = Math.min(
+                this.currentInterval * 2,
+                this.maxBackoffInterval
+            );
+            console.log(`🎯 ENTITY_MANAGER: Exponential backoff - next retry in ${this.currentInterval}ms`);
+        }
+    }
+
+    /**
+     * Display error UI to user
+     */
+    showErrorUI() {
+        // Try to find the entity list container or stats area
+        const entityStatsElement = document.getElementById('entity-count');
+        const pageTitle = document.querySelector('h1') || document.querySelector('title');
+
+        // Add visual indicator to entity stats if available
+        if (entityStatsElement) {
+            const parent = entityStatsElement.parentElement;
+            if (parent && !parent.querySelector('.connection-error')) {
+                const errorIndicator = document.createElement('div');
+                errorIndicator.className = 'connection-error';
+                errorIndicator.style.cssText = `
+                    margin-top: 0.5rem;
+                    padding: 0.5rem;
+                    background-color: #fee2e2;
+                    border: 1px solid #fecaca;
+                    border-radius: 0.25rem;
+                    color: #dc2626;
+                    font-size: 0.85rem;
+                    text-align: center;
+                `;
+                errorIndicator.innerHTML = `
+                    <strong>⚠️ Connection Issues</strong><br>
+                    <span style="opacity: 0.8;">API unreachable. Retrying with exponential backoff...</span>
+                `;
+                parent.appendChild(errorIndicator);
+            }
+        }
+    }
+
+    /**
+     * Reset circuit breaker on successful request
+     */
+    resetCircuitBreaker() {
+        if (this.circuitOpen || this.failureCount > 0) {
+            console.log(`🎯 ENTITY_MANAGER: Circuit breaker CLOSED - connection restored`);
+            this.circuitOpen = false;
+            this.failureCount = 0;
+            this.currentInterval = this.baseInterval;
+
+            // Remove error indicator if present
+            const errorIndicator = document.querySelector('.connection-error');
+            if (errorIndicator) {
+                errorIndicator.remove();
+            }
+        }
+    }
+
+    /**
+     * Schedule the next poll with current interval (may be backed off)
+     */
+    scheduleNextPoll() {
+        if (!this.isPolling) return;
+
+        this.pollInterval = setTimeout(() => {
+            this.fetchEntities();
+            this.scheduleNextPoll();
+        }, this.currentInterval);
     }
 
     /**
@@ -125,6 +230,16 @@ export class EntityManager {
      */
     isActive() {
         return this.isPolling;
+    }
+
+    /**
+     * Manually reset circuit breaker (e.g., after API comes back online)
+     */
+    manualReset() {
+        console.log('🎯 ENTITY_MANAGER: Manual circuit breaker reset');
+        this.resetCircuitBreaker();
+        // Immediately try to fetch
+        this.fetchEntities();
     }
 
     /**
