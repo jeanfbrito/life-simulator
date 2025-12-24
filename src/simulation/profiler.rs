@@ -169,7 +169,13 @@ impl TickProfiler {
 
     /// Reset timing data for next reporting period
     pub fn reset_period(&mut self) {
-        self.systems.clear();
+        for timing in self.systems.values_mut() {
+            timing.total_duration = Duration::ZERO;
+            timing.call_count = 0;
+            timing.max_duration = Duration::ZERO;
+            timing.min_duration = Duration::MAX;
+            // Keep last_duration for current reporting window
+        }
     }
 
     /// Start a new tick frame
@@ -272,4 +278,141 @@ fn profiler_system(
 /// Run condition for profiler reporting
 fn should_report_profiler(tick: Res<crate::simulation::SimulationTick>) -> bool {
     tick.get() % 50 == 0 // Report every 50 ticks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reset_period_clears_accumulators() {
+        let mut profiler = TickProfiler::new();
+
+        // Add timing data for a system
+        profiler.start_timing("test_system");
+        std::thread::sleep(Duration::from_millis(1));
+        profiler.end_timing("test_system");
+
+        // Verify data was recorded
+        assert!(profiler.systems.contains_key("test_system"));
+        let timing_before = profiler.systems["test_system"].clone();
+        assert!(timing_before.total_duration > Duration::ZERO);
+        assert_eq!(timing_before.call_count, 1);
+
+        // Reset period
+        profiler.reset_period();
+
+        // Verify accumulators are reset but system entry still exists
+        assert!(profiler.systems.contains_key("test_system"), "System entry should still exist after reset");
+        let timing_after = profiler.systems["test_system"].clone();
+        assert_eq!(timing_after.total_duration, Duration::ZERO, "total_duration should be reset to zero");
+        assert_eq!(timing_after.call_count, 0, "call_count should be reset to zero");
+        assert_eq!(timing_after.max_duration, Duration::ZERO, "max_duration should be reset to zero");
+        assert_eq!(timing_after.min_duration, Duration::MAX, "min_duration should be reset to MAX");
+    }
+
+    #[test]
+    fn test_reset_period_preserves_last_duration() {
+        let mut profiler = TickProfiler::new();
+
+        profiler.start_timing("test_system");
+        std::thread::sleep(Duration::from_millis(2));
+        profiler.end_timing("test_system");
+
+        let last_duration = profiler.systems["test_system"].last_duration;
+        assert!(last_duration > Duration::ZERO);
+
+        profiler.reset_period();
+
+        // last_duration should be preserved for current reporting window
+        assert_eq!(
+            profiler.systems["test_system"].last_duration, last_duration,
+            "last_duration should be preserved across reset"
+        );
+    }
+
+    #[test]
+    fn test_reset_period_with_multiple_systems() {
+        let mut profiler = TickProfiler::new();
+
+        // Add timing for multiple systems
+        for i in 0..5 {
+            let system_name = format!("system_{}", i);
+            profiler.start_timing(&system_name);
+            std::thread::sleep(Duration::from_millis(1));
+            profiler.end_timing(&system_name);
+        }
+
+        assert_eq!(profiler.systems.len(), 5);
+
+        // Add more timings to accumulate
+        for i in 0..5 {
+            let system_name = format!("system_{}", i);
+            profiler.start_timing(&system_name);
+            std::thread::sleep(Duration::from_millis(1));
+            profiler.end_timing(&system_name);
+        }
+
+        // Verify all systems have call_count = 2
+        for i in 0..5 {
+            let system_name = format!("system_{}", i);
+            assert_eq!(profiler.systems[&system_name].call_count, 2);
+        }
+
+        // Reset period
+        profiler.reset_period();
+
+        // Verify all systems still exist but are reset
+        assert_eq!(profiler.systems.len(), 5, "All systems should still exist");
+        for i in 0..5 {
+            let system_name = format!("system_{}", i);
+            assert_eq!(profiler.systems[&system_name].total_duration, Duration::ZERO);
+            assert_eq!(profiler.systems[&system_name].call_count, 0);
+        }
+    }
+
+    #[test]
+    fn test_reset_period_prevents_unbounded_accumulation() {
+        let mut profiler = TickProfiler::new();
+
+        // Simulate 1000 calls to add_timing
+        for _ in 0..1000 {
+            profiler.start_timing("intensive_system");
+            std::thread::sleep(Duration::from_micros(100)); // Small sleep
+            profiler.end_timing("intensive_system");
+        }
+
+        let timing_before_reset = profiler.systems["intensive_system"].clone();
+        assert_eq!(timing_before_reset.call_count, 1000);
+        assert!(timing_before_reset.total_duration > Duration::ZERO);
+
+        // Reset the period
+        profiler.reset_period();
+
+        let timing_after_reset = profiler.systems["intensive_system"].clone();
+        assert_eq!(timing_after_reset.call_count, 0, "call_count should be reset to 0");
+        assert_eq!(timing_after_reset.total_duration, Duration::ZERO, "total_duration should be reset to zero");
+    }
+
+    #[test]
+    fn test_system_timing_statistics_after_reset() {
+        let mut profiler = TickProfiler::new();
+
+        // Add some timings
+        for _ in 0..10 {
+            profiler.start_timing("stats_system");
+            std::thread::sleep(Duration::from_millis(1));
+            profiler.end_timing("stats_system");
+        }
+
+        let avg_before = profiler.systems["stats_system"].average_duration();
+        assert!(avg_before > Duration::ZERO);
+
+        // Reset
+        profiler.reset_period();
+
+        let timing_after = &profiler.systems["stats_system"];
+        assert_eq!(timing_after.call_count, 0);
+        assert_eq!(timing_after.average_duration(), Duration::ZERO, "average should be zero when call_count is zero");
+    }
 }

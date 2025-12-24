@@ -668,4 +668,127 @@ mod tests {
         assert!(alerts.iter().any(|a| a.alert_type == HealthAlert::PopulationCrash));
     }
 
+    // TDD Tests for cleanup_old_states fix - prevent clearing all entities
+    #[test]
+    fn test_cleanup_removes_dead_entities_only() {
+        let mut checker = HealthChecker::default();
+
+        // Create 10 entities in the state map
+        for id in 1..=10 {
+            checker.update_entity_position(id, (10, 20), 10);
+        }
+
+        assert_eq!(checker.entity_states.len(), 10);
+
+        // Cleanup: keep entities 1-7 alive, remove 8-10
+        let alive_entities = std::collections::HashSet::from([1, 2, 3, 4, 5, 6, 7]);
+        checker.cleanup_old_states(|id| alive_entities.contains(&id));
+
+        // Should have exactly 7 entities remaining
+        assert_eq!(checker.entity_states.len(), 7);
+
+        // Verify correct entities remain
+        for id in 1..=7 {
+            assert!(checker.entity_states.contains_key(&id), "Entity {} should be retained", id);
+        }
+
+        // Verify dead entities are removed
+        for id in 8..=10 {
+            assert!(!checker.entity_states.contains_key(&id), "Entity {} should be removed", id);
+        }
+    }
+
+    #[test]
+    fn test_cleanup_preserves_all_entities_if_all_alive() {
+        let mut checker = HealthChecker::default();
+
+        // Create 5 entities
+        for id in 1..=5 {
+            checker.update_entity_position(id, (10, 20), 10);
+        }
+
+        assert_eq!(checker.entity_states.len(), 5);
+
+        // Cleanup: all entities are alive
+        let alive_entities = std::collections::HashSet::from([1, 2, 3, 4, 5]);
+        checker.cleanup_old_states(|id| alive_entities.contains(&id));
+
+        // All entities should remain
+        assert_eq!(checker.entity_states.len(), 5);
+        for id in 1..=5 {
+            assert!(checker.entity_states.contains_key(&id));
+        }
+    }
+
+    #[test]
+    fn test_cleanup_removes_all_dead_entities() {
+        let mut checker = HealthChecker::default();
+
+        // Create 5 entities
+        for id in 1..=5 {
+            checker.update_entity_position(id, (10, 20), 10);
+        }
+
+        assert_eq!(checker.entity_states.len(), 5);
+
+        // Cleanup: no entities are alive (all dead)
+        let alive_entities: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        checker.cleanup_old_states(|id| alive_entities.contains(&id));
+
+        // All entities should be removed
+        assert_eq!(checker.entity_states.len(), 0);
+    }
+
+    #[test]
+    fn test_cleanup_preserves_action_state_for_alive_entities() {
+        let mut checker = HealthChecker::default();
+
+        // Create entities with action states
+        checker.update_entity_action(1, "Attack".to_string());
+        for _ in 0..14 {
+            checker.update_entity_action(1, "Attack".to_string());
+        }
+
+        checker.update_entity_action(2, "Move".to_string());
+
+        assert_eq!(checker.entity_states.len(), 2);
+        assert_eq!(checker.entity_states.get(&1).unwrap().action_repeat_count, 15);
+        assert_eq!(checker.entity_states.get(&2).unwrap().current_action, "Move");
+
+        // Cleanup: keep entity 1 alive
+        let alive_entities = std::collections::HashSet::from([1]);
+        checker.cleanup_old_states(|id| alive_entities.contains(&id));
+
+        // Entity 1 should remain with its state intact
+        assert_eq!(checker.entity_states.len(), 1);
+        assert_eq!(checker.entity_states.get(&1).unwrap().action_repeat_count, 15);
+        assert_eq!(checker.entity_states.get(&1).unwrap().current_action, "Attack");
+
+        // Entity 2 should be removed
+        assert!(!checker.entity_states.contains_key(&2));
+    }
+
+    #[test]
+    fn test_cleanup_preserves_position_state_for_alive_entities() {
+        let mut checker = HealthChecker::default();
+
+        // Create 3 entities
+        for id in 1..=3 {
+            checker.update_entity_position(id, (10, 20), 10);
+        }
+
+        // Store original positions before cleanup
+        let original_pos_1 = checker.entity_states.get(&1).unwrap().last_position;
+        let original_pos_2 = checker.entity_states.get(&2).unwrap().last_position;
+
+        // Cleanup with predicate that keeps entities 1 and 2
+        let alive_entities = std::collections::HashSet::from([1, 2]);
+        checker.cleanup_old_states(|id| alive_entities.contains(&id));
+
+        // Verify positions are preserved (not cleared)
+        assert_eq!(checker.entity_states.get(&1).unwrap().last_position, original_pos_1);
+        assert_eq!(checker.entity_states.get(&2).unwrap().last_position, original_pos_2);
+        assert!(!checker.entity_states.contains_key(&3));
+    }
+
 }
