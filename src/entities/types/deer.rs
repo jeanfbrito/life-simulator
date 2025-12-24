@@ -4,11 +4,12 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
-use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams, maybe_add_flee_action};
 use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types;
+use crate::entities::entity_types::{Bear, Fox, Wolf};
 use crate::entities::reproduction::{
     birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
     ReproductionCooldown, Sex, WellFedStreak,
@@ -53,7 +54,7 @@ impl DeerBehavior {
             (5, 15), // graze_range
             150,     // water_search_radius
             150,     // food_search_radius
-            40,      // wander_radius
+            50,      // wander_radius (Phase 3: aligned with mating search)
         )
     }
 
@@ -67,7 +68,7 @@ impl DeerBehavior {
             hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)), // slower hunger gain
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.02)), // much slower thirst gain
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.04)),         // slower energy drain
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),          // same regen for now
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),          // Phase 3: 50% faster regen
         }
     }
 
@@ -133,12 +134,16 @@ pub fn plan_deer_actions(
         With<Deer>,
     >,
     deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
+    predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
     world_loader: Res<WorldLoader>,
     vegetation_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
     let loader = world_loader.as_ref();
+
+    // Collect predator positions once for all deer
+    let predator_pos_list: Vec<IVec2> = predator_positions.iter().map(|pos| pos.tile).collect();
 
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_deer_actions");
 
@@ -148,7 +153,7 @@ pub fn plan_deer_actions(
         &deer,
         &deer_positions,
         |_, position, thirst, hunger, energy, behavior, fear_state| {
-            DeerBehavior::evaluate_actions(
+            let mut actions = DeerBehavior::evaluate_actions(
                 position,
                 thirst,
                 hunger,
@@ -157,7 +162,18 @@ pub fn plan_deer_actions(
                 loader,
                 &vegetation_grid,
                 fear_state,
-            )
+            );
+
+            // Add flee action if afraid of predators (Phase 3: Explicit Flee Behavior)
+            maybe_add_flee_action(
+                &mut actions,
+                position,
+                fear_state,
+                &predator_pos_list,
+                loader,
+            );
+
+            actions
         },
         Some(MateActionParams {
             utility: 0.45,

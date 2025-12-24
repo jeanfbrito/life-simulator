@@ -4,11 +4,12 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
-use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams, maybe_add_flee_action};
 use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types;
+use crate::entities::entity_types::{Bear, Fox, Wolf};
 use crate::entities::reproduction::{
     birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
     ReproductionCooldown, Sex, WellFedStreak,
@@ -51,7 +52,7 @@ impl RabbitBehavior {
     /// - Light sleepers: Rest when energy drops below 30%
     /// - Short-range grazers: Prefer to stay close (3-8 tiles) when eating
     /// - Moderate search radius: 100 tiles for resources
-    /// - Small territory: 15 tile wander radius
+    /// - Moderate territory: 25 tile wander radius (Phase 3: aligned with mating search)
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(
             0.75,   // thirst_threshold: Drink when >= 75% thirsty
@@ -60,7 +61,7 @@ impl RabbitBehavior {
             (3, 8), // graze_range: Short-range grazing (3-8 tiles)
             100,    // water_search_radius: Wide water search
             100,    // food_search_radius: Wide food search
-            15,     // wander_radius: Small territory
+            25,     // wander_radius: Moderate territory (Phase 3: aligned with mating search)
         )
     }
 
@@ -74,7 +75,7 @@ impl RabbitBehavior {
             hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // moderate hunger gain
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)), // slower thirst gain to avoid spam-drinking
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)), // reduced energy drain to improve movement viability
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),  // same regen for now
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),  // Phase 3: 50% faster regen
         }
     }
 
@@ -140,12 +141,16 @@ pub fn plan_rabbit_actions(
         With<Rabbit>,
     >,
     rabbit_positions: Query<(Entity, &TilePosition), With<Rabbit>>,
+    predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
     world_loader: Res<WorldLoader>,
     vegetation_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
     let loader = world_loader.as_ref();
+
+    // Collect predator positions once for all rabbits
+    let predator_pos_list: Vec<IVec2> = predator_positions.iter().map(|pos| pos.tile).collect();
 
     let _timer =
         crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_rabbit_actions");
@@ -156,7 +161,7 @@ pub fn plan_rabbit_actions(
         &rabbits,
         &rabbit_positions,
         |_, position, thirst, hunger, energy, behavior, fear_state| {
-            RabbitBehavior::evaluate_actions(
+            let mut actions = RabbitBehavior::evaluate_actions(
                 position,
                 thirst,
                 hunger,
@@ -165,7 +170,18 @@ pub fn plan_rabbit_actions(
                 loader,
                 &vegetation_grid,
                 fear_state,
-            )
+            );
+
+            // Add flee action if afraid of predators (Phase 3: Explicit Flee Behavior)
+            maybe_add_flee_action(
+                &mut actions,
+                position,
+                fear_state,
+                &predator_pos_list,
+                loader,
+            );
+
+            actions
         },
         Some(MateActionParams {
             utility: 0.45,

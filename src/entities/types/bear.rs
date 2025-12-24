@@ -73,7 +73,7 @@ impl BearBehavior {
             hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
-            health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),
+            health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
         }
     }
 

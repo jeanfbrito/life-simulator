@@ -14,7 +14,7 @@ use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;
 use bevy::prelude::*;
 
-const BEAR_FAWN_RADIUS: f32 = 20.0;
+const BEAR_FAWN_RADIUS: f32 = 40.0;
 // Foxes roam widely and can track rabbits over large territories; use an expansive
 // hunt radius so they stop starving when prey wanders just outside their idle loop.
 const FOX_HUNT_RADIUS: f32 = 120.0;

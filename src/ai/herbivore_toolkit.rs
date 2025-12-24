@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::ai::action::ActionType;
 use crate::ai::behaviors::{
-    evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_follow_behavior,
-    evaluate_grazing_behavior, evaluate_resting_behavior,
+    evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
+    evaluate_follow_behavior, evaluate_grazing_behavior, evaluate_resting_behavior,
     eating::HerbivoreDiet,
 };
 use crate::ai::planner::UtilityScore;
@@ -211,4 +211,68 @@ pub fn maybe_add_mate_action(
     } else {
         false
     }
+}
+
+/// Add a flee action if the entity is fearful and predators are nearby.
+///
+/// This function integrates the flee behavior from Phase 3 of the predator-prey system.
+/// Returns true if a flee action was added.
+///
+/// # Parameters
+/// - `actions`: Action list to potentially add flee action to
+/// - `position`: Current position of the prey entity
+/// - `fear_state`: Fear state (contains fear level and predator detection)
+/// - `predator_positions`: List of nearby predator positions
+/// - `world_loader`: World terrain data for pathfinding
+///
+/// # Returns
+/// - `true` if flee action was added
+/// - `false` if not fearful or no valid escape route
+pub fn maybe_add_flee_action(
+    actions: &mut Vec<UtilityScore>,
+    position: &TilePosition,
+    fear_state: Option<&FearState>,
+    predator_positions: &[IVec2],
+    world_loader: &WorldLoader,
+) -> bool {
+    // Only flee if fear state exists and indicates fear
+    let Some(fear) = fear_state else {
+        return false;
+    };
+
+    // Check if fear level is high enough to trigger fleeing
+    if !fear.is_fearful() {
+        return false;
+    }
+
+    // Find nearest predator to flee from
+    let nearest_predator = find_nearest_predator(position.tile, predator_positions);
+    let Some(predator_pos) = nearest_predator else {
+        return false;
+    };
+
+    // Evaluate flee behavior
+    if let Some(flee_action) =
+        evaluate_fleeing_behavior(position, fear, predator_pos, world_loader)
+    {
+        debug!(
+            "😱 Flee action added: utility {:.2}, priority {}, fear level {:.2}",
+            flee_action.utility, flee_action.priority, fear.fear_level
+        );
+        actions.push(flee_action);
+        true
+    } else {
+        false
+    }
+}
+
+/// Find the nearest predator position to flee from
+fn find_nearest_predator(prey_pos: IVec2, predator_positions: &[IVec2]) -> Option<IVec2> {
+    predator_positions
+        .iter()
+        .min_by_key(|&&pred_pos| {
+            let diff = prey_pos - pred_pos;
+            diff.x.abs() + diff.y.abs() // Manhattan distance for faster computation
+        })
+        .copied()
 }

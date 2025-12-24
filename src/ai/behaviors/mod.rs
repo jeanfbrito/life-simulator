@@ -1,5 +1,6 @@
 pub mod drinking;
 pub mod eating;
+pub mod fleeing;
 pub mod follow;
 /// Behaviors Module - Reusable AI behaviors for different entity types
 ///
@@ -29,9 +30,13 @@ pub mod follow;
 /// - Rests in place to regenerate energy
 /// - Priority scales with tiredness
 ///
+/// ### Fleeing (prey)
+/// - Rabbits, Deer, Sheep, Horses fleeing from predators
+/// - High priority escape behavior
+/// - Triggered by fear from predator proximity
+///
 /// ## Future Behaviors:
 /// - Hunting (carnivores) - Wolves, Bears seeking prey
-/// - Fleeing (prey) - Rabbits fleeing from predators  
 /// - Socializing (pack animals) - Wolves, Deer grouping behavior
 /// - Breeding (all) - Reproduction when healthy
 /// - Hoarding (some) - Squirrels collecting food
@@ -40,6 +45,7 @@ pub mod resting;
 
 pub use drinking::evaluate_drinking_behavior;
 pub use eating::evaluate_eating_behavior;
+pub use fleeing::evaluate_fleeing_behavior;
 pub use follow::evaluate_follow_behavior;
 pub use grazing::evaluate_grazing_behavior;
 pub use resting::evaluate_resting_behavior;
