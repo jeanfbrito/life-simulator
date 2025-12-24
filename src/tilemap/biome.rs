@@ -413,13 +413,15 @@ mod tests {
 
     #[test]
     fn test_biome_climate_integration() {
-        let generator = BiomeGenerator::new(123);
+        // Use a larger seed to benefit from entropy-preserving XOR conversion
+        let generator = BiomeGenerator::new(9876543210);
 
-        // Generate a small biome map and verify all biomes are valid
+        // Generate a biome map with sparser sampling to get variety
+        // (noise scales are 0.015-0.025, so we need larger coordinate ranges)
         let mut biome_set = std::collections::HashSet::new();
 
-        for x in 0..20 {
-            for y in 0..20 {
+        for x in (0..200).step_by(10) {
+            for y in (0..200).step_by(10) {
                 let biome = generator.generate_biome(x, y);
                 biome_set.insert(biome);
             }

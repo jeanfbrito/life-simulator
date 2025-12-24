@@ -1165,6 +1165,7 @@ mod tests {
         // Check that the cell now has the resource type
         let updated_cell = grid.get_cell(pos).unwrap();
         assert_eq!(updated_cell.resource_type, Some(ResourceType::HazelShrub));
-        assert!(updated_cell.max_biomass > 50.0); // Should be updated to profile value
+        // HazelShrub has biomass_cap of 30.0, so max_biomass should be updated to that value
+        assert_eq!(updated_cell.max_biomass, 30.0); // Should be updated to profile value (30.0)
     }
 }
