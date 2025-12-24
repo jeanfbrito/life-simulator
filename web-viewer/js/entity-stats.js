@@ -13,6 +13,13 @@ export class EntityStatsManager {
         this.nextOrderIndex = 0;
     }
 
+    // Sanitize HTML to prevent XSS attacks
+    sanitizeHTML(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
     start() {
         if (this.isRunning) return;
         this.isRunning = true;
@@ -69,11 +76,12 @@ export class EntityStatsManager {
     renderEntityCard(entity) {
         const emoji = this.getEntityEmoji(entity.entity_type);
         const actionLabel = entity.current_action ? this.renderCurrentAction(entity.current_action) : '';
-        
+        const safeName = this.sanitizeHTML(entity.name); // Sanitize entity name to prevent XSS
+
         return `
             <div class="entity-card">
                 <div class="entity-header">
-                    <div class="entity-name">${entity.name} ${this.renderSex(entity)}</div>
+                    <div class="entity-name">${safeName} ${this.renderSex(entity)}</div>
                     <div class="entity-type">${emoji}</div>
                 </div>
                 ${actionLabel}
@@ -83,9 +91,10 @@ export class EntityStatsManager {
     }
 
     renderCurrentAction(action) {
+        const safeAction = this.sanitizeHTML(action); // Sanitize action to prevent XSS
         return `
             <div class="entity-action">
-                <span class="action-label">Action:</span> <span class="action-value">${action}</span>
+                <span class="action-label">Action:</span> <span class="action-value">${safeAction}</span>
             </div>
         `;
     }

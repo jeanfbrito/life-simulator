@@ -118,9 +118,79 @@ class LifeSimulatorApp {
         this.chunkManager.updateChunkCount(this.worldData.worldStats);
     }
 
+    /**
+     * Check for required browser features and provide fallbacks
+     */
+    checkBrowserFeatures() {
+        // Check Canvas support
+        const canvas = document.createElement('canvas');
+        if (!canvas.getContext || !canvas.getContext('2d')) {
+            this.showFatalError('Canvas', 'Your browser does not support HTML5 Canvas. Please use a modern browser like Chrome, Firefox, or Edge.');
+            return false;
+        }
+
+        // Check for backdrop-filter support
+        if (!CSS.supports('backdrop-filter', 'blur(10px)')) {
+            console.warn('backdrop-filter not supported, using opaque backgrounds');
+            // Apply fallback styles
+            document.querySelectorAll('.sidebar, header').forEach(el => {
+                el.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+                el.style.backdropFilter = 'none';
+            });
+        }
+
+        // Check for ES6+ features
+        try {
+            eval('const x = () => {}; let y = {...{}}');
+        } catch (e) {
+            this.showFatalError('JavaScript', 'Your browser does not support modern JavaScript. Please update your browser.');
+            return false;
+        }
+
+        console.log('✓ Browser feature checks passed');
+        return true;
+    }
+
+    /**
+     * Show fatal error overlay
+     */
+    showFatalError(feature, message) {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            font-family: system-ui, sans-serif;
+        `;
+
+        overlay.innerHTML = `
+            <div style="text-align: center; max-width: 500px; padding: 2rem;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">⚠️</div>
+                <h2 style="margin-bottom: 1rem; color: #f87171;">Unsupported Browser</h2>
+                <p style="margin-bottom: 1rem; line-height: 1.6;">${message}</p>
+                <p style="opacity: 0.7; font-size: 0.9rem;">Feature missing: ${feature}</p>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+    }
+
     async initialize() {
         try {
             console.log('🚀 APP: Initializing viewer...');
+
+            // Feature detection
+            if (!this.checkBrowserFeatures()) {
+                return; // Stop initialization if critical features missing
+            }
 
             // Setup initial canvas size
             this.renderer.setupCanvasSize(this.controls.getDragOffset());

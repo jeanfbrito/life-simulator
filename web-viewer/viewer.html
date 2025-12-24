@@ -270,9 +270,277 @@
         .stat-thirst .stat-bar-fill { background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 100%); }
         .stat-energy .stat-bar-fill { background: linear-gradient(90deg, #10b981 0%, #22c55e 100%); }
         .stat-health .stat-bar-fill { background: linear-gradient(90deg, #ef4444 0%, #22c55e 100%); }
+
+        /* Help Overlay Styles */
+        .help-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .help-overlay.hidden {
+            display: none;
+        }
+
+        .help-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid rgba(74, 144, 226, 0.3);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease-out;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .help-content h3 {
+            margin: 0 0 1.5rem 0;
+            color: #4a90e2;
+            font-size: 1.8rem;
+            text-align: center;
+        }
+
+        .help-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .help-section h4 {
+            margin: 0 0 0.5rem 0;
+            color: #60a5fa;
+            font-size: 1.2rem;
+        }
+
+        .help-section ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .help-section li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .help-section li:last-child {
+            border-bottom: none;
+        }
+
+        .help-section strong {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+
+        .help-dismiss-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 1rem;
+        }
+
+        .help-dismiss-btn:hover {
+            background: linear-gradient(135deg, #357abd 0%, #2563eb 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
+        }
+
+        .help-tip {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            text-align: center;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ===== RESPONSIVE DESIGN ===== */
+
+        /* Tablet (1024px and below) */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 250px; /* Narrower sidebars */
+            }
+
+            h1 {
+                font-size: 1.2rem;
+            }
+
+            .status-item {
+                font-size: 0.8rem;
+                padding: 0.4rem 0.8rem;
+            }
+        }
+
+        /* Mobile Landscape (768px and below) */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                gap: 0.5rem;
+                padding: 0.75rem;
+            }
+
+            .status {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .sidebar {
+                position: fixed;
+                top: 0;
+                bottom: 0;
+                width: 280px;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 100;
+                box-shadow: 4px 0 12px rgba(0, 0, 0, 0.5);
+            }
+
+            .sidebar.right {
+                transform: translateX(100%);
+                right: 0;
+                box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
+            }
+
+            .sidebar.active {
+                transform: translateX(0);
+            }
+
+            .map-container {
+                width: 100%;
+            }
+
+            /* Add toggle buttons */
+            .sidebar-toggle {
+                position: fixed;
+                top: 50%;
+                transform: translateY(-50%);
+                background: rgba(74, 144, 226, 0.9);
+                border: none;
+                padding: 1rem 0.5rem;
+                border-radius: 0 8px 8px 0;
+                color: white;
+                font-size: 1.5rem;
+                cursor: pointer;
+                z-index: 99;
+                transition: all 0.2s ease;
+            }
+
+            .sidebar-toggle:hover {
+                background: rgba(74, 144, 226, 1);
+                padding-right: 0.75rem;
+            }
+
+            .sidebar-toggle.left {
+                left: 0;
+            }
+
+            .sidebar-toggle.right {
+                right: 0;
+                border-radius: 8px 0 0 8px;
+            }
+
+            .help-content {
+                max-width: 90%;
+                max-height: 80vh;
+                overflow-y: auto;
+            }
+        }
+
+        /* Mobile Portrait (480px and below) */
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1rem;
+            }
+
+            .status-item {
+                font-size: 0.75rem;
+                padding: 0.3rem 0.6rem;
+            }
+
+            canvas {
+                border-radius: 0;
+                border-width: 1px;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .controls button {
+                padding: 0.6rem 1rem;
+                font-size: 0.9rem;
+            }
+
+            .legend-item {
+                font-size: 0.85rem;
+            }
+
+            .entity-card {
+                padding: 0.75rem;
+            }
+        }
+
+        /* Touch-friendly enhancements */
+        @media (hover: none) and (pointer: coarse) {
+            /* Larger touch targets */
+            button {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            .controls button {
+                padding: 0.75rem 1.25rem;
+            }
+
+            /* Disable hover effects on touch */
+            button:hover {
+                transform: none;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Mobile sidebar toggles -->
+    <button class="sidebar-toggle left" id="toggle-left-sidebar" aria-label="Toggle world info">
+        📊
+    </button>
+    <button class="sidebar-toggle right" id="toggle-right-sidebar" aria-label="Toggle entity stats">
+        📈
+    </button>
+
     <header>
         <h1>🗺️ Life Simulator Map Viewer</h1>
         <div class="status">
@@ -442,6 +710,42 @@
         </div>
     </div>
 
+    <!-- Help Overlay -->
+    <div id="help-overlay" class="help-overlay">
+        <div class="help-content">
+            <h3>Game Controls</h3>
+            <div class="help-section">
+                <h4>Mouse Controls</h4>
+                <ul>
+                    <li><strong>Middle-click + drag</strong> - Pan the map</li>
+                    <li><strong>Hover</strong> - Show tile information</li>
+                    <li><strong>Zoom buttons</strong> - Zoom in/out</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4>Keyboard Shortcuts</h4>
+                <ul>
+                    <li><strong>Arrow keys / WASD</strong> - Pan the map</li>
+                    <li><strong>+ / -</strong> - Zoom in/out</li>
+                    <li><strong>R</strong> - Reset view</li>
+                    <li><strong>H</strong> - Show/hide help</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4>Features</h4>
+                <ul>
+                    <li><strong>Entity stats</strong> - Right sidebar shows live entity data</li>
+                    <li><strong>Grass density</strong> - Toggle vegetation overlay</li>
+                    <li><strong>Terrain legend</strong> - Left sidebar shows color guide</li>
+                </ul>
+            </div>
+            <button id="dismiss-help" class="help-dismiss-btn">Got it!</button>
+            <div class="help-tip">
+                Press 'H' anytime to show help again
+            </div>
+        </div>
+    </div>
+
     <!-- Modular JavaScript components -->
     <script type="module" src="js/config.js"></script>
     <script type="module" src="js/renderer.js"></script>
@@ -450,5 +754,81 @@
     <script type="module" src="js/controls.js"></script>
     <script type="module" src="js/entity-stats.js"></script>
     <script type="module" src="js/app.js"></script>
+
+    <!-- Help Overlay Script -->
+    <script>
+        // Help overlay logic
+        const helpOverlay = document.getElementById('help-overlay');
+        const dismissHelpBtn = document.getElementById('dismiss-help');
+
+        // Check if user has seen help before
+        const hasSeenHelp = localStorage.getItem('lifeSimViewerHelpSeen');
+
+        // Show help on first visit
+        if (!hasSeenHelp) {
+            helpOverlay.classList.remove('hidden');
+        } else {
+            helpOverlay.classList.add('hidden');
+        }
+
+        // Dismiss help and remember
+        dismissHelpBtn.addEventListener('click', () => {
+            helpOverlay.classList.add('hidden');
+            localStorage.setItem('lifeSimViewerHelpSeen', 'true');
+        });
+
+        // Press 'H' to show help again
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'h' || e.key === 'H') {
+                helpOverlay.classList.toggle('hidden');
+            }
+        });
+    </script>
+
+    <!-- Mobile Sidebar Toggle Script -->
+    <script>
+        // Mobile sidebar toggles
+        const leftToggle = document.getElementById('toggle-left-sidebar');
+        const rightToggle = document.getElementById('toggle-right-sidebar');
+        const leftSidebar = document.querySelector('.sidebar:not(.right)');
+        const rightSidebar = document.querySelector('.sidebar.right');
+
+        // Only show toggles on mobile
+        function updateToggleVisibility() {
+            const isMobile = window.innerWidth <= 768;
+            if (leftToggle && rightToggle) {
+                leftToggle.style.display = isMobile ? 'block' : 'none';
+                rightToggle.style.display = isMobile ? 'block' : 'none';
+            }
+        }
+
+        leftToggle?.addEventListener('click', () => {
+            leftSidebar?.classList.toggle('active');
+            // Close right sidebar when opening left
+            if (leftSidebar?.classList.contains('active')) {
+                rightSidebar?.classList.remove('active');
+            }
+        });
+
+        rightToggle?.addEventListener('click', () => {
+            rightSidebar?.classList.toggle('active');
+            // Close left sidebar when opening right
+            if (rightSidebar?.classList.contains('active')) {
+                leftSidebar?.classList.remove('active');
+            }
+        });
+
+        // Close sidebars when clicking on map
+        document.querySelector('.map-container')?.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                leftSidebar?.classList.remove('active');
+                rightSidebar?.classList.remove('active');
+            }
+        });
+
+        // Update on resize
+        window.addEventListener('resize', updateToggleVisibility);
+        updateToggleVisibility();
+    </script>
 </body>
 </html>

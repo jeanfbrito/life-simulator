@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feature Detection Test</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            padding: 2rem;
+            margin: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .test-result {
+            background: #2a2a2a;
+            border-left: 4px solid #4ade80;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+        .test-result.pass {
+            border-left-color: #4ade80;
+        }
+        .test-result.fail {
+            border-left-color: #f87171;
+        }
+        .test-result.warn {
+            border-left-color: #fbbf24;
+        }
+        .test-title {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .color-sample {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            color: #4ade80;
+            border-bottom: 2px solid #4ade80;
+            padding-bottom: 0.5rem;
+        }
+        h2 {
+            color: #60a5fa;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Life Simulator - Feature Detection Test</h1>
+
+        <h2>Browser Capabilities</h2>
+        <div id="features"></div>
+
+        <h2>Terrain Colors</h2>
+        <div id="colors"></div>
+
+        <h2>Test Results</h2>
+        <div id="results"></div>
+    </div>
+
+    <script type="module">
+        // Import config
+        import { TERRAIN_COLORS } from './js/config.js';
+
+        const resultsDiv = document.getElementById('results');
+        const featuresDiv = document.getElementById('features');
+        const colorsDiv = document.getElementById('colors');
+
+        // Feature Detection Tests
+        function testCanvasSupport() {
+            const canvas = document.createElement('canvas');
+            const result = canvas.getContext && canvas.getContext('2d');
+            return {
+                name: 'Canvas 2D Support',
+                passed: !!result,
+                message: result ? 'Canvas 2D API available' : 'Canvas 2D not supported'
+            };
+        }
+
+        function testBackdropFilter() {
+            const result = CSS.supports('backdrop-filter', 'blur(10px)');
+            return {
+                name: 'backdrop-filter Support',
+                passed: result,
+                message: result ? 'backdrop-filter available' : 'backdrop-filter not supported (will use fallback)',
+                type: result ? 'pass' : 'warn'
+            };
+        }
+
+        function testES6Features() {
+            try {
+                eval('const x = () => {}; let y = {...{}}');
+                return {
+                    name: 'ES6+ Features',
+                    passed: true,
+                    message: 'ES6+ features (arrow functions, spread operator) supported'
+                };
+            } catch (e) {
+                return {
+                    name: 'ES6+ Features',
+                    passed: false,
+                    message: 'ES6+ features not supported'
+                };
+            }
+        }
+
+        // Run tests
+        const tests = [
+            testCanvasSupport(),
+            testBackdropFilter(),
+            testES6Features()
+        ];
+
+        // Display feature results
+        tests.forEach(test => {
+            const result = document.createElement('div');
+            result.className = `test-result ${test.type || (test.passed ? 'pass' : 'fail')}`;
+            result.innerHTML = `
+                <div class="test-title">${test.passed ? '✓' : '✗'} ${test.name}</div>
+                <div>${test.message}</div>
+            `;
+            featuresDiv.appendChild(result);
+        });
+
+        // Display terrain colors
+        const colorGrid = document.createElement('div');
+        colorGrid.style.display = 'grid';
+        colorGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(150px, 1fr))';
+        colorGrid.style.gap = '1rem';
+
+        Object.entries(TERRAIN_COLORS).forEach(([name, color]) => {
+            const box = document.createElement('div');
+            box.style.background = '#2a2a2a';
+            box.style.padding = '1rem';
+            box.style.borderRadius = '4px';
+            box.style.display = 'flex';
+            box.style.alignItems = 'center';
+            box.style.gap = '0.5rem';
+
+            const swatch = document.createElement('div');
+            swatch.className = 'color-sample';
+            swatch.style.background = color;
+
+            const label = document.createElement('div');
+            label.style.flex = '1';
+            label.innerHTML = `<strong>${name}</strong><br><code>${color}</code>`;
+
+            box.appendChild(swatch);
+            box.appendChild(label);
+            colorGrid.appendChild(box);
+        });
+
+        colorsDiv.appendChild(colorGrid);
+
+        // Summary
+        const allPassed = tests.every(t => t.passed);
+        const summary = document.createElement('div');
+        summary.className = `test-result ${allPassed ? 'pass' : 'fail'}`;
+        summary.innerHTML = `
+            <div class="test-title">${allPassed ? '✓ All Tests Passed' : '✗ Some Tests Failed'}</div>
+            <div>
+                Passed: ${tests.filter(t => t.passed).length} / ${tests.length}
+            </div>
+        `;
+        resultsDiv.appendChild(summary);
+
+        // Log results to console
+        console.log('Feature Detection Results:', {
+            allPassed,
+            tests: tests.map(t => ({ name: t.name, passed: t.passed })),
+            terrainColors: Object.keys(TERRAIN_COLORS).length
+        });
+    </script>
+</body>
+</html>
