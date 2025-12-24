@@ -2,6 +2,13 @@
 ///
 /// Manages queued actions with priorities, executing them synchronously on ticks.
 /// Handles multi-tick actions that span across multiple ticks.
+///
+/// DEAD ENTITY MANAGEMENT:
+/// Dead entities are automatically skipped during action execution via validation checks.
+/// Additionally, the queue periodically cleans up accumulated dead entity references
+/// (every 100 ticks) to prevent HashMap iteration slowdown. This prevents memory
+/// accumulation when entities are despawned but their references remain in queue
+/// data structures (active, pending, recently_completed, pending_cancellations).
 use bevy::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -399,5 +406,267 @@ impl ActionQueue {
         }
 
         cancelled
+    }
+
+    /// Remove references to dead entities from all queue data structures
+    /// This prevents accumulation of dead entity references that cause HashMap iteration slowdown
+    pub fn cleanup_dead_entities(&mut self, world: &World) {
+        let mut active_removed = 0;
+        let mut recently_completed_removed = 0;
+        let mut pending_removed = 0;
+        let mut pending_cancellations_removed = 0;
+
+        // Remove dead entities from active actions
+        self.active.retain(|entity, _| {
+            let is_alive = world.get_entity(*entity).is_ok();
+            if !is_alive {
+                active_removed += 1;
+            }
+            is_alive
+        });
+
+        // Remove dead entities from recently_completed
+        let original_len = self.recently_completed.len();
+        self.recently_completed
+            .retain(|(entity, _)| world.get_entity(*entity).is_ok());
+        recently_completed_removed = original_len - self.recently_completed.len();
+
+        // Remove dead entities from pending (requires collecting and rebuilding heap)
+        let valid_pending: Vec<_> = self
+            .pending
+            .drain()
+            .filter(|qa| {
+                let is_alive = world.get_entity(qa.entity).is_ok();
+                if !is_alive {
+                    pending_removed += 1;
+                }
+                is_alive
+            })
+            .collect();
+        self.pending = valid_pending.into_iter().collect();
+
+        // Clean pending cancellations
+        let original_len = self.pending_cancellations.len();
+        self.pending_cancellations
+            .retain(|entity| world.get_entity(*entity).is_ok());
+        pending_cancellations_removed = original_len - self.pending_cancellations.len();
+
+        if active_removed > 0 || pending_removed > 0 || recently_completed_removed > 0 {
+            debug!(
+                "Cleaned dead entities from ActionQueue: {} active, {} pending, {} recently_completed, {} pending_cancellations",
+                active_removed, pending_removed, recently_completed_removed, pending_cancellations_removed
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create a minimal test world
+    fn create_test_world() -> World {
+        World::new()
+    }
+
+    #[test]
+    fn test_cleanup_removes_dead_entities_from_active() {
+        let mut world = create_test_world();
+        let mut queue = ActionQueue::default();
+
+        // Spawn two entities
+        let entity1 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+        let entity2 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+
+        // Manually insert active actions (simulating queue behavior)
+        queue.active.insert(
+            entity1,
+            ActiveAction {
+                entity: entity1,
+                action: create_action(ActionType::Rest { duration_ticks: 5 }),
+                started_at_tick: 0,
+            },
+        );
+        queue.active.insert(
+            entity2,
+            ActiveAction {
+                entity: entity2,
+                action: create_action(ActionType::Rest { duration_ticks: 5 }),
+                started_at_tick: 0,
+            },
+        );
+
+        assert_eq!(queue.active.len(), 2, "Should have 2 active actions");
+
+        // Despawn entity1
+        world.despawn(entity1);
+
+        // Cleanup should remove the dead entity
+        queue.cleanup_dead_entities(&world);
+
+        assert_eq!(queue.active.len(), 1, "Should have 1 active action after cleanup");
+        assert!(queue.active.contains_key(&entity2), "entity2 should still be active");
+        assert!(!queue.active.contains_key(&entity1), "entity1 should be removed");
+    }
+
+    #[test]
+    fn test_cleanup_removes_dead_entities_from_recently_completed() {
+        let mut world = create_test_world();
+        let mut queue = ActionQueue::default();
+
+        // Spawn entities
+        let entity1 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+        let entity2 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+
+        // Add to recently completed
+        queue.recently_completed.push((entity1, 100));
+        queue.recently_completed.push((entity2, 105));
+
+        assert_eq!(
+            queue.recently_completed.len(),
+            2,
+            "Should have 2 recently completed"
+        );
+
+        // Despawn entity1
+        world.despawn(entity1);
+
+        // Cleanup should remove the dead entity
+        queue.cleanup_dead_entities(&world);
+
+        assert_eq!(
+            queue.recently_completed.len(),
+            1,
+            "Should have 1 recently completed after cleanup"
+        );
+        assert_eq!(
+            queue.recently_completed[0].0, entity2,
+            "entity2 should still be in recently completed"
+        );
+    }
+
+    #[test]
+    fn test_cleanup_removes_dead_entities_from_pending_cancellations() {
+        let mut world = create_test_world();
+        let mut queue = ActionQueue::default();
+
+        // Spawn entities
+        let entity1 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+        let entity2 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+
+        // Add to pending cancellations
+        queue.pending_cancellations.insert(entity1);
+        queue.pending_cancellations.insert(entity2);
+
+        assert_eq!(
+            queue.pending_cancellations.len(),
+            2,
+            "Should have 2 pending cancellations"
+        );
+
+        // Despawn entity1
+        world.despawn(entity1);
+
+        // Cleanup should remove the dead entity
+        queue.cleanup_dead_entities(&world);
+
+        assert_eq!(
+            queue.pending_cancellations.len(),
+            1,
+            "Should have 1 pending cancellation after cleanup"
+        );
+        assert!(
+            queue.pending_cancellations.contains(&entity2),
+            "entity2 should still be in pending cancellations"
+        );
+    }
+
+    #[test]
+    fn test_execute_active_actions_skips_dead_entities() {
+        let mut world = create_test_world();
+        let mut queue = ActionQueue::default();
+
+        // Spawn an entity
+        let entity = world.spawn((crate::entities::CurrentAction::none(),)).id();
+
+        // Insert active action
+        queue.active.insert(
+            entity,
+            ActiveAction {
+                entity,
+                action: create_action(ActionType::Rest { duration_ticks: 5 }),
+                started_at_tick: 0,
+            },
+        );
+
+        assert_eq!(queue.active.len(), 1, "Should have 1 active action");
+
+        // Despawn the entity
+        world.despawn(entity);
+
+        // Execute active actions should not panic and should handle dead entity gracefully
+        queue.execute_active_actions(&mut world, 1);
+
+        // The dead entity check should skip it and remove it from active
+        assert_eq!(queue.active.len(), 0, "Dead entity should be removed from active");
+    }
+
+    #[test]
+    fn test_cleanup_comprehensive_dead_entity_removal() {
+        let mut world = create_test_world();
+        let mut queue = ActionQueue::default();
+
+        // Spawn 3 entities
+        let alive1 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+        let dead1 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+        let dead2 = world.spawn((crate::entities::CurrentAction::none(),)).id();
+
+        // Add to all data structures
+        queue.active.insert(
+            alive1,
+            ActiveAction {
+                entity: alive1,
+                action: create_action(ActionType::Rest { duration_ticks: 5 }),
+                started_at_tick: 0,
+            },
+        );
+        queue.active.insert(
+            dead1,
+            ActiveAction {
+                entity: dead1,
+                action: create_action(ActionType::Rest { duration_ticks: 5 }),
+                started_at_tick: 0,
+            },
+        );
+
+        queue.recently_completed.push((alive1, 100));
+        queue.recently_completed.push((dead1, 105));
+        queue.recently_completed.push((dead2, 110));
+
+        queue.pending_cancellations.insert(dead1);
+        queue.pending_cancellations.insert(dead2);
+
+        // Despawn dead entities
+        world.despawn(dead1);
+        world.despawn(dead2);
+
+        // Cleanup
+        queue.cleanup_dead_entities(&world);
+
+        // Verify only alive entities remain
+        assert_eq!(queue.active.len(), 1, "Should have only alive1 in active");
+        assert!(queue.active.contains_key(&alive1));
+
+        assert_eq!(
+            queue.recently_completed.len(),
+            1,
+            "Should have only alive1 in recently_completed"
+        );
+        assert_eq!(queue.recently_completed[0].0, alive1);
+
+        assert!(
+            queue.pending_cancellations.is_empty(),
+            "Should have no pending cancellations for dead entities"
+        );
     }
 }

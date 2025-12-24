@@ -78,6 +78,11 @@ fn execute_queued_actions(world: &mut World) {
     // Execute the AI actions
     world.resource_scope(|world, mut queue: Mut<ActionQueue>| {
         queue.execute_tick(world, tick);
+
+        // Periodic cleanup of dead entities every 100 ticks to prevent HashMap slowdown
+        if tick % 100 == 0 {
+            queue.cleanup_dead_entities(world);
+        }
     });
 
     // End profiling after execution completes
