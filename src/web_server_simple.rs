@@ -1,5 +1,6 @@
 use crate::cached_world::CachedWorld;
 use crate::world_loader::{list_available_worlds, WorldLoader};
+use crate::debug::HealthCheckApi;
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, RwLock};
@@ -389,6 +390,24 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
         "/api/collectables/types" => {
             // Return all available collectable types
             let json = crate::ai::get_collectable_types_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/debug/health" => {
+            // Return overall health status
+            let api = HealthCheckApi::global();
+            let json = api.get_health_status_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/debug/alerts" => {
+            // Return recent health alerts
+            let api = HealthCheckApi::global();
+            let json = api.get_alerts_json();
+            send_response(&mut stream, "200 OK", "application/json", &json);
+        }
+        "/api/debug/tps" => {
+            // Return current TPS from health check system
+            let api = HealthCheckApi::global();
+            let json = api.get_tps_json();
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/vegetation/biomass" => {

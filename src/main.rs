@@ -4,6 +4,7 @@ use std::time::Duration;
 
 mod ai;
 mod cached_world;
+mod debug;
 mod entities;
 mod errors;
 mod pathfinding;
@@ -17,8 +18,9 @@ mod world_loader;
 
 use ai::TQUAIPlugin;
 use cached_world::CachedWorldPlugin;
+use debug::{HealthCheckPlugin, HealthCheckApiPlugin};
 use entities::EntitiesPlugin;
-use pathfinding::{process_pathfinding_requests, PathfindingGrid};
+use pathfinding::{pathfinding_cache_cleanup_system, process_pathfinding_requests, PathCache, PathfindingGrid};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
 use tilemap::{TilemapPlugin, WorldConfig};
@@ -46,10 +48,13 @@ fn main() {
             EntitiesPlugin,
             TQUAIPlugin,
             VegetationPlugin,
+            HealthCheckPlugin,
+            HealthCheckApiPlugin,
         )) // Core plugins
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
+        .init_resource::<PathCache>()
         .add_systems(
             Startup,
             (setup, entities::spawn_entities_from_config.after(setup)),
@@ -57,7 +62,8 @@ fn main() {
         .add_systems(
             Update,
             (
-                process_pathfinding_requests, // Async pathfinding
+                process_pathfinding_requests, // Async pathfinding with cache
+                pathfinding_cache_cleanup_system, // Periodic cache cleanup
                 simulation_system,
                 save_load_system.after(simulation_system),
             )
