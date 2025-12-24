@@ -1,4 +1,4 @@
-use crate::entities::entity_types::{Herbivore, Wolf};
+use crate::entities::entity_types::{Bear, Fox, Herbivore, Wolf};
 use crate::entities::{Creature, TilePosition};
 use crate::vegetation::constants::predator_effects::*;
 /// Predator fear system for herbivore behavior modification
@@ -119,9 +119,9 @@ impl FearState {
 pub fn predator_proximity_system(
     mut prey_query: Query<
         (Entity, &Creature, &TilePosition, &mut FearState),
-        (With<Herbivore>, Without<Wolf>),
+        (With<Herbivore>, Without<Wolf>, Without<Fox>, Without<Bear>),
     >,
-    predator_query: Query<&TilePosition, With<Wolf>>,
+    predator_query: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
 ) {
     // Collect predator positions
     let predator_positions: Vec<IVec2> = predator_query.iter().map(|pos| pos.tile).collect();
@@ -175,7 +175,7 @@ pub fn fear_speed_system(
             &mut crate::entities::MovementSpeed,
             &Creature,
         ),
-        (With<Herbivore>, Without<Wolf>),
+        (With<Herbivore>, Without<Wolf>, Without<Fox>, Without<Bear>),
     >,
 ) {
     for (fear_state, mut movement_speed, creature) in prey_query.iter_mut() {

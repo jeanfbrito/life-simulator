@@ -55,7 +55,7 @@ impl RabbitBehavior {
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new(
             0.75,   // thirst_threshold: Drink when >= 75% thirsty
-            0.15,   // hunger_threshold: Eat when >= 15% hungry (lowered for testing)
+            0.40,   // hunger_threshold: Eat when >= 40% hungry (enables 300-tick well-fed streak)
             0.3,    // energy_threshold: Rest when energy drops below 30%
             (3, 8), // graze_range: Short-range grazing (3-8 tiles)
             100,    // water_search_radius: Wide water search

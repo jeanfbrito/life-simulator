@@ -117,6 +117,19 @@ fn nearest_adult_deer(
         .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
 }
 
+fn nearest_any_deer(
+    here: IVec2,
+    radius: f32,
+    deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
+) -> Option<(Entity, f32)> {
+    deer.iter()
+        .filter_map(|(entity, tile, _)| {
+            let dist = distance(here, tile.tile);
+            (dist <= radius).then_some((entity, dist))
+        })
+        .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+}
+
 fn filter_out_graze(actions: &mut Vec<UtilityScore>) {
     actions.retain(|a| !matches!(a.action_type, ActionType::Graze { .. }));
 }
@@ -224,7 +237,7 @@ pub fn evaluate_fox_actions(
         if let Some((rabbit, dist)) = nearest_rabbit(position.tile, FOX_HUNT_RADIUS, rabbits) {
             let distance_factor = (FOX_HUNT_RADIUS - dist) / FOX_HUNT_RADIUS;
             if distance_factor > 0.0 {
-                let utility = ((0.35 + hunger_value * 0.45) * distance_factor).clamp(0.0, 0.95);
+                let utility = ((0.60 + hunger_value * 0.35) * distance_factor).clamp(0.0, 0.95);
                 actions.push(UtilityScore {
                     action_type: ActionType::Hunt { prey: rabbit },
                     utility,
@@ -291,7 +304,7 @@ pub fn evaluate_wolf_actions(
 
     let hunger_value = hunger_norm(hunger);
     if hunger_value >= 0.45 && energy_norm(energy) > 0.4 {
-        if let Some((deer_entity, dist)) = nearest_adult_deer(position.tile, WOLF_HUNT_RADIUS, deer)
+        if let Some((deer_entity, dist)) = nearest_any_deer(position.tile, WOLF_HUNT_RADIUS, deer)
         {
             let distance_factor = (WOLF_HUNT_RADIUS - dist) / WOLF_HUNT_RADIUS;
             if distance_factor > 0.0 {
