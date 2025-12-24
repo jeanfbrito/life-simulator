@@ -8,7 +8,7 @@ pub mod growth {
     /// Logistic growth rate coefficient (r)
     /// Controls how fast vegetation biomass regenerates
     /// Higher values = faster regrowth, but can lead to instability
-    pub const GROWTH_RATE: f32 = 0.05; // 5% per tick at optimal conditions
+    pub const GROWTH_RATE: f32 = 0.08; // 8% per tick at optimal conditions
 
     /// Initial biomass assigned to newly generated vegetation tiles
     /// Represents sparse ground cover that must regrow before becoming forageable

@@ -34,7 +34,7 @@ impl WolfBehavior {
             well_fed_required_ticks: 900,
             matching_interval_ticks: 480,
             mating_duration_ticks: 60,
-            min_energy_norm: 0.6,
+            min_energy_norm: 0.45,
             min_health_norm: 0.6,
         }
     }
@@ -66,7 +66,7 @@ impl WolfBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.07)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),

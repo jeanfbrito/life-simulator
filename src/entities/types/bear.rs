@@ -32,7 +32,7 @@ impl BearBehavior {
             mating_search_radius: 90,
             well_fed_hunger_norm: 0.45,
             well_fed_thirst_norm: 0.45,
-            well_fed_required_ticks: 900,
+            well_fed_required_ticks: 600,
             matching_interval_ticks: 420,
             mating_duration_ticks: 60,
             min_energy_norm: 0.55,

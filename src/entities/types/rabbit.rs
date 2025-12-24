@@ -73,7 +73,7 @@ impl RabbitBehavior {
         EntityStatsBundle {
             hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // moderate hunger gain
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)), // slower thirst gain to avoid spam-drinking
-            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.07)), // slightly faster energy drain
+            energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)), // reduced energy drain to improve movement viability
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.01)),  // same regen for now
         }
     }

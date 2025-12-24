@@ -35,7 +35,7 @@ impl FoxBehavior {
             matching_interval_ticks: 360,
             mating_duration_ticks: 50,
             min_energy_norm: 0.5,
-            min_health_norm: 0.6,
+            min_health_norm: 0.50,
         }
     }
 
