@@ -46,6 +46,38 @@ php -S localhost:8080 -t web-viewer
 
 Then open `http://localhost:8080/viewer.html` in your browser.
 
+## Configuration
+
+All configuration values can be found in `js/config.js` and can be customized for different performance and behavior requirements:
+
+### Grid and Rendering
+- `TILE_SIZE` (8px) - Size of each tile on screen, affected by zoom level
+- `VIEW_SIZE_X` / `VIEW_SIZE_Y` (100) - Viewport size in tiles
+- `CHUNK_SIZE` (16) - Tiles per chunk (16x16 tiles per chunk)
+
+### Performance Tuning
+- `ENTITY_POLL_INTERVAL_MS` (500ms) - How often to fetch entity updates from server
+- `TOOLTIP_THROTTLE_MS` (100ms) - Tooltip update frequency to reduce DOM operations
+- `CHUNK_LOAD_DEBOUNCE_MS` (100ms) - Delay before loading visible chunks after panning
+- `BIOMASS_FETCH_INTERVAL_MS` (5000ms) - How often to fetch vegetation biomass data
+
+### Network Settings
+- `CHUNKS_PER_REQUEST` (10) - Max chunks to fetch in single API request to avoid URL length issues
+- `FETCH_TIMEOUT_MS` (5s) - Default timeout for API requests
+- `CHUNK_FETCH_TIMEOUT_MS` (10s) - Longer timeout for chunk loading due to larger data
+
+### Camera and Controls
+- `PAN_SMOOTHING_FACTOR` (0.2) - Camera catch-up speed while dragging (0-1, lower = faster)
+- `INERTIA_FRICTION` (0.90) - Velocity decay after releasing drag (0-1, lower = faster deceleration)
+- `MIN_INERTIA_SPEED` (0.15) - Minimum speed before inertia stops
+- `ZOOM_MULTIPLIER` (1.25) - Zoom step size (25% per zoom level)
+- `MIN_ZOOM` (0.25) - Minimum zoom level
+- `MAX_ZOOM` (4.0) - Maximum zoom level
+
+### Reliability
+- `MAX_FAILURES` (5) - Number of failures before circuit breaker opens
+- `MAX_BACKOFF_INTERVAL_MS` (10000ms) - Maximum retry delay during exponential backoff
+
 ## Controls
 
 ### Keyboard Controls
@@ -55,12 +87,14 @@ Then open `http://localhost:8080/viewer.html` in your browser.
 
 ### Mouse Controls
 - **Hover**: Shows terrain and coordinate information
+- **Middle Drag**: Pan the map with inertia
 - **Click**: (No functionality yet - future features planned)
 
 ### UI Controls
-- **🔍 Zoom In/Out**: Zoom controls
+- **🔍 Zoom In/Out**: Zoom controls with CONFIG.ZOOM_MULTIPLIER steps
 - **🔄 Reset View**: Reset to default zoom and position
-- **🌍 New World**: Generate a new world with random coordinates
+- **🌱 Show Grass Density**: Toggle biomass visualization overlay
+- **📊 Stats**: Real-time rendering statistics
 
 ## API Endpoints
 

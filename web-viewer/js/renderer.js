@@ -60,6 +60,14 @@ export class Renderer {
         this.canvas.style.transform = 'none';
     }
 
+    /**
+     * Render the entire scene: terrain, resources, and entities
+     * Uses two-pass rendering: first renders terrain, then Y-sorted rendering for proper depth
+     * @param {Object} worldData - World state containing chunks and resources
+     * @param {Object} dragOffset - Camera pan offset in pixels {x, y}
+     * @param {Array} entities - Array of entity objects to render
+     * @returns {Object} Rendering statistics (tile counts, terrain types, etc.)
+     */
     render(worldData, dragOffset, entities = []) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -171,6 +179,15 @@ export class Renderer {
         return stats;
     }
 
+    /**
+     * Render entities and resources using Y-sorting algorithm
+     * Items are sorted by their Y coordinate to create proper depth illusion
+     * Back-to-front rendering ensures entities appear properly layered
+     * @param {Array} entities - Array of entity objects with position and metadata
+     * @param {Array} resourcesToRender - Array of resources with x, y coordinates
+     * @param {number} cameraOffsetX - Camera X offset in tiles
+     * @param {number} cameraOffsetY - Camera Y offset in tiles
+     */
     renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY) {
         // Create a combined list of entities and resources with Y-coordinates for sorting
         const renderList = [];

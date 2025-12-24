@@ -13,53 +13,80 @@ function determineApiBaseUrl() {
 
 // Display configuration
 export const CONFIG = {
-    TILE_SIZE: 8, // Dynamic tile size for zoom functionality
-    renderScale: 1.0, // Scale factor for rendering
-    VIEW_SIZE_X: 100, // Dynamic view width based on container
-    VIEW_SIZE_Y: 100, // Dynamic view height based on container
+    // Grid and rendering
+    TILE_SIZE: 8,           // Pixels per tile (8x8)
+    VIEW_SIZE_X: 100,       // Viewport width in tiles
+    VIEW_SIZE_Y: 100,       // Viewport height in tiles
+
+    // Chunk system
+    CHUNK_SIZE: 16,              // Tiles per chunk (16x16)
+    CHUNKS_PER_REQUEST: 10,      // Max chunks to fetch in one HTTP request
+    CHUNK_LOAD_DEBOUNCE_MS: 100, // Delay before loading visible chunks (milliseconds)
+
+    // Backwards compatibility with existing property names
+    chunkLoadRadius: 5,          // Load radius for chunks around player
+    chunkLoadDebounce: 100,      // Alias for CHUNK_LOAD_DEBOUNCE_MS
+    chunkBatchSize: 10,          // Alias for CHUNKS_PER_REQUEST
+    initialChunkRadius: 5,       // Initial chunk load radius
+
+    // Network and polling
+    ENTITY_POLL_INTERVAL_MS: 500,        // How often to fetch entities (milliseconds)
+    FETCH_TIMEOUT_MS: 5000,              // Default timeout for API requests (milliseconds)
+    CHUNK_FETCH_TIMEOUT_MS: 10000,       // Longer timeout for chunk loading (milliseconds)
+
+    // Performance and throttling
+    TOOLTIP_THROTTLE_MS: 100,            // Min time between tooltip updates (milliseconds)
+    BIOMASS_FETCH_INTERVAL_MS: 5000,     // How often to fetch biomass data (milliseconds)
+
+    // Circuit breaker
+    MAX_FAILURES: 5,                     // Failures before circuit opens
+    MAX_BACKOFF_INTERVAL_MS: 10000,      // Max retry interval during backoff (milliseconds)
+
+    // Camera and controls
+    PAN_SMOOTHING_FACTOR: 0.2,           // Camera catch-up easing (0-1, lower = faster)
+    INERTIA_FRICTION: 0.90,              // Velocity decay after drag release (0-1)
+    MIN_INERTIA_SPEED: 0.15,             // Minimum speed before stopping inertia
+    ZOOM_MULTIPLIER: 1.25,               // Zoom step size (1.25 = 25% per step)
+
+    // Display and rendering
+    renderScale: 1.0,        // Scale factor for rendering (affected by zoom)
+    MIN_ZOOM: 0.25,          // Minimum zoom level
+    MAX_ZOOM: 4.0,           // Maximum zoom level
+    minZoom: 0.25,           // Backwards compatibility alias
+    maxZoom: 4.0,            // Backwards compatibility alias
+    zoomFactor: 1.25,        // Backwards compatibility alias
 
     // Performance settings
-    targetFPS: 60,
-    frameDelay: 1000 / 60,
+    targetFPS: 60,           // Target frames per second
+    frameDelay: 1000 / 60,   // Milliseconds per frame
 
-    // Panning smoothing
+    // Panning smoothing (backwards compatibility)
     panSmoothing: 0.2,      // 0..1 how fast the camera catches up to the target
     inertiaFriction: 0.90,  // 0..1 how quickly inertia slows down
     inertiaMinSpeed: 0.15,  // px/frame threshold to stop inertia
-
-    // Chunk loading settings
-    chunkLoadRadius: 5,
-    chunkLoadDebounce: 100, // ms delay for chunk loading
-    chunkBatchSize: 10,
-    initialChunkRadius: 5, // Load more chunks to show full world
-
-    // Zoom settings
-    minZoom: 0.25,
-    maxZoom: 4.0,
-    zoomFactor: 1.25,
 
     // Grass density visualization
     showGrassDensity: false, // Toggle for grass density overlay
 
     // Network settings
     apiBaseUrl: determineApiBaseUrl(),
-    connectionTimeout: 5000,
+    connectionTimeout: 5000, // API connection timeout (milliseconds)
 };
 
 // Terrain colors with improved visibility and contrast
 export const TERRAIN_COLORS = {
-    'Grass': '#3a7f47',      // Brighter grass green
-    'Stone': '#8b8680',       // Lighter stone gray
-    'Sand': '#f4d58f',       // Brighter sand yellow
-    'Water': '#4a90e2',      // Brighter water blue
-    'Dirt': '#8b6239',       // Richer dirt brown
-    'Snow': '#f0f0f0',       // Slightly off-white snow
-    'Forest': '#2d5a2d',     // Darker forest green
-    'Mountain': '#a8a8a8',   // Lighter mountain gray
-    'DeepWater': '#1e3a5f',  // Darker deep water
-    'ShallowWater': '#5ca7d8', // Lighter shallow water
-    'Swamp': '#5a6b3c',      // Brighter swamp green
-    'Desert': '#d4a76a'      // Brighter desert tan
+    'Grass': '#4ade80',        // Keep (good green)
+    'Water': '#2563eb',        // Darker blue (was #4a90e2)
+    'DeepWater': '#1e40af',    // Keep (dark blue)
+    'Sand': '#fbbf24',         // Keep (yellow-orange)
+    'Stone': '#78716c',        // Darker brown (was #8b8680)
+    'Forest': '#166534',       // Keep (dark green)
+    'Mountain': '#d1d5db',     // Much lighter gray (was #a8a8a8)
+    'Snow': '#f0f9ff',         // Keep (white)
+    'Desert': '#fed7aa',       // Keep (tan)
+    'Swamp': '#064e3b',        // Keep (dark teal)
+    'Dirt': '#92400e',         // Keep (brown)
+    'ShallowWater': '#60a5fa', // Lighter blue (was #5ca7d8)
 };
 
 // Resource colors and symbols

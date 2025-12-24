@@ -47,8 +47,8 @@ export class ChunkManager {
         // Split requests into smaller batches to avoid URL length issues
         const chunkArray = Array.from(neededChunks);
 
-        for (let i = 0; i < chunkArray.length; i += CONFIG.chunkBatchSize) {
-            const batch = chunkArray.slice(i, i + CONFIG.chunkBatchSize);
+        for (let i = 0; i < chunkArray.length; i += CONFIG.CHUNKS_PER_REQUEST) {
+            const batch = chunkArray.slice(i, i + CONFIG.CHUNKS_PER_REQUEST);
             const batchData = await this.loadChunkBatch(batch);
             if (batchData) {
                 // Merge batch data with accumulated data
@@ -98,7 +98,13 @@ export class ChunkManager {
         return null;
     }
 
-    // HTTP-based data fetching with CORS workaround and timeout protection
+    /**
+     * HTTP-based data fetching with CORS workaround and timeout protection
+     * Uses longer timeout for chunk loading due to larger data size
+     * @param {string} endpoint - API endpoint to fetch from
+     * @returns {Object} Parsed JSON response data
+     * @throws {Error} If fetch fails or times out
+     */
     async fetchData(endpoint) {
         console.log(`Fetching: ${CONFIG.apiBaseUrl}${endpoint}`);
 
@@ -107,7 +113,7 @@ export class ChunkManager {
             const response = await fetchWithTimeout(`${CONFIG.apiBaseUrl}${endpoint}`, {
                 mode: 'cors',
                 credentials: 'omit'
-            }, 10000);
+            }, CONFIG.CHUNK_FETCH_TIMEOUT_MS);
 
             console.log(`Response status: ${response.status}`);
             if (!response.ok) {
@@ -125,7 +131,13 @@ export class ChunkManager {
         }
     }
 
-    // Function to load chunks around the visible area (debounced)
+    /**
+     * Load chunks around visible area with debounce to avoid excessive API calls
+     * Delays loading by CONFIG.CHUNK_LOAD_DEBOUNCE_MS to coalesce rapid movement requests
+     * @param {Object} dragOffset - Current camera offset {x, y}
+     * @param {Object} worldData - Current world data object to merge into
+     * @param {Function} onChunksLoaded - Callback to trigger render after loading
+     */
     loadVisibleChunksDebounced(dragOffset, worldData, onChunksLoaded) {
         // Clear existing timeout
         if (this.chunkLoadTimeout) {
@@ -139,7 +151,7 @@ export class ChunkManager {
             if (loaded && onChunksLoaded) {
                 onChunksLoaded();
             }
-        }, CONFIG.chunkLoadDebounce);
+        }, CONFIG.CHUNK_LOAD_DEBOUNCE_MS);
     }
 
     // Function to load chunks around the visible area

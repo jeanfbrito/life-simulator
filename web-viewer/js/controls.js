@@ -28,7 +28,7 @@ export class Controls {
 
         // Throttle tooltip updates to reduce getBoundingClientRect() calls
         this.lastTooltipUpdate = 0;
-        this.tooltipThrottleMs = 100; // Update max once per 100ms
+        this.tooltipThrottleMs = CONFIG.TOOLTIP_THROTTLE_MS; // Update max once per configured interval
         // Store bound handlers for cleanup
         this.boundHandlers = {
             mouseMove: (e) => this.handleMouseMove(e),
@@ -76,6 +76,12 @@ this.setupEventListeners();
         if (toggleGrassBtn) toggleGrassBtn.addEventListener('click', this.boundHandlers.toggleGrassDensity);
     }
 
+    /**
+     * Handle mouse movement for hover tooltips
+     * Throttled to maximum once per CONFIG.TOOLTIP_THROTTLE_MS to reduce overhead
+     * Updates tooltip position smoothly every frame but only updates content periodically
+     * @param {MouseEvent} e - Mouse event with clientX/clientY coordinates
+     */
     handleMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
 
@@ -96,7 +102,7 @@ this.setupEventListeners();
                 tooltip.style.top = (e.clientY + offset) + 'px';
             }
 
-            // But only update content and recalculate bounds every 100ms
+            // But only update content and recalculate bounds every CONFIG.TOOLTIP_THROTTLE_MS
             if (now - this.lastTooltipUpdate >= this.tooltipThrottleMs) {
                 this.showTooltip(e, x, y);
                 this.lastTooltipUpdate = now;
@@ -333,8 +339,12 @@ this.setupEventListeners();
         document.getElementById('tile-size-display').textContent = CONFIG.TILE_SIZE + 'px';
     }
 
+    /**
+     * Zoom in by multiplying render scale by CONFIG.ZOOM_MULTIPLIER
+     * Applies zoom limits defined in CONFIG
+     */
     zoomIn() {
-        CONFIG.renderScale = Math.min(CONFIG.renderScale * CONFIG.zoomFactor, CONFIG.maxZoom);
+        CONFIG.renderScale = Math.min(CONFIG.renderScale * CONFIG.ZOOM_MULTIPLIER, CONFIG.MAX_ZOOM);
         this.renderer.setupCanvasSize(this.dragOffset);
         this.updateZoomDisplay();
         // Trigger re-render via the main app
@@ -343,8 +353,12 @@ this.setupEventListeners();
         }
     }
 
+    /**
+     * Zoom out by dividing render scale by CONFIG.ZOOM_MULTIPLIER
+     * Applies zoom limits defined in CONFIG
+     */
     zoomOut() {
-        CONFIG.renderScale = Math.max(CONFIG.renderScale / CONFIG.zoomFactor, CONFIG.minZoom);
+        CONFIG.renderScale = Math.max(CONFIG.renderScale / CONFIG.ZOOM_MULTIPLIER, CONFIG.MIN_ZOOM);
         this.renderer.setupCanvasSize(this.dragOffset);
         this.updateZoomDisplay();
         // Trigger re-render via the main app
@@ -364,19 +378,23 @@ this.setupEventListeners();
         }
     }
 
-    // Smooth update called each animation frame
+    /**
+     * Smooth camera update called each animation frame
+     * Applies easing to camera movement while dragging and inertia when released
+     * Uses CONFIG constants for smooth pan speed and inertia decay
+     */
     update() {
         // Smoothly move current offset toward target while dragging
         if (this.isDragging) {
-            this.dragOffset.x += (this.targetOffset.x - this.dragOffset.x) * CONFIG.panSmoothing;
-            this.dragOffset.y += (this.targetOffset.y - this.dragOffset.y) * CONFIG.panSmoothing;
+            this.dragOffset.x += (this.targetOffset.x - this.dragOffset.x) * CONFIG.PAN_SMOOTHING_FACTOR;
+            this.dragOffset.y += (this.targetOffset.y - this.dragOffset.y) * CONFIG.PAN_SMOOTHING_FACTOR;
         } else {
             // Apply inertia when not dragging
-            if (Math.abs(this.inertiaVelocity.x) > CONFIG.inertiaMinSpeed || Math.abs(this.inertiaVelocity.y) > CONFIG.inertiaMinSpeed) {
+            if (Math.abs(this.inertiaVelocity.x) > CONFIG.MIN_INERTIA_SPEED || Math.abs(this.inertiaVelocity.y) > CONFIG.MIN_INERTIA_SPEED) {
                 this.dragOffset.x += this.inertiaVelocity.x;
                 this.dragOffset.y += this.inertiaVelocity.y;
-                this.inertiaVelocity.x *= CONFIG.inertiaFriction;
-                this.inertiaVelocity.y *= CONFIG.inertiaFriction;
+                this.inertiaVelocity.x *= CONFIG.INERTIA_FRICTION;
+                this.inertiaVelocity.y *= CONFIG.INERTIA_FRICTION;
 
                 // While inertia is moving, keep loading chunks
                 if (this.worldData && this.onRender) {

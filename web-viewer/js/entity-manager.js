@@ -16,10 +16,10 @@ export class EntityManager {
 
         // Circuit breaker properties
         this.failureCount = 0;
-        this.maxFailures = 5;
-        this.currentInterval = 1000; // Will be set by startPolling
-        this.baseInterval = 1000; // Store base interval for reset
-        this.maxBackoffInterval = 10000; // Max 10 seconds between retries
+        this.maxFailures = CONFIG.MAX_FAILURES;
+        this.currentInterval = CONFIG.ENTITY_POLL_INTERVAL_MS; // Will be set by startPolling
+        this.baseInterval = CONFIG.ENTITY_POLL_INTERVAL_MS; // Store base interval for reset
+        this.maxBackoffInterval = CONFIG.MAX_BACKOFF_INTERVAL_MS; // Max backoff interval between retries
         this.circuitOpen = false;
     }
 
@@ -65,7 +65,7 @@ export class EntityManager {
      */
     async fetchEntities() {
         try {
-            const response = await fetchWithTimeout(`${CONFIG.apiBaseUrl}/api/entities`, {}, 5000);
+            const response = await fetchWithTimeout(`${CONFIG.apiBaseUrl}/api/entities`, {}, CONFIG.FETCH_TIMEOUT_MS);
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
