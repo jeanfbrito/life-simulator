@@ -56,7 +56,7 @@ impl HarvestProfile {
     }
 }
 
-/// Resource definitions metadata map
+// Resource definitions metadata map
 lazy_static::lazy_static! {
     pub static ref RESOURCE_DEFINITIONS: HashMap<ResourceType, HarvestProfile> = {
         let mut defs = HashMap::new();

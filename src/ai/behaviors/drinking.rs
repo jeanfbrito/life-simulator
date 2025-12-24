@@ -45,7 +45,7 @@ pub fn evaluate_drinking_behavior(
 
     // Use weighted combination
     // Thirst weighted at 80%, distance at 20%
-    let utility = (thirst_level * 0.8 + distance_score * 0.2);
+    let utility = thirst_level * 0.8 + distance_score * 0.2;
 
     // Calculate priority based on urgency
     // Higher thirst = higher priority

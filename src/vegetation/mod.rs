@@ -32,7 +32,7 @@ pub use resource_grid::ResourceGrid;
 use bevy::prelude::*;
 use serde_json::json;
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::{Arc, RwLock};
 
 use crate::simulation::SimulationTick;
@@ -42,7 +42,7 @@ use crate::world_loader::WorldLoader;
 pub use constants::*;
 use constants::{
     consumption::DEPLETED_TILE_COOLDOWN,
-    growth::{ACTIVE_TILE_THRESHOLD, GROWTH_INTERVAL_TICKS, MAX_BIOMASS},
+    growth::{ACTIVE_TILE_THRESHOLD, MAX_BIOMASS},
     performance::CHUNK_SIZE,
 };
 
@@ -1446,7 +1446,7 @@ fn setup_vegetation_system(
                             let distance_from_origin = tile.as_vec2().length();
                             if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
                                 let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
-                                if let Ok(mut cell) = resource_grid
+                                if let Ok(cell) = resource_grid
                                     .get_or_create_cell(
                                         tile,
                                         100.0 * terrain_multiplier,

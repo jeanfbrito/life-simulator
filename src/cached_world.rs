@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 
 use bevy::prelude::*;
-use serde::{Deserialize, Serialize};
 
-use crate::tilemap::{ChunkCoordinate, CHUNK_SIZE};
 
 /// Cached world data that stores loaded chunks with multi-layer support
 #[derive(Debug, Clone, Resource)]

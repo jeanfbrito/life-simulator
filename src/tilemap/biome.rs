@@ -147,11 +147,14 @@ impl BiomeGenerator {
         let temperature_seed = seed.wrapping_add(1000);
         let elevation_seed = seed.wrapping_add(2000);
 
+        // Convert u64 to u32 by XORing upper and lower bits to preserve entropy
+        let to_u32 = |s: u64| ((s >> 32) as u32) ^ (s as u32);
+
         Self {
             seed,
-            moisture_noise: Simplex::new(moisture_seed),
-            temperature_noise: Perlin::new(temperature_seed),
-            elevation_noise: Simplex::new(elevation_seed),
+            moisture_noise: Simplex::new(to_u32(moisture_seed)),
+            temperature_noise: Perlin::new(to_u32(temperature_seed)),
+            elevation_noise: Simplex::new(to_u32(elevation_seed)),
         }
     }
 

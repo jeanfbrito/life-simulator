@@ -463,7 +463,7 @@ impl ResourceGrid {
                 profile.biomass_cap,
                 profile.growth_rate_multiplier,
             ) {
-                Ok(mut cell) => {
+                Ok(cell) => {
                     cell.resource_type = Some(resource_type);
                     cell.max_biomass = profile.biomass_cap;
                     cell.growth_rate_modifier = profile.growth_rate_multiplier;
@@ -967,7 +967,7 @@ mod tests {
         let pos = IVec2::new(5, 10);
 
         // Create cell with full biomass
-        let cell = grid.get_or_create_cell(pos, 100.0, 1.0);
+        let cell = grid.get_or_create_cell(pos, 100.0, 1.0).unwrap();
         cell.total_biomass = 80.0;
 
         // Consume biomass

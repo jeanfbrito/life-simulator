@@ -1,4 +1,4 @@
-use bevy::log::{error, info, warn};
+use bevy::log::info;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -152,7 +152,7 @@ impl WorldLoader {
             ChunkIterator {
                 chunk_x,
                 chunk_y,
-                chunk_data,
+                chunk_data: &chunk_data.layers,
             }
         })
     }

@@ -1,4 +1,3 @@
-use crate::simulation::SimulationTick;
 use std::collections::VecDeque;
 /// Performance benchmarking module for Phase 4 verification
 ///
@@ -411,7 +410,7 @@ impl BenchmarkRunner {
         // Simulate vegetation growth system work
         // Base time + some variance + occasional spikes
         let base_growth_time_us = 850; // 850μs base time
-        let variance = (rand::random::<i64>() % 201 - 100); // ±100μs variance
+        let variance = rand::random::<i64>() % 201 - 100; // ±100μs variance
         let spike_chance = rand::random::<f32>();
 
         let growth_time_us = if spike_chance < 0.05 {

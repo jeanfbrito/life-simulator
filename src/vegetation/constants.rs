@@ -67,7 +67,7 @@ pub mod consumption {
 pub mod species {
     /// Rabbit-specific vegetation consumption
     pub mod rabbit {
-        use super::super::growth::MAX_BIOMASS;
+        
 
         /// Meal size as fraction of rabbit's daily needs
         /// Rabbits eat small, frequent meals
@@ -126,7 +126,7 @@ pub mod predator_effects {
 
 /// Terrain-specific vegetation modifiers
 pub mod terrain_modifiers {
-    use super::growth::MAX_BIOMASS;
+    
 
     /// Maximum biomass multiplier by terrain type
     /// Some terrains support more vegetation than others

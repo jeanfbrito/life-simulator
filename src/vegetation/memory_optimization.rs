@@ -1,5 +1,4 @@
 use super::TileVegetation;
-use crate::tilemap::TerrainType;
 use bevy::prelude::IVec2;
 /// Memory optimization module for Phase 4 performance improvements
 ///

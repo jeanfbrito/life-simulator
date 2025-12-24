@@ -758,7 +758,7 @@ impl Action for ScavengeAction {
         }
 
         if spent {
-            if let Ok(mut carcass_entity) = world.get_entity_mut(self.carcass) {
+            if let Ok(carcass_entity) = world.get_entity_mut(self.carcass) {
                 carcass_entity.despawn();
             }
         }

@@ -206,7 +206,7 @@ impl WorldGenerator {
     fn add_resources_to_chunk(&self, chunk: &mut Chunk) {
         for y in 0..chunk.tiles.len() {
             for x in 0..chunk.tiles[y].len() {
-                if let Ok(rng) = self.rng.write() {
+                if let Ok(mut rng) = self.rng.write() {
                 if rng.gen::<f32>() < self.config.resource_density {
                     // Add resource deposits based on terrain type
                         let terrain = chunk.tiles[y][x];
@@ -282,7 +282,7 @@ impl WorldGenerator {
         let max_attempts = 100;
 
         while attempts < max_attempts {
-            let (chunk_x, chunk_y) = if let Ok(rng) = self.rng.write() {
+            let (chunk_x, chunk_y) = if let Ok(mut rng) = self.rng.write() {
                 (
                     rng.gen_range(min_x..=max_x),
                     rng.gen_range(min_y..=max_y)
@@ -756,13 +756,13 @@ impl WorldGenerator {
         // Step 3: If highest corner >= current + 4 levels (32 units), check for diagonal
         if highest_corner >= current_height + 32 {
             let mut count = 0;
-            let mut corner_idx = 0;
+            let mut _corner_idx = 0;
             let mut can_compensate = true;
 
             for (i, &corner_h) in corner_heights.iter().enumerate() {
                 if corner_h == highest_corner {
                     count += 1;
-                    corner_idx = i;
+                    _corner_idx = i;
 
                     let highest_on_lowest_side = match i {
                         0 => h_e.max(h_s),

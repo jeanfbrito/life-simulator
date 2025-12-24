@@ -248,7 +248,7 @@ pub fn debug_list_collectables(
 /// JSON serialization functions for web API
 pub mod web_api {
     use super::*;
-    use crate::simulation::SimulationTick;
+    
     use crate::vegetation::resource_grid::ResourceGrid;
     use crate::world_loader::WorldLoader;
     use serde_json;
@@ -397,8 +397,8 @@ mod tests {
         assert!(is_collectable(&ResourceType::WildRoot));
 
         // Test non-collectables
-        assert!(!is_collectable(&ResourceType::OakTree));
-        assert!(!is_collectable(&ResourceType::BirchShrub));
+        assert!(!is_collectable(&ResourceType::TreeOak));
+        assert!(!is_collectable(&ResourceType::HazelShrub));
     }
 
     #[test]

@@ -27,7 +27,7 @@ mod config {
         pub min_energy_norm: f32,
         pub min_health_norm: f32,
     }
-    pub use ReproductionConfig as Config;
+    
 }
 
 // -----------------------------
@@ -90,7 +90,7 @@ mod components {
         pub duration_ticks: u32,
     }
 
-    pub use Age as AgeC;
+    
 }
 
 // -----------------------------

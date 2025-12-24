@@ -3,11 +3,10 @@ use std::fs;
 use std::path::Path;
 
 use bevy::prelude::*;
-use ron::error::SpannedError;
 use serde::{Deserialize, Serialize};
 
 use crate::cached_world::CachedWorld;
-use crate::tilemap::{ChunkCoordinate, WorldConfig, CHUNK_SIZE};
+use crate::tilemap::{ChunkCoordinate, WorldConfig};
 
 /// Configuration for biome generation and classification
 #[derive(Debug, Clone, Serialize, Deserialize)]

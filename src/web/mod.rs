@@ -7,7 +7,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 
-use crate::tilemap::{Chunk, ChunkCoordinate, WorldGenerator, CHUNK_SIZE};
+use crate::tilemap::{Chunk, WorldGenerator, CHUNK_SIZE};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WebSocketMessage {
@@ -222,10 +222,10 @@ fn handle_websocket_requests(
 }
 
 // Helper functions for sending messages to all connected clients
-pub async fn broadcast_message(server: &WebSocketServer, message: WebSocketMessage) {
+pub async fn broadcast_message(server: &WebSocketServer, _message: WebSocketMessage) {
     let clients = server.clients.read().await;
 
-    for (_, ws_stream) in clients.iter() {
+    for (_, _ws_stream) in clients.iter() {
         // Note: This would need mutable access to the streams
         // In a real implementation, you'd need to handle this differently
         // Perhaps using a message queue system

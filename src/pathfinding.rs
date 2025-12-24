@@ -6,7 +6,7 @@ use std::{
     collections::{BinaryHeap, HashMap, HashSet},
 };
 
-use crate::tilemap::{chunk::CHUNK_SIZE, terrain::TerrainType};
+use crate::tilemap::terrain::TerrainType;
 
 // ============================================================================
 // CORE DATA STRUCTURES

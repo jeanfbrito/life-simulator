@@ -5,6 +5,7 @@ use std::time::Duration;
 mod ai;
 mod cached_world;
 mod entities;
+mod errors;
 mod pathfinding;
 mod resources;
 mod serialization;

@@ -1,7 +1,6 @@
 /// Core simulation tick system
 /// Provides the heartbeat for all discrete game logic
 use bevy::prelude::*;
-use std::time::Duration;
 
 pub mod profiler;
 pub mod tick;

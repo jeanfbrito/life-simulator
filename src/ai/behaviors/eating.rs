@@ -4,7 +4,7 @@ use crate::entities::{stats::Hunger, TilePosition};
 use crate::tilemap::TerrainType;
 use crate::vegetation::resource_grid::*;
 use crate::world_loader::WorldLoader;
-use crate::resources::{ResourceType, ConsumptionKind};
+use crate::resources::ResourceType;
 /// Eating Behavior - for herbivores that consume vegetation
 ///
 /// This behavior makes entities find and eat suitable vegetation when hungry.
