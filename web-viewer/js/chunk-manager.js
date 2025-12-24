@@ -3,6 +3,8 @@
  */
 
 import { CONFIG } from './config.js';
+import { fetchWithTimeout } from './utils/fetch-timeout.js';
+import { CoordinateConverter } from './utils/coordinates.js';
 
 export class ChunkManager {
     constructor() {
@@ -27,7 +29,7 @@ export class ChunkManager {
             for (let dy = -radius; dy <= radius; dy++) {
                 const chunkX = centerX + dx;
                 const chunkY = centerY + dy;
-                const chunkKey = `${chunkX},${chunkY}`;
+                const chunkKey = CoordinateConverter.chunkKey(chunkX, chunkY);
 
                 if (!this.loadedChunks.has(chunkKey) && !this.loadingChunks.has(chunkKey)) {
                     neededChunks.add(chunkKey);
@@ -96,16 +98,16 @@ export class ChunkManager {
         return null;
     }
 
-    // HTTP-based data fetching with CORS workaround
+    // HTTP-based data fetching with CORS workaround and timeout protection
     async fetchData(endpoint) {
         console.log(`Fetching: ${CONFIG.apiBaseUrl}${endpoint}`);
 
         try {
-            // Try fetch first, fallback to our proxy if CORS fails
-            const response = await fetch(`${CONFIG.apiBaseUrl}${endpoint}`, {
+            // Try fetch first with timeout protection
+            const response = await fetchWithTimeout(`${CONFIG.apiBaseUrl}${endpoint}`, {
                 mode: 'cors',
                 credentials: 'omit'
-            });
+            }, 10000);
 
             console.log(`Response status: ${response.status}`);
             if (!response.ok) {
@@ -146,8 +148,10 @@ export class ChunkManager {
         const viewCenterWorldX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_X / 2);
         const viewCenterWorldY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_Y / 2);
 
-        const centerChunkX = Math.floor(viewCenterWorldX / 16);
-        const centerChunkY = Math.floor(viewCenterWorldY / 16);
+        // Convert to chunk coordinates
+        const centerChunk = CoordinateConverter.worldToChunk(viewCenterWorldX, viewCenterWorldY);
+        const centerChunkX = centerChunk.chunkX;
+        const centerChunkY = centerChunk.chunkY;
 
         // Only load if we've moved significantly from last loaded center
         const distanceX = Math.abs(centerChunkX - this.lastLoadedCenter.x);
@@ -166,10 +170,12 @@ export class ChunkManager {
         const viewEndWorldY = viewStartWorldY + CONFIG.VIEW_SIZE_Y;
 
         // Convert to chunk coordinates and add buffer
-        const startChunkX = Math.floor(viewStartWorldX / 16) - 1; // Add 1 chunk buffer
-        const startChunkY = Math.floor(viewStartWorldY / 16) - 1;
-        const endChunkX = Math.floor(viewEndWorldX / 16) + 1; // Add 1 chunk buffer
-        const endChunkY = Math.floor(viewEndWorldY / 16) + 1;
+        const startChunk = CoordinateConverter.worldToChunk(viewStartWorldX, viewStartWorldY);
+        const endChunk = CoordinateConverter.worldToChunk(viewEndWorldX, viewEndWorldY);
+        const startChunkX = startChunk.chunkX - 1; // Add 1 chunk buffer
+        const startChunkY = startChunk.chunkY - 1;
+        const endChunkX = endChunk.chunkX + 1; // Add 1 chunk buffer
+        const endChunkY = endChunk.chunkY + 1;
 
         // Calculate radius from the bounds
         const radiusX = Math.abs(centerChunkX - startChunkX);

@@ -3,6 +3,7 @@
  */
 
 import { CONFIG, RESOURCE_SYMBOLS } from './config.js';
+import { CoordinateConverter } from './utils/coordinates.js';
 
 export class Controls {
     constructor(canvas, renderer, chunkManager) {
@@ -22,34 +23,57 @@ export class Controls {
         // Track last mouse position to compute velocity while dragging
         this.lastMouse = { x: 0, y: 0 };
 
-        this.setupEventListeners();
+        // Cache for biomass average to avoid O(n²) calculation on every mousemove
+        this.cachedBiomassAverage = null;
+
+        // Throttle tooltip updates to reduce getBoundingClientRect() calls
+        this.lastTooltipUpdate = 0;
+        this.tooltipThrottleMs = 100; // Update max once per 100ms
+        // Store bound handlers for cleanup
+        this.boundHandlers = {
+            mouseMove: (e) => this.handleMouseMove(e),
+            mouseLeave: () => this.hideTooltip(),
+            mouseDown: (e) => this.handleMouseDown(e),
+            drag: (e) => this.handleDrag(e),
+            mouseUp: (e) => this.handleMouseUp(e),
+            contextMenu: (e) => e.preventDefault(),
+            resize: () => this.handleResize(),
+            zoomIn: () => this.zoomIn(),
+            zoomOut: () => this.zoomOut(),
+            resetView: () => this.resetView(),
+            toggleGrassDensity: () => this.toggleGrassDensity()
+        };
+this.setupEventListeners();
     }
 
     setupEventListeners() {
         // Mouse move for hover info
-        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mousemove', this.boundHandlers.mouseMove);
 
         // Mouse leave to hide tooltip
-        this.canvas.addEventListener('mouseleave', () => this.hideTooltip());
+        this.canvas.addEventListener('mouseleave', this.boundHandlers.mouseLeave);
 
         // Middle mouse button drag functionality
-        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleDrag(e));
-        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('mousedown', this.boundHandlers.mouseDown);
+        this.canvas.addEventListener('mousemove', this.boundHandlers.drag);
+        this.canvas.addEventListener('mouseup', this.boundHandlers.mouseUp);
 
         // Handle context menu (right click) to prevent interference
-        this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        this.canvas.addEventListener('contextmenu', this.boundHandlers.contextMenu);
 
         // Window resize
-        window.addEventListener('resize', () => this.handleResize());
+        window.addEventListener('resize', this.boundHandlers.resize);
 
         // Zoom controls
-        document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn());
-        document.getElementById('zoom-out').addEventListener('click', () => this.zoomOut());
-        document.getElementById('reset-view').addEventListener('click', () => this.resetView());
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const resetViewBtn = document.getElementById('reset-view');
+        const toggleGrassBtn = document.getElementById('toggle-grass-density');
 
-        // Grass density toggle
-        document.getElementById('toggle-grass-density').addEventListener('click', () => this.toggleGrassDensity());
+        if (zoomInBtn) zoomInBtn.addEventListener('click', this.boundHandlers.zoomIn);
+        if (zoomOutBtn) zoomOutBtn.addEventListener('click', this.boundHandlers.zoomOut);
+        if (resetViewBtn) resetViewBtn.addEventListener('click', this.boundHandlers.resetView);
+        if (toggleGrassBtn) toggleGrassBtn.addEventListener('click', this.boundHandlers.toggleGrassDensity);
     }
 
     handleMouseMove(e) {
@@ -62,7 +86,21 @@ export class Controls {
         const y = Math.floor(canvasY / CONFIG.TILE_SIZE);
 
         if (x >= 0 && x < CONFIG.VIEW_SIZE_X && y >= 0 && y < CONFIG.VIEW_SIZE_Y) {
-            this.showTooltip(e, x, y);
+            const now = Date.now();
+
+            // Always update tooltip position for smooth tracking
+            const tooltip = document.getElementById('tooltip');
+            if (tooltip && tooltip.style.display === 'block') {
+                const offset = 15;
+                tooltip.style.left = (e.clientX + offset) + 'px';
+                tooltip.style.top = (e.clientY + offset) + 'px';
+            }
+
+            // But only update content and recalculate bounds every 100ms
+            if (now - this.lastTooltipUpdate >= this.tooltipThrottleMs) {
+                this.showTooltip(e, x, y);
+                this.lastTooltipUpdate = now;
+            }
         } else {
             this.hideTooltip();
         }
@@ -72,7 +110,7 @@ export class Controls {
         const tooltip = document.getElementById('tooltip');
         tooltip.style.display = 'block';
 
-        // Position tooltip near cursor with smart positioning
+        // Position tooltip near cursor with smart positioning (throttled - only called every 100ms)
         const offset = 15; // Distance from cursor
         const tooltipRect = tooltip.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
@@ -93,33 +131,26 @@ export class Controls {
         tooltip.style.top = top + 'px';
 
         // Convert to world coordinates (matching render function)
-        const worldX = x - Math.floor(CONFIG.VIEW_SIZE_X / 2);
-        const worldY = y - Math.floor(CONFIG.VIEW_SIZE_Y / 2);
+        const world = CoordinateConverter.screenToWorld(x, y, CONFIG.VIEW_SIZE_X, CONFIG.VIEW_SIZE_Y);
+        const chunk = CoordinateConverter.worldToChunk(world.x, world.y);
+        const chunkKey = CoordinateConverter.chunkKey(chunk.chunkX, chunk.chunkY);
 
-        // Get chunk coordinates
-        const chunkX = Math.floor(worldX / 16);
-        const chunkY = Math.floor(worldY / 16);
-        const localX = ((worldX % 16) + 16) % 16;
-        const localY = ((worldY % 16) + 16) % 16;
-
-        const chunkKey = `${chunkX},${chunkY}`;
+        // Use shorthand for readability
+        const worldX = world.x;
+        const worldY = world.y;
+        const chunkX = chunk.chunkX;
+        const chunkY = chunk.chunkY;
+        const localX = chunk.localX;
+        const localY = chunk.localY;
         let terrainType = 'Grass';
 
         // We need access to worldData - this will be injected from main app
         if (this.worldData) {
-            if (this.worldData.chunks[chunkKey] &&
-                this.worldData.chunks[chunkKey][localY] &&
-                this.worldData.chunks[chunkKey][localY][localX]) {
-                terrainType = this.worldData.chunks[chunkKey][localY][localX];
-            }
+            // Use optional chaining for null-safe access to terrain data
+            terrainType = this.worldData.chunks?.[chunkKey]?.[localY]?.[localX] ?? 'Grass';
 
-            // Check for resource
-            let resourceType = '';
-            if (this.worldData.resources[chunkKey] &&
-                this.worldData.resources[chunkKey][localY] &&
-                this.worldData.resources[chunkKey][localY][localX]) {
-                resourceType = this.worldData.resources[chunkKey][localY][localX];
-            }
+            // Check for resource with null-safe optional chaining
+            const resourceType = this.worldData.resources?.[chunkKey]?.[localY]?.[localX] ?? '';
 
             let tooltipText = `World: (${worldX}, ${worldY})<br>Chunk: (${chunkX}, ${chunkY})<br>Terrain: ${terrainType}`;
 
@@ -182,13 +213,12 @@ export class Controls {
         const tileSize = this.renderer.biomassData.tile_size || 16;
 
         // Convert world tile coordinates to chunk coordinates
-        const chunkX = Math.floor(worldX / tileSize);
-        const chunkY = Math.floor(worldY / tileSize);
+        const chunk = CoordinateConverter.worldToChunk(worldX, worldY, tileSize);
 
         const offsetX = Math.floor(heatmapSizeX / 2);
         const offsetY = Math.floor(heatmapSizeY / 2);
-        const heatmapX = chunkX + offsetX;
-        const heatmapY = chunkY + offsetY;
+        const heatmapX = chunk.chunkX + offsetX;
+        const heatmapY = chunk.chunkY + offsetY;
 
         // Check if we have biomass data for this position
         if (heatmapX >= 0 && heatmapX < heatmapSizeX && heatmapY >= 0 && heatmapY < heatmapSizeY) {
@@ -215,6 +245,11 @@ export class Controls {
 
     // Calculate average biomass across the entire heatmap
     calculateAverageBiomass() {
+        // Return cached value if available to avoid O(n²) calculation on every mousemove
+        if (this.cachedBiomassAverage !== null) {
+            return this.cachedBiomassAverage;
+        }
+
         if (!this.renderer.biomassData || !this.renderer.biomassData.heatmap) {
             return 0;
         }
@@ -388,6 +423,8 @@ export class Controls {
             const biomassData = await this.renderer.fetchBiomassData();
 
             if (biomassData) {
+                // Recalculate and cache average when new data arrives
+                this.cachedBiomassAverage = this.calculateAverageBiomass();
                 status.innerHTML = '<span style="color: #22c55e;">✅ Grass density overlay active</span>';
             } else {
                 status.innerHTML = '<span style="color: #f87171;">⚠️ Biomass data unavailable — check that the simulator is running</span>';
@@ -408,8 +445,9 @@ export class Controls {
             button.innerHTML = '🌱 Show Grass Density';
             status.innerHTML = '<span style="color: #fbbf24;">🔍 Click to show grass growth patterns</span>';
 
-            // Clear biomass data
+            // Clear biomass data and invalidate cache
             this.renderer.biomassData = null;
+            this.cachedBiomassAverage = null;
 
             // Update rendering
             if (this.onRender) {
@@ -417,6 +455,37 @@ export class Controls {
             }
         }
     }
+
+    /**
+     * Clean up event listeners to prevent memory leaks
+     * Call this when destroying the viewer instance
+     */
+    destroy() {
+        // Remove canvas event listeners
+        this.canvas.removeEventListener('mousemove', this.boundHandlers.mouseMove);
+        this.canvas.removeEventListener('mouseleave', this.boundHandlers.mouseLeave);
+        this.canvas.removeEventListener('mousedown', this.boundHandlers.mouseDown);
+        this.canvas.removeEventListener('mousemove', this.boundHandlers.drag);
+        this.canvas.removeEventListener('mouseup', this.boundHandlers.mouseUp);
+        this.canvas.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
+
+        // Remove window event listeners
+        window.removeEventListener('resize', this.boundHandlers.resize);
+
+        // Remove button event listeners
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const resetViewBtn = document.getElementById('reset-view');
+        const toggleGrassBtn = document.getElementById('toggle-grass-density');
+
+        if (zoomInBtn) zoomInBtn.removeEventListener('click', this.boundHandlers.zoomIn);
+        if (zoomOutBtn) zoomOutBtn.removeEventListener('click', this.boundHandlers.zoomOut);
+        if (resetViewBtn) resetViewBtn.removeEventListener('click', this.boundHandlers.resetView);
+        if (toggleGrassBtn) toggleGrassBtn.removeEventListener('click', this.boundHandlers.toggleGrassDensity);
+
+        console.log('Controls destroyed, event listeners removed');
+    }
+
 }
 
 export class FPSCounter {

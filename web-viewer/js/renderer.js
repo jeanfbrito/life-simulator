@@ -3,6 +3,8 @@
  */
 
 import { CONFIG, TERRAIN_COLORS, RESOURCE_CONFIG, RESOURCE_SYMBOLS, ENTITY_CONFIG, JUVENILE_SCALES, DEFAULTS } from './config.js';
+import { fetchWithTimeout } from './utils/fetch-timeout.js';
+import { CoordinateConverter } from './utils/coordinates.js';
 
 export class Renderer {
     constructor(canvas, ctx) {
@@ -113,21 +115,16 @@ export class Renderer {
                 const worldX = x + cameraOffsetX - Math.floor(CONFIG.VIEW_SIZE_X / 2);
                 const worldY = y + cameraOffsetY - Math.floor(CONFIG.VIEW_SIZE_Y / 2);
 
-                // Get chunk coordinates
-                const chunkX = Math.floor(worldX / 16);
-                const chunkY = Math.floor(worldY / 16);
-                const localX = ((worldX % 16) + 16) % 16;
-                const localY = ((worldY % 16) + 16) % 16;
+                // Get chunk coordinates and local position
+                const chunk = CoordinateConverter.worldToChunk(worldX, worldY);
+                const chunkKey = CoordinateConverter.chunkKey(chunk.chunkX, chunk.chunkY);
+                const chunkX = chunk.chunkX;
+                const chunkY = chunk.chunkY;
+                const localX = chunk.localX;
+                const localY = chunk.localY;
 
-                const chunkKey = `${chunkX},${chunkY}`;
-                let terrainType = DEFAULTS.terrainType;
-
-                // Access the actual terrain data from loaded chunks
-                if (worldData.chunks[chunkKey] &&
-                    worldData.chunks[chunkKey][localY] &&
-                    worldData.chunks[chunkKey][localY][localX]) {
-                    terrainType = worldData.chunks[chunkKey][localY][localX];
-                }
+                // Access the actual terrain data from loaded chunks with null-safe optional chaining
+                const terrainType = worldData.chunks?.[chunkKey]?.[localY]?.[localX] ?? DEFAULTS.terrainType;
 
                 // Draw tile
                 let color = TERRAIN_COLORS[terrainType] || TERRAIN_COLORS[DEFAULTS.terrainType];
@@ -140,13 +137,8 @@ export class Renderer {
                 this.ctx.fillStyle = color;
                 this.ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
 
-                // Collect resource data for later rendering
-                let resourceType = '';
-                if (worldData.resources[chunkKey] &&
-                    worldData.resources[chunkKey][localY] &&
-                    worldData.resources[chunkKey][localY][localX]) {
-                    resourceType = worldData.resources[chunkKey][localY][localX];
-                }
+                // Collect resource data for later rendering with null-safe optional chaining
+                const resourceType = worldData.resources?.[chunkKey]?.[localY]?.[localX] ?? '';
 
                 if (resourceType && resourceType !== '') {
                     resourcesToRender.push({
@@ -199,22 +191,20 @@ export class Renderer {
             const entityWorldX = entity.position.x;
             const entityWorldY = entity.position.y;
 
-            // Convert world coordinates to screen coordinates
-            const screenX = (entityWorldX - cameraOffsetX + Math.floor(CONFIG.VIEW_SIZE_X / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
-            const screenY = (entityWorldY - cameraOffsetY + Math.floor(CONFIG.VIEW_SIZE_Y / 2)) * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE / 2;
-            const screenTileY = entityWorldY - cameraOffsetY + Math.floor(CONFIG.VIEW_SIZE_Y / 2);
+            // Convert world coordinates to screen pixel coordinates
+            const screenCoords = CoordinateConverter.worldToScreenPixels(entityWorldX, entityWorldY, cameraOffsetX, cameraOffsetY);
 
             // Only add if within visible bounds
             const ENTITY_RADIUS = Math.max(2, CONFIG.TILE_SIZE * 0.3);
-            if (screenX >= -ENTITY_RADIUS && screenX <= (CONFIG.VIEW_SIZE_X * CONFIG.TILE_SIZE) + ENTITY_RADIUS &&
-                screenY >= -ENTITY_RADIUS && screenY <= (CONFIG.VIEW_SIZE_Y * CONFIG.TILE_SIZE) + ENTITY_RADIUS) {
-                
+            if (screenCoords.screenPixelX >= -ENTITY_RADIUS && screenCoords.screenPixelX <= (CONFIG.VIEW_SIZE_X * CONFIG.TILE_SIZE) + ENTITY_RADIUS &&
+                screenCoords.screenPixelY >= -ENTITY_RADIUS && screenCoords.screenPixelY <= (CONFIG.VIEW_SIZE_Y * CONFIG.TILE_SIZE) + ENTITY_RADIUS) {
+
                 renderList.push({
                     type: 'entity',
                     data: entity,
-                    y: screenTileY,  // Use tile Y for sorting
-                    screenX: screenX,
-                    screenY: screenY
+                    y: screenCoords.screenTileY,  // Use tile Y for sorting
+                    screenX: screenCoords.screenPixelX,
+                    screenY: screenCoords.screenPixelY
                 });
             }
         }
@@ -397,10 +387,10 @@ export class Renderer {
         const url = `${CONFIG.apiBaseUrl}/api/vegetation/biomass`;
 
         try {
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 mode: 'cors',
                 credentials: 'omit'
-            });
+            }, 5000);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
