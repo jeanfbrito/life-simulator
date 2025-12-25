@@ -1,7 +1,7 @@
 ---
 name: npx-package-agent
 description: Specializes in Phase 4 NPX package creation for claude-code-sub-agent-collective distribution, including installer system, template management, and npm registry publishing.
-tools: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, mcp__task-master__get_task, mcp__task-master__set_task_status, mcp__task-master__update_task, LS
+tools: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, LS
 color: green
 ---
 
@@ -50,21 +50,17 @@ claude-code-collective/
 - Documentation templates with project customization
 - Settings templates with environment-specific configurations
 
-### 📋 TaskMaster Integration:
+### 📋 Task Tracking:
 
-**MANDATORY**: Always check TaskMaster before starting work:
+**MANDATORY**: Always check task status before starting work:
 ```bash
 # Get Task 4 details
-mcp__task-master__get_task --id=4 --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
 
 # Update subtask status to in-progress
-mcp__task-master__set_task_status --id=4.X --status=in-progress --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
 
 # Update task with progress
-mcp__task-master__update_task --id=4.X --prompt="NPX package development progress" --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
 
 # Mark subtask complete
-mcp__task-master__set_task_status --id=4.X --status=done --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
 ```
 
 ### 🛠️ Implementation Patterns:
@@ -164,7 +160,7 @@ class Installer {
 ### 🔄 Work Process:
 
 1. **Preparation**
-   - Get Task 4 details from TaskMaster
+   - Get Task 4 details from task system
    - Mark appropriate subtask as in-progress
    - Analyze current collective system structure
 
@@ -194,7 +190,7 @@ class Installer {
 
 6. **Completion**
    - Deploy NPX package
-   - Update TaskMaster with completion
+   - Update task with completion
    - Mark subtasks as done
    - Document installation procedures
 
@@ -206,7 +202,7 @@ class Installer {
 
 **Error Recovery**: Robust error handling with rollback capabilities for failed installations.
 
-**TaskMaster Compliance**: Every package development action must be tracked in TaskMaster with proper status updates.
+**Task Compliance**: Every package development action must be tracked in task tracking with proper status updates.
 
 ### 🧪 Installation Testing:
 
@@ -234,7 +230,7 @@ npx claude-code-collective validate
 - Hook scripts executable
 - Settings.json configured
 - Documentation available
-- TaskMaster integration working
+- Task integration working
 
 ### 📦 Distribution Strategy:
 

@@ -18,6 +18,8 @@ pub struct FearState {
     pub ticks_since_danger: u32,
     /// Maximum fear level reached recently (for persistent effects)
     pub peak_fear: f32,
+    /// Last fear level that was logged (for change detection)
+    pub last_logged_fear: f32,
 }
 
 impl Default for FearState {
@@ -27,6 +29,7 @@ impl Default for FearState {
             nearby_predators: 0,
             ticks_since_danger: 0,
             peak_fear: 0.0,
+            last_logged_fear: 0.0,
         }
     }
 }
@@ -94,6 +97,21 @@ impl FearState {
         }
     }
 
+    /// Check if fear level has changed significantly enough to warrant logging
+    /// Returns true if change is > 0.1 or if crossing the fearful threshold
+    pub fn should_log_fear_change(&mut self) -> bool {
+        let fear_delta = (self.fear_level - self.last_logged_fear).abs();
+        let crossing_threshold = (self.last_logged_fear <= 0.1 && self.fear_level > 0.1)
+            || (self.last_logged_fear > 0.1 && self.fear_level <= 0.1);
+
+        if fear_delta > 0.1 || crossing_threshold {
+            self.last_logged_fear = self.fear_level;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get feeding duration reduction under fear
     pub fn get_feeding_reduction(&self) -> f32 {
         if self.is_fearful() {
@@ -149,18 +167,22 @@ pub fn predator_proximity_system(
         if nearby_predators > 0 {
             fear_state.apply_fear_stimulus(nearby_predators);
 
-            info!(
-                "😨 {} {:?} fear level: {:.2} ({} predators within {} tiles)",
-                creature.species, entity, fear_state.fear_level, nearby_predators, FEAR_RADIUS
-            );
+            // Only log if fear level changed significantly
+            if fear_state.should_log_fear_change() {
+                info!(
+                    "😨 {} {:?} fear level: {:.2} ({} predators within {} tiles)",
+                    creature.species, entity, fear_state.fear_level, nearby_predators, FEAR_RADIUS
+                );
+            }
         } else {
             let was_fearful = fear_state.is_fearful();
             fear_state.decay_fear();
 
-            if was_fearful && !fear_state.is_fearful() {
-                debug!(
-                    "🙂 {} {:?} fear dissipated after {} ticks without predators",
-                    creature.species, entity, fear_state.ticks_since_danger
+            // Log when fear dissipates (crosses threshold)
+            if fear_state.should_log_fear_change() {
+                info!(
+                    "🙂 {} {:?} fear dissipated (level: {:.2}) after {} ticks without predators",
+                    creature.species, entity, fear_state.fear_level, fear_state.ticks_since_danger
                 );
             }
         }
@@ -237,6 +259,7 @@ mod tests {
             nearby_predators: 0,
             ticks_since_danger: 0,
             peak_fear: 0.8,
+            last_logged_fear: 0.0,
         };
 
         // Decay over time

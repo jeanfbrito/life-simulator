@@ -68,6 +68,9 @@ pub enum ActionType {
         target_tile: IVec2,
         resource_type: crate::resources::ResourceType,
     },
+    Wander {
+        target_tile: IVec2,
+    },
     // Future actions:
     // Hunt { target: Entity },
     // Flee { from: Entity },
@@ -1349,6 +1352,99 @@ impl Action for HarvestAction {
 }
 
 // =============================================================================
+// WANDER ACTION
+// =============================================================================
+
+/// Wander action - idle exploration within territory
+///
+/// Behavior:
+/// - Moves to a random walkable tile within wander_radius
+/// - Lowest priority action (always available as fallback)
+/// - Used when no needs are pressing
+#[derive(Debug, Clone)]
+pub struct WanderAction {
+    pub target_tile: IVec2,
+    pub started: bool,
+}
+
+impl WanderAction {
+    pub fn new(target_tile: IVec2) -> Self {
+        Self {
+            target_tile,
+            started: false,
+        }
+    }
+}
+
+impl Action for WanderAction {
+    fn can_execute(&self, world: &World, entity: Entity, _tick: u64) -> bool {
+        // Check entity has position
+        if world.get::<TilePosition>(entity).is_none() {
+            return false;
+        }
+
+        // Check target tile is walkable
+        if let Some(world_loader) = world.get_resource::<WorldLoader>() {
+            if let Some(terrain_str) =
+                world_loader.get_terrain_at(self.target_tile.x, self.target_tile.y)
+            {
+                if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+                    terrain.is_walkable()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
+    fn execute(&mut self, world: &mut World, entity: Entity, _tick: u64) -> ActionResult {
+        // Get current position
+        let Some(pos) = world.get::<TilePosition>(entity) else {
+            return ActionResult::Failed;
+        };
+        let current_pos = pos.tile;
+
+        // Check if arrived
+        if current_pos == self.target_tile {
+            return ActionResult::Success;
+        }
+
+        // Start pathfinding
+        if !self.started {
+            if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+                entity_mut.insert(MoveOrder {
+                    destination: self.target_tile,
+                    allow_diagonal: true,
+                });
+            }
+            self.started = true;
+        }
+
+        // Check for pathfinding failure
+        if world.get::<PathfindingFailed>(entity).is_some() {
+            return ActionResult::Failed;
+        }
+
+        ActionResult::InProgress
+    }
+
+    fn cancel(&mut self, world: &mut World, entity: Entity) {
+        if let Some(mut entity_mut) = world.get_entity_mut(entity).ok() {
+            entity_mut.remove::<MoveOrder>();
+            entity_mut.remove::<Path>();
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "Wander"
+    }
+}
+
+// =============================================================================
 // ACTION FACTORY
 // =============================================================================
 
@@ -1373,5 +1469,6 @@ pub fn create_action(action_type: ActionType) -> Box<dyn Action> {
             target_tile,
             resource_type,
         } => Box::new(HarvestAction::new(target_tile, resource_type)),
+        ActionType::Wander { target_tile } => Box::new(WanderAction::new(target_tile)),
     }
 }

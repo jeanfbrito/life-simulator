@@ -184,6 +184,41 @@ impl Health {
     pub fn is_dead(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Apply progressive health damage based on hunger and thirst levels
+    /// Only applies damage if either need >= 90%
+    /// Uses the WORSE of hunger/thirst damage (they don't stack)
+    pub fn apply_need_damage(&mut self, hunger: &Hunger, thirst: &Thirst) {
+        let hunger_norm = hunger.0.normalized();
+        let thirst_norm = thirst.0.normalized();
+
+        // Calculate damage from each need
+        let hunger_damage = Self::calculate_need_damage(hunger_norm);
+        let thirst_damage = Self::calculate_need_damage(thirst_norm);
+
+        // Apply the worse damage (they don't stack)
+        let damage = hunger_damage.max(thirst_damage);
+        if damage > 0.0 {
+            self.0.change(-damage);
+        }
+    }
+
+    /// Calculate progressive damage based on normalized need level (0.0-1.0)
+    /// Returns damage per tick:
+    /// - 90-95% hungry/thirsty: 0.05 health/tick (warning)
+    /// - 95-98%: 0.2 health/tick (danger)
+    /// - 98%+: 0.5 health/tick (critical)
+    fn calculate_need_damage(need_normalized: f32) -> f32 {
+        if need_normalized >= 0.98 {
+            0.5 // Critical: death in ~200 ticks = 20 seconds
+        } else if need_normalized >= 0.95 {
+            0.2 // Danger: death in ~500 ticks = 50 seconds
+        } else if need_normalized >= 0.90 {
+            0.05 // Warning: can survive indefinitely
+        } else {
+            0.0 // No damage
+        }
+    }
 }
 
 // ============================================================================
@@ -197,6 +232,7 @@ pub struct EntityStatsBundle {
     pub thirst: Thirst,
     pub energy: Energy,
     pub health: Health,
+    pub cached_state: crate::entities::CachedEntityState,
 }
 
 impl Default for EntityStatsBundle {
@@ -206,6 +242,7 @@ impl Default for EntityStatsBundle {
             thirst: Thirst::new(),
             energy: Energy::new(),
             health: Health::new(),
+            cached_state: crate::entities::CachedEntityState::default(),
         }
     }
 }
@@ -284,6 +321,30 @@ pub fn tick_stats_system(
     }
 
     end_timing_resource(&mut profiler, "stats");
+}
+
+/// Apply progressive damage from starvation and dehydration
+/// MUST run in FixedUpdate schedule (tick-synced)
+pub fn need_damage_system(
+    mut query: Query<(Entity, &mut Health, &Hunger, &Thirst)>,
+    tick: Res<crate::simulation::SimulationTick>,
+) {
+    for (entity, mut health, hunger, thirst) in query.iter_mut() {
+        let old_health = health.0.current;
+
+        health.apply_need_damage(hunger, thirst);
+
+        // Log damage events every 10 ticks to avoid spam
+        if tick.0 % 10 == 0 && health.0.current < old_health {
+            let hunger_norm = hunger.0.normalized();
+            let thirst_norm = thirst.0.normalized();
+
+            warn!(
+                "Entity {:?} taking need damage: health {:.1} (hunger {:.1}%, thirst {:.1}%)",
+                entity, health.0.current, hunger_norm * 100.0, thirst_norm * 100.0
+            );
+        }
+    }
 }
 
 /// Handle death when health reaches zero
@@ -447,5 +508,75 @@ mod tests {
         let mut critical_hunger = Hunger::new();
         critical_hunger.0.set(95.0);
         assert!(utility_eat(&critical_hunger) > 0.9); // Very urgent
+    }
+
+    #[test]
+    fn test_starvation_damage_warning() {
+        let mut health = Health::new();
+        let mut hunger = Hunger::new();
+        let thirst = Thirst::new();
+
+        hunger.0.set(92.0);  // 92% = warning zone
+        health.apply_need_damage(&hunger, &thirst);
+
+        assert!(health.0.current < 100.0);  // Damage applied
+        assert!(health.0.current > 99.0);   // But very small (0.05)
+    }
+
+    #[test]
+    fn test_starvation_damage_critical() {
+        let mut health = Health::new();
+        let mut hunger = Hunger::new();
+        let thirst = Thirst::new();
+
+        hunger.0.set(99.0);  // 99% = critical
+        health.apply_need_damage(&hunger, &thirst);
+
+        assert_eq!(health.0.current, 99.5);  // Lost 0.5 health
+    }
+
+    #[test]
+    fn test_thirst_overrides_hunger() {
+        let mut health = Health::new();
+        let mut hunger = Hunger::new();
+        let mut thirst = Thirst::new();
+
+        hunger.0.set(92.0);  // 92% hunger = 0.05 damage
+        thirst.0.set(99.0);  // 99% thirst = 0.5 damage
+        health.apply_need_damage(&hunger, &thirst);
+
+        assert_eq!(health.0.current, 99.5);  // Uses worse damage (0.5)
+    }
+
+    #[test]
+    fn test_no_damage_below_threshold() {
+        let mut health = Health::new();
+        let mut hunger = Hunger::new();
+        let thirst = Thirst::new();
+
+        hunger.0.set(85.0);  // Below 90% threshold
+        health.apply_need_damage(&hunger, &thirst);
+
+        assert_eq!(health.0.current, 100.0);  // No damage
+    }
+
+    #[test]
+    fn test_entity_stats_bundle_includes_cached_state() {
+        let bundle = EntityStatsBundle::default();
+
+        // Verify all stats are present
+        assert_eq!(bundle.hunger.0.current, 0.0);
+        assert_eq!(bundle.thirst.0.current, 0.0);
+        assert_eq!(bundle.energy.0.current, 100.0);
+        assert_eq!(bundle.health.0.current, 100.0);
+
+        // Verify cached state component exists in bundle
+        assert_eq!(bundle.cached_state.tile, bevy::math::IVec2::ZERO);
+        // Default cached state starts with all urgencies at 0.0
+        assert_eq!(bundle.cached_state.hunger_urgency, 0.0);
+        assert_eq!(bundle.cached_state.thirst_urgency, 0.0);
+        assert_eq!(bundle.cached_state.energy_urgency, 0.0);
+        // Should be dirty on creation (needs update on first use)
+        assert!(bundle.cached_state.dirty);
     }
 }

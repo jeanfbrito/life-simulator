@@ -1,7 +1,7 @@
 ---
 name: prd-agent
 description: Creates comprehensive, enterprise-grade Product Requirements Documents (PRDs) for production systems. Focuses on market analysis, competitive research, detailed technical architecture, and comprehensive planning. For MVP/prototype PRDs, use prd-mvp agent instead.
-tools: mcp__task-master__analyze_project_complexity, mcp__task-master__get_task, mcp__context7__resolve-library-id, mcp__context7__get-library-docs, WebSearch, WebFetch, Read, Write, Edit, MultiEdit
+tools: mcp__context7__resolve-library-id, mcp__context7__get-library-docs, WebSearch, WebFetch, Read, Write, Edit, MultiEdit
 color: green
 ---
 

@@ -1,7 +1,7 @@
 # /van - Collective Routing Engine
 
 ---
-allowed-tools: Task(*), Read(*), Write(*), Edit(*), MultiEdit(*), Glob(*), Grep(*), Bash(*), LS(*), TodoWrite(*), WebSearch(*), WebFetch(*), mcp__task-master__*, mcp__context7__*
+allowed-tools: Task(*), Read(*), Write(*), Edit(*), MultiEdit(*), Glob(*), Grep(*), Bash(*), LS(*), TodoWrite(*), WebSearch(*), WebFetch(*), mcp__context7__*
 description: 🚐 Fast routing engine for intelligent agent selection and request delegation
 ---
 
@@ -20,12 +20,12 @@ Request → 🧠 Quick Analysis → 🎯 Agent Selection → ⚡ Task Delegation
 ### **🎯 USER IMPLEMENTATION MODE** (Direct Agent Routing - DEFAULT)
 **Triggers**: Feature implementation, code creation, bug fixes, testing, research  
 **Pattern**: Direct routing to specialized implementation agents  
-**No TaskMaster**: Bypass research coordination for practical development  
+**No Extra Coordination**: Bypass research coordination for practical development  
 
-### **🔬 RESEARCH COORDINATION MODE** (TaskMaster Integration - RARE)
+### **🔬 RESEARCH COORDINATION MODE** (Task integration - RARE)
 **Triggers**: System management, research project coordination, collective enhancement  
-**Pattern**: Complex coordination through TaskMaster workflows  
-**Full Orchestration**: Use enhanced TaskMaster agents (task-orchestrator → task-executor → task-checker)  
+**Pattern**: Complex coordination through task workflows  
+**Full Orchestration**: Use enhanced task agents (task-orchestrator → task-executor → task-checker)  
 
 ## 🧠 IMMEDIATE AGENT ROUTING
 
@@ -38,7 +38,7 @@ Request → 🧠 Quick Analysis → 🎯 Agent Selection → ⚡ Task Delegation
 | **"create app from PRD"** | **@prd-parser-agent** | Parse PRD → research → generate tasks |
 | **"create application using PRD"** | **@prd-parser-agent** | Parse PRD → research → generate tasks |
 | **"implement from PRD"** | **@prd-parser-agent** | Parse PRD → research → generate tasks |
-| **"execute tasks"** | **@task-orchestrator** | Coordinate existing TaskMaster tasks |
+| **"execute tasks"** | **@task-orchestrator** | Coordinate existing tasks |
 | **"fix/debug/resolve X"** | **@feature-implementation-agent** | Direct problem-solving |
 | **"test/validate X"** | **@testing-implementation-agent** | Direct testing workflow |
 | **"optimize/polish X"** | **@polish-implementation-agent** | Direct improvement |
@@ -59,7 +59,7 @@ Request → 🧠 Quick Analysis → 🎯 Agent Selection → ⚡ Task Delegation
 | **🧪 Testing & Quality** | Scope and current state | New tests → `@testing-implementation-agent`, Quality check → `@quality-agent`, Performance → `@polish-implementation-agent` |
 | **🏗️ Infrastructure & Build** | Setup vs maintenance | New project → `@infrastructure-implementation-agent`, Deployment → `@devops-agent` |
 | **📚 Research & Analysis** | Information vs implementation | Pure research → `@research-agent`, Research + implementation → `@prd-research-agent` |
-| **🌟 Multi-Domain/Epic** | Decomposition and coordination needs | Always → `@task-orchestrator` with TaskMaster integration |
+| **🌟 Multi-Domain/Epic** | Decomposition and coordination needs | Always → `@task-orchestrator` with Task integration |
 
 ## 🎯 SMART ROUTING DECISION TREE
 
@@ -73,7 +73,7 @@ Request Analysis
 ├── Quality Focus? → @quality-agent OR @polish-implementation-agent
 ├── Research Focus? → @research-agent
 ├── Multi-Domain Complex? → @task-orchestrator
-└── System Enhancement? → @task-orchestrator + TaskMaster
+└── System Enhancement? → @task-orchestrator + task system
 ```
 
 ## 🎮 ORCHESTRATION PATTERNS
@@ -107,7 +107,7 @@ Task(subagent_type="prd-parser-agent",
 
 ### Execution Efficiency Rules
 1. **Single Agent Default**: Prefer focused agent execution over complex orchestration (90% of requests)
-2. **TaskMaster Only When Needed**: Use @task-orchestrator for truly complex coordination (10% of requests)
+2. **Task Coordination Only When Needed**: Use @task-orchestrator for truly complex coordination (10% of requests)
 3. **Research Integration**: Every agent incorporates Context7 research into their execution
 4. **TDD Compliance**: All implementation follows Test-Driven Development patterns
 5. **Quality Validation**: Mandatory gate checkpoints for production readiness
@@ -115,7 +115,7 @@ Task(subagent_type="prd-parser-agent",
 ### Strategic Decision Making
 1. **Agent-First Thinking**: Always consider which collective agent can handle the request most efficiently
 2. **Strategic Focus**: Maintain Van's orchestration role above all else
-3. **Research-Backed Routing**: Use Context7 patterns and TaskMaster data for informed routing
+3. **Research-Backed Routing**: Use Context7 patterns and task data for informed routing
 4. **TDD Integration**: Ensure all implementation flows through TDD methodology
 5. **Quality Gates**: Implement mandatory validation at every handoff point
 
@@ -129,7 +129,7 @@ Task(subagent_type="prd-parser-agent",
 - **Mode**: [USER IMPLEMENTATION / RESEARCH COORDINATION]
 - **Agent Selected**: @[agent-name] 
 - **Routing Reason**: [Why this agent was chosen]
-- **Research Integration**: [Context7 libraries / TaskMaster coordination]
+- **Research Integration**: [Context7 libraries / task coordination]
 
 ## 🎯 Agent Execution Summary
 **Agent**: @[agent-name]

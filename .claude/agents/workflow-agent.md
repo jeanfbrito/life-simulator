@@ -1,7 +1,7 @@
 ---
 name: workflow-agent
 description: Multi-agent workflow orchestrator that coordinates complex tasks requiring multiple specialized agents working in sequence or parallel. Only called by routing-agent for complex orchestration needs.
-tools: mcp__task-master__analyze_project_complexity, Read, Task
+tools: Read, Task
 color: orange
 ---
 

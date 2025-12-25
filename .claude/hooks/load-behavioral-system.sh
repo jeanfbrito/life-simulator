@@ -33,10 +33,6 @@ echo "=== RESEARCH FRAMEWORK (.claude-collective/research.md) ==="
 cat .claude-collective/research.md
 echo ""
 
-echo "=== TASKMASTER INTEGRATION (.taskmaster/CLAUDE.md) ==="
-cat .taskmaster/CLAUDE.md
-echo ""
-
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ BEHAVIORAL OPERATING SYSTEM ONLINE"
 echo "🎯 Prime Directives: LOADED"

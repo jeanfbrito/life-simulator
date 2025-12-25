@@ -38,7 +38,7 @@ impl RabbitBehavior {
             well_fed_hunger_norm: 0.35,
             well_fed_thirst_norm: 0.35,
             well_fed_required_ticks: 300, // ~30s sustained
-            matching_interval_ticks: 50,  // run matcher every 5s
+            matching_interval_ticks: 20,  // run matcher every 2s (optimized for breeding)
             mating_duration_ticks: 30,    // ~3s mating interaction
             min_energy_norm: 0.5,
             min_health_norm: 0.6,
@@ -69,6 +69,7 @@ impl RabbitBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
         // Rabbits: higher metabolism — eat/drink more often, tire a bit faster
         EntityStatsBundle {
@@ -76,6 +77,7 @@ impl RabbitBehavior {
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)), // slower thirst gain to avoid spam-drinking
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)), // reduced energy drain to improve movement viability
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),  // Phase 3: 50% faster regen
+            cached_state: CachedEntityState::default(),
         }
     }
 
@@ -246,5 +248,21 @@ mod tests {
         assert_eq!(config.thirst_threshold, 0.75);
         assert_eq!(config.graze_range, (3, 8));
         assert_eq!(config.water_search_radius, 100);
+    }
+
+    #[test]
+    fn test_rabbit_stats_bundle_includes_cached_state() {
+        let bundle = RabbitBehavior::stats_bundle();
+
+        // Verify all stats are present
+        assert_eq!(bundle.hunger.0.max, 70.0);
+        assert_eq!(bundle.thirst.0.max, 90.0);
+        assert_eq!(bundle.energy.0.current, 100.0);
+        assert_eq!(bundle.health.0.current, 100.0);
+
+        // Verify cached state is present
+        assert_eq!(bundle.cached_state.tile, bevy::math::IVec2::ZERO);
+        // Default cached state starts dirty and needs update on first use
+        assert!(bundle.cached_state.dirty);
     }
 }

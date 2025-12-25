@@ -84,7 +84,7 @@ fn generate_world(file_name: &str, map_name: &str, seed: u64) -> Result<(), Box<
     // Generate chunks around center for saving
     let center_x = 0;
     let center_y = 0;
-    let radius = 3; // Save 7x7 chunk area around center
+    let radius = 12; // Save 25x25 chunk area around center (400x400 tiles)
 
     let total_chunks = ((radius * 2 + 1) * (radius * 2 + 1)) as usize;
     let mut generated_chunks = 0;

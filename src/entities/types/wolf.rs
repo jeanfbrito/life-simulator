@@ -32,7 +32,7 @@ impl WolfBehavior {
             well_fed_hunger_norm: 0.55,
             well_fed_thirst_norm: 0.5,
             well_fed_required_ticks: 900,
-            matching_interval_ticks: 480,
+            matching_interval_ticks: 150, // Check every 15s (optimized)
             mating_duration_ticks: 60,
             min_energy_norm: 0.45,
             min_health_norm: 0.6,
@@ -63,6 +63,7 @@ impl WolfBehavior {
 
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
 
         EntityStatsBundle {
@@ -70,6 +71,7 @@ impl WolfBehavior {
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
+            cached_state: CachedEntityState::default(),
         }
     }
 

@@ -4,7 +4,7 @@ use crate::ai::action::ActionType;
 use crate::ai::behaviors::{
     evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
     evaluate_follow_behavior, evaluate_grazing_behavior, evaluate_resting_behavior,
-    eating::HerbivoreDiet,
+    evaluate_wandering_behavior, eating::HerbivoreDiet,
 };
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
@@ -66,6 +66,15 @@ pub fn evaluate_core_actions(
         evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
     {
         actions.push(graze);
+    }
+
+    // Wandering - lowest priority idle behavior (always available)
+    if let Some(wander_score) = evaluate_wandering_behavior(
+        position,
+        world_loader,
+        behavior_config.wander_radius,
+    ) {
+        actions.push(wander_score);
     }
 
     // Apply fear modifiers to action utilities
@@ -193,6 +202,33 @@ pub fn maybe_add_mate_action(
     let hunger_level = hunger.0.normalized();
     let energy_level = energy.0.normalized();
 
+    // EMERGENCY OVERRIDE: Block mating if critically deprived
+    //
+    // This emergency check ensures survival always takes precedence over reproduction,
+    // even if reproduction config thresholds would otherwise allow mating.
+    //
+    // Without this, entities can starve/dehydrate while mating because:
+    // - Mate actions have high priority (350) that overrides survival actions (~100)
+    // - Species configs may have lenient thresholds with large margins
+    // - Emergency survival should ALWAYS block reproduction attempts
+    //
+    // At 90%+ hunger/thirst, entities begin taking health damage and should focus
+    // exclusively on survival (eating/drinking) rather than reproduction.
+    const EMERGENCY_HUNGER_THRESHOLD: f32 = 0.90;  // 90%+ hunger = emergency
+    const EMERGENCY_THIRST_THRESHOLD: f32 = 0.90;  // 90%+ thirst = emergency
+
+    if hunger_level >= EMERGENCY_HUNGER_THRESHOLD
+        || thirst_level >= EMERGENCY_THIRST_THRESHOLD
+    {
+        debug!(
+            "🚨 Mating blocked by emergency needs: hunger {:.1}%, thirst {:.1}%",
+            hunger_level * 100.0,
+            thirst_level * 100.0
+        );
+        return false;
+    }
+
+    // Existing safety checks (more lenient than emergency thresholds)
     let thirst_safe = thirst_level <= cfg.well_fed_thirst_norm + params.threshold_margin;
     let hunger_safe = hunger_level <= cfg.well_fed_hunger_norm + params.threshold_margin;
     let energy_safe = energy_level >= (cfg.min_energy_norm + params.energy_margin).min(1.0);
@@ -275,4 +311,236 @@ fn find_nearest_predator(prey_pos: IVec2, predator_positions: &[IVec2]) -> Optio
             diff.x.abs() + diff.y.abs() // Manhattan distance for faster computation
         })
         .copied()
+}
+
+// ============================================================================
+// TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod emergency_mating_tests {
+    use super::*;
+    use crate::entities::reproduction::{MatingIntent, ReproductionConfig};
+    use bevy::prelude::Entity;
+
+    /// Helper to create test reproduction config
+    fn test_repro_config() -> ReproductionConfig {
+        ReproductionConfig {
+            maturity_ticks: 3600,
+            gestation_ticks: 1200,
+            mating_cooldown_ticks: 600,
+            postpartum_cooldown_ticks: 1200,
+            litter_size_range: (1, 4),
+            mating_search_radius: 20,
+            well_fed_hunger_norm: 0.3,  // Must be <= 30% hungry
+            well_fed_thirst_norm: 0.3,  // Must be <= 30% thirsty
+            well_fed_required_ticks: 600,
+            matching_interval_ticks: 100,
+            mating_duration_ticks: 100,
+            min_energy_norm: 0.4,        // Must have >= 40% energy
+            min_health_norm: 0.5,
+        }
+    }
+
+    /// Helper to create test mating intent
+    fn test_mating_intent() -> MatingIntent {
+        MatingIntent {
+            partner: Entity::from_raw(999),
+            meeting_tile: IVec2::new(10, 10),
+            duration_ticks: 100,
+        }
+    }
+
+    /// Helper to create test mate action params
+    fn test_mate_params() -> MateActionParams {
+        MateActionParams {
+            utility: 0.8,
+            priority: 350,
+            threshold_margin: 0.1,
+            energy_margin: 0.05,
+        }
+    }
+
+    #[test]
+    fn test_mating_blocked_when_critically_hungry() {
+        // Setup: Entity with critical hunger (>90%) but within reproduction config thresholds
+        // This tests the emergency override that should block mating regardless of config margins
+        let mut hunger = Hunger::new();
+        hunger.0.set(95.0);  // 95% hungry = critical emergency
+
+        let thirst = Thirst::new();  // Normal thirst (0%)
+        let energy = Energy::new();  // Normal energy (100%)
+
+        let mating_intent = test_mating_intent();
+
+        // Create a permissive config that would normally allow mating at 95% hunger
+        // (if we had huge margins) - emergency check should override this
+        let mut repro_cfg = test_repro_config();
+        repro_cfg.well_fed_hunger_norm = 1.0;  // Very permissive (allow up to 100% hunger)
+
+        let mut actions = Vec::new();
+        let params = MateActionParams {
+            utility: 0.8,
+            priority: 350,
+            threshold_margin: 0.1,  // Even with margin, 95% > 90% emergency threshold
+            energy_margin: 0.05,
+        };
+
+        let result = maybe_add_mate_action(
+            &mut actions,
+            Some(&mating_intent),
+            Some(&repro_cfg),
+            &thirst,
+            &hunger,
+            &energy,
+            params,
+        );
+
+        assert!(!result, "Mating should be blocked when critically hungry (95%)");
+        assert!(actions.is_empty(), "No mate action should be added when critically hungry");
+    }
+
+    #[test]
+    fn test_mating_blocked_when_critically_thirsty() {
+        // Setup: Entity with critical thirst (>90%) but within reproduction config thresholds
+        let hunger = Hunger::new();  // Normal hunger (0%)
+
+        let mut thirst = Thirst::new();
+        thirst.0.set(95.0);  // 95% thirsty = critical emergency
+
+        let energy = Energy::new();  // Normal energy (100%)
+
+        let mating_intent = test_mating_intent();
+
+        // Create permissive config
+        let mut repro_cfg = test_repro_config();
+        repro_cfg.well_fed_thirst_norm = 1.0;  // Very permissive
+
+        let mut actions = Vec::new();
+        let params = MateActionParams {
+            utility: 0.8,
+            priority: 350,
+            threshold_margin: 0.1,
+            energy_margin: 0.05,
+        };
+
+        let result = maybe_add_mate_action(
+            &mut actions,
+            Some(&mating_intent),
+            Some(&repro_cfg),
+            &thirst,
+            &hunger,
+            &energy,
+            params,
+        );
+
+        assert!(!result, "Mating should be blocked when critically thirsty (95%)");
+        assert!(actions.is_empty(), "No mate action should be added when critically thirsty");
+    }
+
+    #[test]
+    fn test_mating_blocked_at_90_percent_threshold() {
+        // Setup: Entity exactly at 90% threshold
+        let mut hunger = Hunger::new();
+        hunger.0.set(90.0);  // Exactly 90% = should block
+
+        let thirst = Thirst::new();
+        let energy = Energy::new();
+
+        let mating_intent = test_mating_intent();
+
+        // Create permissive config
+        let mut repro_cfg = test_repro_config();
+        repro_cfg.well_fed_hunger_norm = 1.0;
+
+        let mut actions = Vec::new();
+        let params = MateActionParams {
+            utility: 0.8,
+            priority: 350,
+            threshold_margin: 0.1,
+            energy_margin: 0.05,
+        };
+
+        let result = maybe_add_mate_action(
+            &mut actions,
+            Some(&mating_intent),
+            Some(&repro_cfg),
+            &thirst,
+            &hunger,
+            &energy,
+            params,
+        );
+
+        assert!(!result, "Mating should be blocked at exactly 90% hunger threshold");
+        assert!(actions.is_empty(), "No mate action should be added at 90% threshold");
+    }
+
+    #[test]
+    fn test_mating_allowed_when_not_critical() {
+        // Setup: Entity with safe stats (below emergency threshold)
+        let mut hunger = Hunger::new();
+        hunger.0.set(30.0);  // 30% hungry = safe (below 90%)
+
+        let mut thirst = Thirst::new();
+        thirst.0.set(20.0);  // 20% thirsty = safe (below 90%)
+
+        let energy = Energy::new();  // 100% energy = safe
+
+        let mating_intent = test_mating_intent();
+        let repro_cfg = test_repro_config();
+
+        let mut actions = Vec::new();
+        let result = maybe_add_mate_action(
+            &mut actions,
+            Some(&mating_intent),
+            Some(&repro_cfg),
+            &thirst,
+            &hunger,
+            &energy,
+            test_mate_params(),
+        );
+
+        assert!(result, "Mating should be allowed when stats are safe (30% hunger, 20% thirst)");
+        assert_eq!(actions.len(), 1, "Mate action should be added when not critical");
+
+        // Verify the action was created correctly
+        if let Some(action) = actions.first() {
+            assert_eq!(action.priority, 350, "Mate action priority should be 350");
+            match &action.action_type {
+                ActionType::Mate { partner, .. } => {
+                    assert_eq!(*partner, Entity::from_raw(999), "Partner should match");
+                }
+                _ => panic!("Expected Mate action type"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_mating_blocked_when_both_needs_critical() {
+        // Setup: Both hunger and thirst critical
+        let mut hunger = Hunger::new();
+        hunger.0.set(95.0);  // Critical hunger
+
+        let mut thirst = Thirst::new();
+        thirst.0.set(92.0);  // Critical thirst
+
+        let energy = Energy::new();
+
+        let mating_intent = test_mating_intent();
+        let repro_cfg = test_repro_config();
+
+        let mut actions = Vec::new();
+        let result = maybe_add_mate_action(
+            &mut actions,
+            Some(&mating_intent),
+            Some(&repro_cfg),
+            &thirst,
+            &hunger,
+            &energy,
+            test_mate_params(),
+        );
+
+        assert!(!result, "Mating should be blocked when both hunger and thirst are critical");
+        assert!(actions.is_empty(), "No mate action when both needs are critical");
+    }
 }

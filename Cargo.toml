@@ -3,6 +3,8 @@ members = [
     ".",
     "tools/debug/sim-logparse",
     "tools/debug/sim-profile",
+    "tools/debug/sim-trace",
+    "tools/debug/sim-monitor",
 ]
 resolver = "2"
 

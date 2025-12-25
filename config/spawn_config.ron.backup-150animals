@@ -1,0 +1,110 @@
+(
+    spawn_groups: [
+        (
+            species: "Rabbit",
+            count: 60,
+            names: ["Rabbit"],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 80,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐇 Spawning rabbit population...",
+                success_template: "   ✅ Rabbit #{index} at {pos}",
+                completion_message: "✅ {count} rabbits spawned!",
+            )),
+        ),
+        (
+            species: "Deer",
+            count: 30,
+            names: ["Deer"],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 80,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦌 Spawning deer herd...",
+                success_template: "   🦌 Deer #{index} at {pos}",
+                completion_message: "🦌 {count} deer spawned!",
+            )),
+        ),
+        (
+            species: "Raccoon",
+            count: 25,
+            names: ["Raccoon"],
+            spawn_area: (
+                center: (50, 50),
+                search_radius: 60,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦝 Spawning raccoon colony...",
+                success_template: "   🦝 Raccoon #{index} at {pos}",
+                completion_message: "🦝 {count} raccoons spawned!",
+            )),
+        ),
+        (
+            species: "Fox",
+            count: 15,
+            names: ["Fox"],
+            spawn_area: (
+                center: (-50, -50),
+                search_radius: 70,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦊 Spawning fox population...",
+                success_template: "   🦊 Fox #{index} at {pos}",
+                completion_message: "🦊 {count} foxes spawned!",
+            )),
+        ),
+        (
+            species: "Wolf",
+            count: 12,
+            names: ["Wolf"],
+            spawn_area: (
+                center: (-80, 80),
+                search_radius: 60,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐺 Spawning wolf packs...",
+                success_template: "   🐺 Wolf #{index} at {pos}",
+                completion_message: "🐺 {count} wolves spawned!",
+            )),
+        ),
+        (
+            species: "Bear",
+            count: 8,
+            names: ["Bear"],
+            spawn_area: (
+                center: (80, -80),
+                search_radius: 70,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐻 Spawning bear territories...",
+                success_template: "   🐻 Bear #{index} at {pos}",
+                completion_message: "🐻 {count} bears spawned!",
+            )),
+        ),
+    ],
+    settings: (
+        verbose_logging: true,
+        enable_spawning: true,
+        completion_message: "🌐 LIFE_SIMULATOR: View at http://127.0.0.1:54321/viewer.html\n🌐 LIFE_SIMULATOR: 150 animals spawned across 400x400 tile world",
+        post_spawn_messages: [
+            "📊 Population: 60 rabbits, 30 deer, 25 raccoons, 15 foxes, 12 wolves, 8 bears",
+            "🌍 World: 25x25 chunks (400x400 tiles), 50/50 grassland/forest mix",
+            "🎯 Predator-prey ratio: 23% predators, 77% prey/herbivores",
+        ],
+    ),
+)

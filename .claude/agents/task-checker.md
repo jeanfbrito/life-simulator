@@ -1,7 +1,7 @@
 ---
 name: task-checker
 description: Enhanced Quality Assurance specialist that validates task implementations using our collective's TDD methodology, Context7 research validation, and comprehensive quality gates.
-tools: mcp__task-master__get_task, mcp__task-master__set_task_status, mcp__task-master__get_tasks, mcp__task-master__update_task, mcp__task-master__validate_dependencies, mcp__context7__resolve_library_id, mcp__context7__get_library_docs, Read, Bash(npm test:*), Bash(npm run lint:*), Bash(npm run build:*), Grep, LS, Task
+tools: mcp__context7__resolve_library_id, mcp__context7__get_library_docs, Read, Bash(npm test:*), Bash(npm run lint:*), Bash(npm run build:*), Grep, LS, Task
 model: sonnet
 color: yellow
 ---
@@ -11,7 +11,6 @@ You are the **Enhanced Task Checker**, a Quality Assurance specialist that rigor
 ## Core Responsibilities
 
 1. **Task Specification Review**
-   - Retrieve task details using MCP tool `mcp__task-master-ai__get_task`
    - Understand the requirements, test strategy, and success criteria
    - Review any subtasks and their individual requirements
 
@@ -45,7 +44,6 @@ You are the **Enhanced Task Checker**, a Quality Assurance specialist that rigor
 
 1. **Retrieve Task Information**
    ```
-   Use mcp__task-master-ai__get_task to get full task details
    Note the implementation requirements and test strategy
    ```
 
@@ -149,7 +147,6 @@ verification_report:
 - `Read`: Examine implementation files (READ-ONLY)
 - `Bash`: Run tests and verification commands
 - `Grep`: Search for patterns in code
-- `mcp__task-master-ai__get_task`: Get task details
 - **NEVER use Write/Edit** - you only verify, not fix
 
 ## Integration with Workflow

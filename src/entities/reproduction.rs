@@ -119,7 +119,8 @@ mod systems {
                 if h <= cfg.well_fed_hunger_norm && t <= cfg.well_fed_thirst_norm {
                     wellfed.ticks = wellfed.ticks.saturating_add(1);
                 } else {
-                    wellfed.ticks = wellfed.ticks.saturating_sub(1);
+                    // Decay by 10% per tick (retain 90%) instead of losing 1 tick
+                    wellfed.ticks = (wellfed.ticks as f32 * 0.90) as u32;
                 }
             }
         }
@@ -332,3 +333,68 @@ pub use systems::{
     birth_common, mate_matching_system, tick_reproduction_timers_system,
     update_age_and_wellfed_system,
 };
+
+// -----------------------------
+// Tests
+// -----------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_well_fed_streak_percentage_decay() {
+        let mut streak = WellFedStreak { ticks: 200 };
+
+        // Simulate 10 ticks not fed with 90% retention per tick
+        for _ in 0..10 {
+            streak.ticks = (streak.ticks as f32 * 0.90) as u32;
+        }
+
+        // Should retain ~35% of original (0.9^10 ≈ 0.35)
+        // 200 * 0.35 ≈ 70 ticks
+        assert!(streak.ticks >= 65 && streak.ticks <= 75,
+                "Expected ~70 ticks, got {}", streak.ticks);
+    }
+
+    #[test]
+    fn test_well_fed_streak_brief_interruption() {
+        let mut streak = WellFedStreak { ticks: 300 };
+
+        // Simulate 5 ticks not fed (brief drink)
+        for _ in 0..5 {
+            streak.ticks = (streak.ticks as f32 * 0.90) as u32;
+        }
+
+        // Should retain ~60% (0.9^5 ≈ 0.59)
+        // 300 * 0.59 ≈ 177 ticks
+        assert!(streak.ticks >= 170,
+                "Expected >=170 ticks after brief interruption, got {}", streak.ticks);
+    }
+
+    #[test]
+    fn test_well_fed_streak_complete_decay() {
+        let mut streak = WellFedStreak { ticks: 100 };
+
+        // Simulate 50 ticks not fed
+        for _ in 0..50 {
+            streak.ticks = (streak.ticks as f32 * 0.90) as u32;
+        }
+
+        // Should decay significantly but not to zero (0.9^50 ≈ 0.005)
+        // 100 * 0.005 ≈ 0-1 ticks
+        assert!(streak.ticks <= 5,
+                "Expected near-zero ticks after long decay, got {}", streak.ticks);
+    }
+
+    #[test]
+    fn test_well_fed_streak_growth_still_works() {
+        let mut streak = WellFedStreak { ticks: 100 };
+
+        // Simulate growth (this tests that our change doesn't break increment logic)
+        streak.ticks = streak.ticks.saturating_add(1);
+        assert_eq!(streak.ticks, 101, "Growth should still work");
+
+        streak.ticks = streak.ticks.saturating_add(10);
+        assert_eq!(streak.ticks, 111, "Multi-tick growth should work");
+    }
+}

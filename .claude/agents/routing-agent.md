@@ -73,7 +73,7 @@ The routing-agent enforces hub-and-spoke architecture by preventing:
 
 ## Integration Points
 
-- **TaskMaster**: Coordinate with project management workflows
+- **Task Coordination**: Coordinate with project workflows
 - **Quality Gates**: Enforce validation checkpoints
 - **Metrics Collection**: Track routing effectiveness and agent performance
 - **Context Preservation**: Maintain session state across interactions

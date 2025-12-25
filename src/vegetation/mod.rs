@@ -11,23 +11,28 @@ pub mod benchmark;
 ///
 /// The system follows a data-driven approach where:
 /// - `ResourceGrid` stores sparse biomass data using event-driven updates
+/// - `VegetationSpatialGrid` provides O(k) chunk-based proximity queries
 /// - Growth systems update biomass through scheduled events
 /// - Herbivore behaviors query and consume vegetation
 /// - Terrain modifiers affect growth rates and maximum biomass
 ///
 /// # Integration Points
 ///
-/// 1. **AI Behaviors**: Herbivore foraging actions consume vegetation
+/// 1. **AI Behaviors**: Herbivore foraging actions consume vegetation via SpatialGrid queries
 /// 2. **Terrain System**: Growth rates vary by terrain type
 /// 3. **World Loader**: Vegetation initializes based on map data
 /// 4. **Web Viewer**: Optional biomass overlay for debugging
+/// 5. **Spatial Grid**: Fast proximity lookups for nearby vegetation cells
 pub mod chunk_lod;
 pub mod constants;
 pub mod memory_optimization;
 pub mod resource_grid;
+pub mod spatial_grid;
+pub mod spatial_maintenance;
 
 // Public exports
 pub use resource_grid::ResourceGrid;
+pub use spatial_grid::VegetationSpatialGrid;
 
 use bevy::prelude::*;
 use serde_json::json;
@@ -1371,6 +1376,10 @@ impl Plugin for VegetationPlugin {
             .init_resource::<crate::vegetation::chunk_lod::ChunkLODManager>()
             // Phase 5: Heatmap refresh manager for on-demand updates
             .init_resource::<HeatmapRefreshManager>()
+            // Spatial grid for efficient vegetation queries
+            .insert_resource(VegetationSpatialGrid::new())
+            .insert_resource(spatial_maintenance::VegetationGridConfig::default())
+            .insert_resource(spatial_maintenance::VegetationGridSync::new())
             .add_systems(
                 PostStartup,
                 setup_vegetation_system.run_if(resource_exists::<WorldLoader>),
@@ -1385,6 +1394,8 @@ impl Plugin for VegetationPlugin {
             ) // Every 2 seconds
             // Phase 5: Heatmap refresh management
             .add_systems(FixedUpdate, heatmap_refresh_management_system)
+            // Vegetation spatial grid maintenance
+            .add_systems(FixedUpdate, spatial_maintenance::maintain_vegetation_spatial_grid)
             // Phase 6: Global heatmap snapshot updates for web API
             .add_systems(
                 FixedUpdate,

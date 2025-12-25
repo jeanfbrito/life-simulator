@@ -33,7 +33,7 @@ impl RaccoonBehavior {
             well_fed_hunger_norm: 0.5,
             well_fed_thirst_norm: 0.5,
             well_fed_required_ticks: 480, // ~48 seconds well-fed streak
-            matching_interval_ticks: 240, // Evaluate partners every ~24 seconds
+            matching_interval_ticks: 60, // Evaluate partners every ~6 seconds (optimized)
             mating_duration_ticks: 40,    // ~4 seconds together
             min_energy_norm: 0.4,
             min_health_norm: 0.4,
@@ -56,12 +56,14 @@ impl RaccoonBehavior {
     /// Stats preset for raccoons
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
         EntityStatsBundle {
             hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.06)),
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
+            cached_state: CachedEntityState::default(),
         }
     }
 

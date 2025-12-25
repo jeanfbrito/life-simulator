@@ -45,8 +45,8 @@ impl Default for OpenRct2Settings {
             water_level: 6,
             land_texture: 0,
             edge_texture: 0,
-            heightmap_low: 14,
-            heightmap_high: 60,
+            heightmap_low: 1,     // Produces ~0-5 base height (water range)
+            heightmap_high: 40,   // Produces ~20 max height, smoothing raises to 30-60
             smooth_tile_edges: true,
             trees: true,
             tree_to_land_ratio: 25,

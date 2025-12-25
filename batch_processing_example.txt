@@ -1,0 +1,67 @@
+BATCH PROCESSING OPTIMIZATION - VISUAL EXAMPLE
+===============================================
+
+BEFORE (Sequential Processing):
+Event 1: Regrow at (0, 0)   -> Access cell at (0, 0)   -> regrow_cell()
+Event 2: Regrow at (5, 5)   -> Access cell at (5, 5)   -> regrow_cell()
+Event 3: Regrow at (16, 16) -> Access cell at (16, 16) -> regrow_cell()
+Event 4: Regrow at (1, 2)   -> Access cell at (1, 2)   -> regrow_cell()
+Event 5: Regrow at (32, 0)  -> Access cell at (32, 0)  -> regrow_cell()
+
+Problem: Random memory access pattern, poor cache locality
+
+
+AFTER (Chunk-Based Batching):
+===============================================
+
+Step 1: Group events by chunk (16x16)
+--------------------------------------
+Chunk (0, 0): [Event 1, Event 2, Event 4]  // Cells (0,0), (5,5), (1,2)
+Chunk (1, 1): [Event 3]                    // Cell (16,16)
+Chunk (2, 0): [Event 5]                    // Cell (32,0)
+
+Step 2: Process each chunk's events together
+--------------------------------------
+Process Chunk (0, 0):
+  - Regrow at (0, 0)   -> regrow_cell()
+  - Regrow at (5, 5)   -> regrow_cell()  
+  - Regrow at (1, 2)   -> regrow_cell()
+  [All nearby cells - better cache locality!]
+
+Process Chunk (1, 1):
+  - Regrow at (16, 16) -> regrow_cell()
+
+Process Chunk (2, 0):
+  - Regrow at (32, 0)  -> regrow_cell()
+
+Benefit: Cells in same chunk processed together = better CPU cache usage
+
+
+CHUNK COORDINATE EXAMPLES:
+===============================================
+Cell (0, 0)    -> Chunk (0, 0)   [0/16 = 0, 0/16 = 0]
+Cell (5, 5)    -> Chunk (0, 0)   [5/16 = 0, 5/16 = 0]
+Cell (15, 15)  -> Chunk (0, 0)   [15/16 = 0, 15/16 = 0]
+Cell (16, 16)  -> Chunk (1, 1)   [16/16 = 1, 16/16 = 1]
+Cell (32, 0)   -> Chunk (2, 0)   [32/16 = 2, 0/16 = 0]
+Cell (100, 50) -> Chunk (6, 3)   [100/16 = 6, 50/16 = 3]
+
+
+EXPECTED PERFORMANCE GAIN:
+===============================================
+Scenario 1: Scattered events (different chunks)
+  - Events spread across 50 different chunks
+  - Batching overhead: ~5-10%
+  - Cache benefit: ~0-5% 
+  - Net: ±0% (no significant change)
+
+Scenario 2: Clustered events (same/nearby chunks)
+  - 100 events in 5 chunks (20 events per chunk)
+  - Batching overhead: ~5%
+  - Cache benefit: 25-35%
+  - Net: 20-30% improvement ✅
+
+Scenario 3: Real gameplay (typical)
+  - Mix of clusters (grazing areas) and scattered events
+  - 60% clustered, 40% scattered
+  - Weighted average: ~12-18% improvement

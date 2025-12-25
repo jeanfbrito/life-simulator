@@ -18,6 +18,7 @@ pub struct HealthCheckSnapshot {
     pub alert_counts: HashMap<&'static str, usize>,
     pub is_healthy: bool,
     pub current_tps: f64,
+    pub current_tick: u64,
 }
 
 impl HealthCheckSnapshot {
@@ -114,12 +115,13 @@ impl HealthCheckApi {
     }
 
     /// Store a snapshot of the health checker data
-    pub fn update(&self, health_checker: &HealthChecker, tps: f64) {
+    pub fn update(&self, health_checker: &HealthChecker, tps: f64, current_tick: u64) {
         let snapshot = HealthCheckSnapshot {
             alerts: health_checker.get_alerts(),
             alert_counts: health_checker.get_alert_counts(),
-            is_healthy: health_checker.is_healthy(),
+            is_healthy: health_checker.is_healthy(current_tick),
             current_tps: tps,
+            current_tick,
         };
 
         if let Ok(mut inner) = self.inner.write() {
@@ -189,10 +191,12 @@ impl Default for HealthCheckApi {
 pub fn update_health_check_api(
     health_checker: Res<HealthChecker>,
     metrics: Res<crate::simulation::TickMetrics>,
+    tick: Res<crate::simulation::SimulationTick>,
     api: Res<HealthCheckApi>,
 ) {
     let tps = metrics.actual_tps();
-    api.update(&health_checker, tps);
+    let current_tick = tick.get();
+    api.update(&health_checker, tps, current_tick);
 }
 
 // ============================================================================
@@ -276,6 +280,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: true,
             current_tps: 60.0,
+            current_tick: 100,
         };
 
         let json = snapshot.get_health_status_json();
@@ -290,6 +295,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: false,
             current_tps: 8.5,
+            current_tick: 100,
         };
 
         let json = snapshot.get_health_status_json();
@@ -303,6 +309,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: false,
             current_tps: 3.0,
+            current_tick: 100,
         };
 
         let json = snapshot.get_health_status_json();
@@ -316,6 +323,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: true,
             current_tps: 59.5,
+            current_tick: 100,
         };
 
         let json = snapshot.get_tps_json();
@@ -329,6 +337,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: true,
             current_tps: 45.0,
+            current_tick: 100,
         };
 
         let json = snapshot.get_tps_json();
@@ -342,6 +351,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: true,
             current_tps: 15.0,
+            current_tick: 100,
         };
 
         let json = snapshot.get_tps_json();
@@ -355,6 +365,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: false,
             current_tps: 5.0,
+            current_tick: 100,
         };
 
         let json = snapshot.get_tps_json();
@@ -376,6 +387,7 @@ mod tests {
             alert_counts: HashMap::new(),
             is_healthy: false,
             current_tps: 10.0,
+            current_tick: 105,
         };
 
         let json = snapshot.get_alerts_json();

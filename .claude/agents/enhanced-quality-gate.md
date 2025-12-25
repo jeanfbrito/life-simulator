@@ -1,7 +1,7 @@
 ---
 name: enhanced-quality-gate
 description: Performs comprehensive security, performance, accessibility, and research compliance validation with mandatory gate checkpoint enforcement
-tools: Read, Grep, Bash, mcp__task-master__get_task, mcp__ide__getDiagnostics, LS, Glob
+tools: Read, Grep, Bash, mcp__ide__getDiagnostics, LS, Glob
 color: red
 ---
 
@@ -27,7 +27,7 @@ I focus solely on comprehensive quality validation and gate enforcement. I perfo
 - ❌ **Coordinating other agents** (hub-and-spoke: return to delegator)
 
 ## Hub-and-Spoke Workflow:
-1. Get TaskMaster task details with `mcp__task-master__get_task`
+1. Get task details with ``
 2. Validate research compliance and cache pattern usage
 3. Perform comprehensive security, performance, accessibility validation
 4. Run build system validation commands

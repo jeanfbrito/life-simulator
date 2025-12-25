@@ -1,4 +1,5 @@
 pub mod auto_eat;
+pub mod cached_state;
 pub mod carcass;
 pub mod current_action;
 pub mod entity_tracker;
@@ -8,6 +9,8 @@ pub mod fear;
 pub mod movement;
 pub mod registry;
 pub mod reproduction;
+pub mod spatial_index;
+pub mod spatial_maintenance;
 pub mod spawn_config;
 pub mod stats;
 pub mod systems_registry;
@@ -20,6 +23,8 @@ pub use movement::{
     MovementState, TilePosition,
 };
 
+pub use spatial_index::{EntityType as SpatialEntityType, SpatialEntityIndex};
+
 // Wandering component REMOVED - use utility AI Wander action instead!
 
 pub use entity_tracker::{get_entities_json, init_entity_tracker, sync_entities_to_tracker};
@@ -28,6 +33,8 @@ pub use stats::{
     death_system, get_most_urgent_need, tick_stats_system, utility_drink, utility_eat,
     utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
 };
+
+pub use cached_state::{CachedEntityState, update_cached_entity_state_system};
 
 pub use carcass::{tick_carcasses, Carcass};
 
@@ -148,6 +155,9 @@ pub struct EntitiesPlugin;
 impl Plugin for EntitiesPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Add spatial entity index resource and maintenance systems
+            .insert_resource(SpatialEntityIndex::new())
+            .insert_resource(spatial_maintenance::EntityPositionCache::new())
             // Add fear system plugin
             .add_plugins(FearPlugin)
             // Startup
@@ -159,6 +169,10 @@ impl Plugin for EntitiesPlugin {
                     movement::initiate_pathfinding,
                     movement::initialize_movement_state,
                     entity_tracker::sync_entities_to_tracker, // Sync for web API
+                    // Spatial index maintenance (runs every frame)
+                    spatial_maintenance::maintain_spatial_entity_index_insertions,
+                    spatial_maintenance::maintain_spatial_entity_index_updates,
+                    spatial_maintenance::maintain_spatial_entity_index_removals,
                 ),
             )
             // Tick systems (run when should_tick is true)

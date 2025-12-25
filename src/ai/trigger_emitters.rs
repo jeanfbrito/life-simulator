@@ -86,11 +86,11 @@ impl IdleTracker {
     }
 
     pub fn is_long_idle(&self, config: &BehaviorConfig) -> bool {
-        // Reduced idle threshold for more responsive AI
-        // Consider long idle as 3x the wander radius in ticks (down from 10x)
-        let idle_threshold = (config.wander_radius * 3) as u32;
-        // Minimum threshold of 20 ticks (2 seconds) to prevent excessive replanning
-        let min_threshold = 20u32;
+        // Balanced idle threshold for stable AI (optimized from 3x to 5x)
+        // Consider long idle as 5x the wander radius in ticks
+        let idle_threshold = (config.wander_radius * 5) as u32;
+        // Minimum threshold of 50 ticks (5 seconds) to prevent excessive replanning
+        let min_threshold = 50u32;
         let final_threshold = idle_threshold.max(min_threshold);
         self.ticks_since_action >= final_threshold
     }

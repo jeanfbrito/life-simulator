@@ -32,7 +32,7 @@ impl FoxBehavior {
             well_fed_hunger_norm: 0.5,
             well_fed_thirst_norm: 0.5,
             well_fed_required_ticks: 600,
-            matching_interval_ticks: 360,
+            matching_interval_ticks: 120, // Check every 12s (optimized)
             mating_duration_ticks: 50,
             min_energy_norm: 0.5,
             min_health_norm: 0.50,
@@ -63,6 +63,7 @@ impl FoxBehavior {
 
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
 
         EntityStatsBundle {
@@ -70,6 +71,7 @@ impl FoxBehavior {
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
+            cached_state: CachedEntityState::default(),
         }
     }
 

@@ -4,7 +4,7 @@
 # Collects performance metrics and coordination statistics for research validation
 
 # Set up metrics storage
-PROJECT_DIR=${CLAUDE_PROJECT_DIR:-"/mnt/h/Active/taskmaster-agent-claude-code"}
+PROJECT_DIR=${CLAUDE_PROJECT_DIR:-"${CLAUDE_PROJECT_DIR}"}
 METRICS_DIR="$PROJECT_DIR/.claude-collective/metrics"
 METRICS_FILE="$METRICS_DIR/metrics-$(date +%Y%m%d).json"
 LOG_FILE="$METRICS_DIR/collective-metrics.log"
@@ -24,7 +24,7 @@ TOOL_NAME=${TOOL_NAME:-""}
 SUBAGENT_NAME=${SUBAGENT_NAME:-""}
 USER_PROMPT=${USER_PROMPT:-""}
 EXECUTION_TIME_MS=${EXECUTION_TIME_MS:-0}
-CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-"/mnt/h/Active/taskmaster-agent-claude-code"}
+CLAUDE_PROJECT_DIR=${CLAUDE_PROJECT_DIR:-"${CLAUDE_PROJECT_DIR}"}
 
 log "METRICS COLLECTION TRIGGERED - Event: $EVENT, Tool: $TOOL_NAME, Agent: $SUBAGENT_NAME"
 

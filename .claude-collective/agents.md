@@ -15,7 +15,7 @@
 ## 💻 RESEARCH & COORDINATION
 - **@research-agent** - Context7-powered technical research and documentation
 - **@prd-research-agent** - Research-backed task generation from PRD documents
-- **@task-orchestrator** - TaskMaster-driven task coordination and parallelization
+- **@task-orchestrator** - Task coordination and parallelization
 
 ## 🧠 SPECIALIZED AGENTS
 - **@completion-gate** - Task validation and completion verification
@@ -30,26 +30,16 @@
 # Enhanced library research (agents use autonomously)
 mcp__context7__resolve_library_id(libraryName="react")
 mcp__context7__get_library_docs(context7CompatibleLibraryID="/facebook/react", topic="hooks")
-
-# TaskMaster integration for project coordination
-mcp__task_master__next_task(projectRoot="/mnt/h/Active/taskmaster-agent-claude-code")
-mcp__task_master__get_task(id="5", projectRoot="/mnt/h/Active/taskmaster-agent-claude-code")
 ```
 
 ## Enhanced Agent Capabilities
 
-**Agents leverage research and TaskMaster integration for informed decisions:**
+**Agents leverage research integration for informed decisions:**
 
 ```python
 # Research-backed task generation
 research_backed_task_generation(
     research_context="Context7 library documentation + best practices",
     task_template="Research-Task Template with TDD guidance"
-)
-
-# TaskMaster coordination
-project_coordination(
-    coordination_model="task-orchestrator", 
-    task_context="Multi-phase development with research integration"
 )
 ```

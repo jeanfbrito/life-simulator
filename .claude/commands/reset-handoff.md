@@ -40,7 +40,6 @@ rm -f .claude/handoff/*.json
 ## Safe Operation
 
 This only removes temporary state files, never:
-- TaskMaster data (`.taskmaster/tasks/`)
 - Agent definitions (`.claude/agents/`)
 - Hook scripts (`.claude/hooks/`)
 - Project files or code

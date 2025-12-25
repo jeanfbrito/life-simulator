@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::entities::reproduction::Sex;
 use crate::entities::spawn_using_registry;
 use crate::pathfinding::PathfindingGrid;
+use crate::tilemap::TerrainType;
+use crate::world_loader::WorldLoader;
 
 /// Configuration for spawning a group of entities
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,9 +153,9 @@ impl Default for SpawnConfig {
                         "Maple".to_string(),
                     ],
                     spawn_area: SpawnArea {
-                        center: (10, 10),
-                        search_radius: 4,
-                        max_attempts: 50,
+                        center: (-30, 10),     // Away from water/beach areas
+                        search_radius: 30,     // Moderate radius for forest areas
+                        max_attempts: 200,     // Many attempts to find suitable terrain
                     },
                     sex_sequence: Some(vec![SpawnSex::Male, SpawnSex::Female]),
                     messages: Some(SpawnMessages {
@@ -238,7 +240,11 @@ impl SpawnConfig {
 }
 
 /// System to spawn entities based on configuration
-pub fn spawn_entities_from_config(mut commands: Commands, pathfinding_grid: Res<PathfindingGrid>) {
+pub fn spawn_entities_from_config(
+    mut commands: Commands,
+    pathfinding_grid: Res<PathfindingGrid>,
+    world_loader: Res<WorldLoader>,
+) {
     let config = SpawnConfig::load_or_default();
     let verbose = config.settings.verbose_logging;
 
@@ -265,8 +271,8 @@ pub fn spawn_entities_from_config(mut commands: Commands, pathfinding_grid: Res<
         for entity_index in 0..group.count {
             let name = config.get_name_for_group(group_index, entity_index);
 
-            // Try to find a walkable spawn position
-            let spawn_pos = (0..group.spawn_area.max_attempts).find_map(|_| {
+            // Try to find a walkable spawn position on grass or forest
+            let spawn_pos = (0..group.spawn_area.max_attempts).find_map(|attempt| {
                 let dx =
                     rng.gen_range(-group.spawn_area.search_radius..=group.spawn_area.search_radius);
                 let dy =
@@ -275,11 +281,24 @@ pub fn spawn_entities_from_config(mut commands: Commands, pathfinding_grid: Res<
                     group.spawn_area.center.0 + dx,
                     group.spawn_area.center.1 + dy,
                 );
+
+                // Check if walkable AND on grass/forest terrain
                 if pathfinding_grid.is_walkable(candidate) {
-                    Some(candidate)
-                } else {
-                    None
+                    if let Some(terrain) = world_loader.get_terrain_at(candidate.x, candidate.y) {
+                        // Only spawn on Grass or Forest (fertile grazing areas)
+                        if terrain == "Grass" || terrain == "Forest" {
+                            if verbose && (attempt == 0 || attempt % 50 == 0) {
+                                println!("   ✅ Found suitable terrain {} at {} (attempt {})", terrain, candidate, attempt);
+                            }
+                            return Some(candidate);
+                        } else if verbose && attempt < 5 {
+                            println!("   ⚠️ Rejected terrain {} at {} (attempt {})", terrain, candidate, attempt);
+                        }
+                    }
+                } else if verbose && attempt < 5 {
+                    println!("   ⚠️ Not walkable at {} (attempt {})", candidate, attempt);
                 }
+                None
             });
 
             if let Some(spawn_pos) = spawn_pos {

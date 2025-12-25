@@ -1,0 +1,10 @@
+#!/bin/bash
+# Quick wrapper to run sim-logparse from anywhere
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../" && pwd)"
+
+cd "$PROJECT_ROOT"
+cargo run -p sim-logparse -- "$@"

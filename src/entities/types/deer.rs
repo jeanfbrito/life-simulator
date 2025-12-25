@@ -38,7 +38,7 @@ impl DeerBehavior {
             well_fed_hunger_norm: 0.55,       // Require healthier condition than rabbits
             well_fed_thirst_norm: 0.55,
             well_fed_required_ticks: 600, // Must stay well fed for ~60s
-            matching_interval_ticks: 300, // Check every 30s for partners
+            matching_interval_ticks: 100, // Check every 10s for partners (optimized)
             mating_duration_ticks: 50,    // ~5s spent together
             min_energy_norm: 0.35,        // Need reasonable energy reserves
             min_health_norm: 0.4,         // Avoid mating when injured
@@ -62,6 +62,7 @@ impl DeerBehavior {
     /// Keeps stat components generic, only the preset lives here.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
         // Deer: lower metabolism — eat/drink less often, tire a bit slower
         EntityStatsBundle {
@@ -69,6 +70,7 @@ impl DeerBehavior {
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.02)), // much slower thirst gain
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.04)),         // slower energy drain
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),          // Phase 3: 50% faster regen
+            cached_state: CachedEntityState::default(),
         }
     }
 

@@ -233,6 +233,7 @@ mod tests {
             nearby_predators: 1,
             ticks_since_danger: 0,
             peak_fear: 0.2,
+            last_logged_fear: 0.0,
         };
 
         // Note: This will return None without a real WorldLoader
@@ -250,6 +251,7 @@ mod tests {
             nearby_predators: 2,
             ticks_since_danger: 0,
             peak_fear: 0.8,
+            last_logged_fear: 0.0,
         };
 
         assert!(

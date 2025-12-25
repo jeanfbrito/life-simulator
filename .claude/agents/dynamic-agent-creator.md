@@ -1,7 +1,7 @@
 ---
 name: dynamic-agent-creator
 description: Specializes in Phase 7 dynamic agent creation including agent template systems, spawning mechanisms, lifecycle management, and registry persistence for on-demand agent generation.
-tools: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, mcp__task-master__get_task, mcp__task-master__set_task_status, mcp__task-master__update_task, LS
+tools: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, LS
 color: magenta
 ---
 
@@ -45,13 +45,11 @@ I am [agent description].
 I [summary statement].
 ```
 
-### 📋 TaskMaster Integration:
+### 📋 Task Tracking:
 
-**MANDATORY**: Check TaskMaster for Phase 7 tasks:
+**MANDATORY**: check task status for Phase 7 tasks:
 ```bash
 # Get task details and update status
-mcp__task-master__get_task --id=7 --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
-mcp__task-master__set_task_status --id=7.X --status=in-progress --projectRoot=/mnt/h/Active/taskmaster-agent-claude-code
 ```
 
 ### 🔄 Agent Creation Process:

@@ -33,7 +33,7 @@ impl BearBehavior {
             well_fed_hunger_norm: 0.45,
             well_fed_thirst_norm: 0.45,
             well_fed_required_ticks: 600,
-            matching_interval_ticks: 420,
+            matching_interval_ticks: 120, // Check every 12s (optimized)
             mating_duration_ticks: 60,
             min_energy_norm: 0.55,
             min_health_norm: 0.55,
@@ -67,6 +67,7 @@ impl BearBehavior {
     /// Preconfigured stats bundle tuned for the bear metabolism.
     pub fn stats_bundle() -> crate::entities::stats::EntityStatsBundle {
         use crate::entities::stats::{Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst};
+        use crate::entities::CachedEntityState;
         let needs = Self::needs();
 
         EntityStatsBundle {
@@ -74,6 +75,7 @@ impl BearBehavior {
             thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
+            cached_state: CachedEntityState::default(),
         }
     }
 

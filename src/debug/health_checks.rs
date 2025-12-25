@@ -14,8 +14,8 @@ use std::collections::VecDeque;
 /// Maximum number of alerts to store in ring buffer
 const MAX_ALERTS: usize = 100;
 
-/// TPS threshold below which to trigger alert
-const MIN_HEALTHY_TPS: f64 = 10.0;
+/// TPS threshold below which to trigger alert (9.5 allows for normal CPU variance)
+const MIN_HEALTHY_TPS: f64 = 9.5;
 
 /// Number of ticks an entity must not move to be considered stuck
 const STUCK_ENTITY_THRESHOLD_TICKS: u64 = 50;
@@ -344,10 +344,10 @@ impl HealthChecker {
     }
 
     /// Check overall health status
-    pub fn is_healthy(&self) -> bool {
-        // Healthy if no critical alerts in last 50 ticks
-        // (this would be set in context when called)
-        self.alerts.len() == 0 || self.get_latest_alert(HealthAlert::TpsBelow10).is_none()
+    /// Only considers alerts within the last 50 ticks
+    pub fn is_healthy(&self, current_tick: u64) -> bool {
+        // Healthy if no TPS alerts in last 50 ticks
+        self.count_alerts_in_window(HealthAlert::TpsBelow10, 50, current_tick) == 0
     }
 }
 
@@ -620,16 +620,136 @@ mod tests {
         let mut checker = HealthChecker::default();
 
         // Initially healthy
-        assert!(checker.is_healthy());
+        assert!(checker.is_healthy(0));
 
         // Not healthy with TPS alert
         checker.add_alert(HealthAlert::TpsBelow10, 10);
-        assert!(!checker.is_healthy());
+        assert!(!checker.is_healthy(10));
 
         // Healthy with other alerts
         let mut checker2 = HealthChecker::default();
         checker2.add_alert(HealthAlert::EntitiesStuck, 10);
-        assert!(checker2.is_healthy());
+        assert!(checker2.is_healthy(10));
+    }
+
+    // TDD RED PHASE: Test for recent alerts only
+    #[test]
+    fn test_is_healthy_only_considers_recent_alerts() {
+        let mut checker = HealthChecker::default();
+
+        // Add old TPS alerts (71 alerts from startup)
+        for i in 0..71 {
+            checker.add_alert(HealthAlert::TpsBelow10, i);
+        }
+
+        // Current tick is 1000, all alerts are from ticks 0-70
+        // These are all more than 50 ticks old
+        assert!(checker.is_healthy(1000), "Old alerts (>50 ticks) should not affect health");
+
+        // Add a recent alert at tick 960 (40 ticks ago from current tick 1000)
+        checker.add_alert(HealthAlert::TpsBelow10, 960);
+        assert!(!checker.is_healthy(1000), "Recent alert (<50 ticks) should affect health");
+
+        // At tick 1015, the alert at 960 is now 55 ticks old (outside window)
+        assert!(checker.is_healthy(1015), "Alert that aged out of 50-tick window should not affect health");
+    }
+
+    #[test]
+    fn test_is_healthy_with_mixed_recent_and_old_alerts() {
+        let mut checker = HealthChecker::default();
+
+        // Add old alerts from ticks 10-30
+        for i in 10..30 {
+            checker.add_alert(HealthAlert::TpsBelow10, i);
+        }
+
+        // Current tick is 100, all alerts are 70-80 ticks old
+        assert!(checker.is_healthy(100), "Only old alerts should result in healthy status");
+
+        // Add one recent alert
+        checker.add_alert(HealthAlert::TpsBelow10, 95);
+        assert!(!checker.is_healthy(100), "One recent alert among many old ones should affect health");
+    }
+
+    #[test]
+    fn test_is_healthy_boundary_conditions() {
+        let mut checker = HealthChecker::default();
+
+        // Alert exactly 50 ticks ago (at boundary)
+        checker.add_alert(HealthAlert::TpsBelow10, 50);
+        assert!(!checker.is_healthy(100), "Alert exactly 50 ticks ago should affect health");
+
+        // Alert 51 ticks ago (just outside window)
+        assert!(checker.is_healthy(101), "Alert 51 ticks ago should not affect health");
+    }
+
+    #[test]
+    fn test_is_healthy_with_non_tps_alerts() {
+        let mut checker = HealthChecker::default();
+
+        // Add recent non-TPS alerts
+        checker.add_alert(HealthAlert::EntitiesStuck, 95);
+        checker.add_alert(HealthAlert::PopulationCrash, 97);
+        checker.add_alert(HealthAlert::AiLoops, 99);
+
+        // Should still be healthy - only TPS alerts affect health status
+        assert!(checker.is_healthy(100), "Non-TPS alerts should not affect health status");
+
+        // Add a recent TPS alert
+        checker.add_alert(HealthAlert::TpsBelow10, 98);
+        assert!(!checker.is_healthy(100), "Recent TPS alert should affect health status");
+    }
+
+    // REFACTOR PHASE: Integration test demonstrating real-world startup scenario
+    #[test]
+    fn test_startup_scenario_with_old_alerts() {
+        let mut checker = HealthChecker::default();
+
+        // Simulate startup phase: 71 TPS alerts during initialization (ticks 0-70)
+        // This mimics the real scenario described in the bug report
+        for tick in 0..71 {
+            checker.add_alert(HealthAlert::TpsBelow10, tick);
+        }
+
+        // Verify we have all startup alerts
+        assert_eq!(checker.get_alerts().len(), 71);
+        assert_eq!(
+            checker.count_alerts_in_window(HealthAlert::TpsBelow10, 50, 70),
+            51,
+            "Last 50 ticks (inclusive) from tick 70 should contain alerts from ticks 20-70 (51 alerts)"
+        );
+
+        // System is now running normally at tick 1000
+        let current_tick = 1000;
+        let current_tps = 10.014;
+
+        // With the fix: health status should be HEALTHY
+        // Old alerts (from ticks 0-70) are 930-1000 ticks old, well outside the 50-tick window
+        assert!(
+            checker.is_healthy(current_tick),
+            "System with TPS={} and only old alerts should be healthy",
+            current_tps
+        );
+
+        // Verify no recent alerts in the 50-tick window
+        assert_eq!(
+            checker.count_alerts_in_window(HealthAlert::TpsBelow10, 50, current_tick),
+            0,
+            "Should have 0 TPS alerts in last 50 ticks"
+        );
+
+        // If a new TPS issue occurs, it should be detected
+        checker.add_alert(HealthAlert::TpsBelow10, current_tick - 10);
+        assert!(
+            !checker.is_healthy(current_tick),
+            "Recent TPS alert should cause unhealthy status"
+        );
+
+        // After the issue passes (51 ticks later), should be healthy again
+        assert!(
+            checker.is_healthy(current_tick + 51),
+            "After 51 ticks, old alert should no longer affect health"
+        );
     }
 
     #[test]

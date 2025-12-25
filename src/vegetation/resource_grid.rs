@@ -603,19 +603,25 @@ impl ResourceGrid {
         let due_events = self.event_scheduler.pop_due_events(current_tick);
         self.metrics.events_processed = due_events.len();
 
-        for event in due_events {
-            match event {
-                GrowthEvent::Consume { location, .. } => {
-                    // Consumption already handled when scheduled
-                    self.regrow_cell(location);
-                }
-                GrowthEvent::Regrow { location, .. } => {
-                    self.regrow_cell(location);
-                }
-                GrowthEvent::RandomSample { locations, .. } => {
-                    for location in locations {
+        // Batch events by chunk for better cache locality
+        let event_batches = Self::group_events_by_chunk(due_events);
+
+        // Process each chunk's events together
+        for (_chunk, events) in event_batches {
+            for event in events {
+                match event {
+                    GrowthEvent::Consume { location, .. } => {
+                        // Consumption already handled when scheduled
                         self.regrow_cell(location);
-                        self.metrics.random_cells_sampled += 1;
+                    }
+                    GrowthEvent::Regrow { location, .. } => {
+                        self.regrow_cell(location);
+                    }
+                    GrowthEvent::RandomSample { locations, .. } => {
+                        for location in locations {
+                            self.regrow_cell(location);
+                            self.metrics.random_cells_sampled += 1;
+                        }
                     }
                 }
             }
@@ -627,6 +633,23 @@ impl ResourceGrid {
         // Update processing time metric
         let elapsed = start_time.elapsed().as_micros() as u64;
         self.metrics.processing_time_us = elapsed;
+    }
+
+    /// Group events by chunk (16x16) for better cache locality
+    fn group_events_by_chunk(events: Vec<GrowthEvent>) -> HashMap<IVec2, Vec<GrowthEvent>> {
+        let mut batches: HashMap<IVec2, Vec<GrowthEvent>> = HashMap::new();
+
+        for event in events {
+            // For events with multiple locations (RandomSample), we group by the first location's chunk
+            // This is a simplification - we could split RandomSample events by chunk if needed
+            let locations = event.locations();
+            if let Some(&first_location) = locations.first() {
+                let chunk = grid_helpers::cell_to_chunk(first_location);
+                batches.entry(chunk).or_insert_with(Vec::new).push(event);
+            }
+        }
+
+        batches
     }
 
     /// Process a random sample of cells for ambient regrowth
@@ -1167,5 +1190,115 @@ mod tests {
         assert_eq!(updated_cell.resource_type, Some(ResourceType::HazelShrub));
         // HazelShrub has biomass_cap of 30.0, so max_biomass should be updated to that value
         assert_eq!(updated_cell.max_biomass, 30.0); // Should be updated to profile value (30.0)
+    }
+
+    #[test]
+    fn test_group_events_by_chunk() {
+        // Test the batch processing helper function
+        let events = vec![
+            GrowthEvent::Regrow {
+                location: IVec2::new(0, 0), // Chunk (0, 0)
+                scheduled_tick: 100,
+            },
+            GrowthEvent::Regrow {
+                location: IVec2::new(5, 5), // Chunk (0, 0)
+                scheduled_tick: 100,
+            },
+            GrowthEvent::Regrow {
+                location: IVec2::new(16, 16), // Chunk (1, 1)
+                scheduled_tick: 100,
+            },
+            GrowthEvent::Regrow {
+                location: IVec2::new(32, 0), // Chunk (2, 0)
+                scheduled_tick: 100,
+            },
+        ];
+
+        let batches = ResourceGrid::group_events_by_chunk(events);
+
+        // Should have 3 chunks
+        assert_eq!(batches.len(), 3);
+
+        // Chunk (0, 0) should have 2 events
+        let chunk_00 = batches.get(&IVec2::new(0, 0)).unwrap();
+        assert_eq!(chunk_00.len(), 2);
+
+        // Chunk (1, 1) should have 1 event
+        let chunk_11 = batches.get(&IVec2::new(1, 1)).unwrap();
+        assert_eq!(chunk_11.len(), 1);
+
+        // Chunk (2, 0) should have 1 event
+        let chunk_20 = batches.get(&IVec2::new(2, 0)).unwrap();
+        assert_eq!(chunk_20.len(), 1);
+    }
+
+    #[test]
+    fn test_batch_processing_preserves_behavior() {
+        // Test that batch processing produces the same results as non-batched
+        let mut grid = ResourceGrid::new();
+        let pos1 = IVec2::new(0, 0);
+        let pos2 = IVec2::new(5, 5);
+
+        // Create cells
+        if let Ok(cell) = grid.get_or_create_cell(pos1, 100.0, 1.0) {
+            cell.total_biomass = 50.0;
+        }
+        if let Ok(cell) = grid.get_or_create_cell(pos2, 100.0, 1.0) {
+            cell.total_biomass = 60.0;
+        }
+
+        // Schedule events for both cells in the same chunk
+        grid.event_scheduler.schedule(GrowthEvent::Regrow {
+            location: pos1,
+            scheduled_tick: 100,
+        });
+        grid.event_scheduler.schedule(GrowthEvent::Regrow {
+            location: pos2,
+            scheduled_tick: 100,
+        });
+
+        // Update should process both events
+        grid.update(150);
+
+        // Both cells should have grown
+        let cell1 = grid.get_cell(pos1).unwrap();
+        let cell2 = grid.get_cell(pos2).unwrap();
+        assert!(cell1.total_biomass > 50.0);
+        assert!(cell2.total_biomass > 60.0);
+
+        // Metrics should show 2 events processed
+        assert_eq!(grid.get_metrics().events_processed, 2);
+    }
+
+    #[test]
+    fn test_batch_processing_with_random_sample() {
+        // Test that RandomSample events are batched correctly
+        let mut grid = ResourceGrid::new();
+
+        // Create cells in different chunks
+        let positions = vec![
+            IVec2::new(0, 0),   // Chunk (0, 0)
+            IVec2::new(5, 5),   // Chunk (0, 0)
+            IVec2::new(16, 16), // Chunk (1, 1)
+        ];
+
+        for pos in &positions {
+            if let Ok(cell) = grid.get_or_create_cell(*pos, 100.0, 1.0) {
+                cell.total_biomass = 50.0;
+            }
+        }
+
+        // Schedule a RandomSample event
+        grid.event_scheduler.schedule(GrowthEvent::RandomSample {
+            locations: positions.clone(),
+            scheduled_tick: 100,
+        });
+
+        // Update should process the event
+        grid.update(150);
+
+        // All cells should have been processed
+        assert_eq!(grid.get_metrics().random_cells_sampled, 3);
+        assert_eq!(grid.get_metrics().events_processed, 1);
     }
 }
