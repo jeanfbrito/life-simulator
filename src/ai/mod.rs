@@ -32,6 +32,7 @@ pub use collectables::{
 };
 pub use hunting_relationship_system::{
     establish_hunting_relationship, clear_hunting_relationship, cleanup_stale_hunting_relationships,
+    has_hunting_relationship, is_being_hunted,
 };
 
 // Re-export web API functions for easier access
@@ -79,6 +80,14 @@ impl Plugin for TQUAIPlugin {
                 execute_queued_actions
                     .in_set(SimulationSet::ActionExecution)
                     .after(SimulationSet::Planning)
+                    .run_if(should_tick),
+            )
+            // === CLEANUP PHASE ===
+            // Clean up stale hunting relationships (prey despawned while being hunted)
+            .add_systems(
+                Update,
+                cleanup_stale_hunting_relationships
+                    .in_set(SimulationSet::Cleanup)
                     .run_if(should_tick),
             );
     }

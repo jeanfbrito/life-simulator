@@ -55,6 +55,27 @@ pub fn cleanup_stale_hunting_relationships(
     }
 }
 
+/// Check if predator has active hunting relationship with target
+pub fn has_hunting_relationship(
+    predator: Entity,
+    target: Entity,
+    world: &World,
+) -> bool {
+    if let Some(hunter) = world.get::<ActiveHunter>(predator) {
+        hunter.target == target
+    } else {
+        false
+    }
+}
+
+/// Check if prey is being hunted by anyone
+pub fn is_being_hunted(
+    prey: Entity,
+    world: &World,
+) -> bool {
+    world.get::<HuntingTarget>(prey).is_some()
+}
+
 /// System to validate hunting relationships are bidirectional
 /// Used for testing and validation
 #[cfg(test)]
