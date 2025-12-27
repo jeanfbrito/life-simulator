@@ -12,6 +12,7 @@ pub mod consideration;
 pub mod debug_collectables;
 pub mod event_driven_planner;
 pub mod herbivore_toolkit;
+pub mod hunting_relationship_system;
 pub mod planner;
 pub mod predator_toolkit;
 pub mod queue;
@@ -28,6 +29,9 @@ pub use action::{
 pub use collectables::{
     CollectableInfo, CollectableSearchConfig, CollectableStats, debug_list_collectables,
     get_collectable_stats, get_collectable_targets, get_all_collectable_types, is_collectable,
+};
+pub use hunting_relationship_system::{
+    establish_hunting_relationship, clear_hunting_relationship, cleanup_stale_hunting_relationships,
 };
 
 // Re-export web API functions for easier access

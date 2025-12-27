@@ -7,6 +7,7 @@ pub mod entity_tracker;
 pub mod entity_types;
 /// Entities module - manages creatures and their behaviors
 pub mod fear;
+pub mod hunting_relationships;
 pub mod movement;
 pub mod movement_component;
 pub mod registry;
@@ -50,6 +51,8 @@ pub use cached_state::{CachedEntityState, update_cached_entity_state_system};
 pub use carcass::{tick_carcasses, Carcass};
 
 pub use fear::{fear_speed_system, predator_proximity_system, FearPlugin, FearState};
+
+pub use hunting_relationships::{ActiveHunter, HuntingTarget};
 
 pub use entity_types::{
     count_entities_by_type, spawn_bear, spawn_deer, spawn_fox, spawn_human, spawn_humans,
