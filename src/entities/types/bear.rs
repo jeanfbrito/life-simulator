@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
+use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types::{Bear, Deer};
 use crate::entities::reproduction::{
     birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
@@ -133,15 +134,13 @@ pub fn plan_bear_actions(
         With<Bear>,
     >,
     bear_positions: Query<(Entity, &TilePosition), With<Bear>>,
-    world_loader: Res<WorldLoader>,
+    resources: PlanningResources,
     carcasses: Query<(Entity, &TilePosition, &Carcass)>,
     deer_query: Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
-    vegetation_grid: Res<ResourceGrid>,
-    tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    let loader = world_loader.as_ref();
-    let vegetation = vegetation_grid.as_ref();
+    let loader = resources.world_loader.as_ref();
+    let vegetation = resources.vegetation_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_bear_actions");
 
     plan_species_actions(
@@ -168,7 +167,7 @@ pub fn plan_bear_actions(
         None,
         "🐻",
         "Bear",
-        tick.0,
+        resources.current_tick(),
     );
 }
 

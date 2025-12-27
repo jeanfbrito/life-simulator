@@ -4,6 +4,7 @@ use crate::pathfinding::{GridPathRequest, Path, PathfindingFailed};
 use crate::resources::ResourceType;
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
+use crate::types::newtypes::Utility;
 /// Action system for TQUAI
 ///
 /// Actions are discrete behaviors that can be queued and executed on ticks.
@@ -35,7 +36,8 @@ pub enum ActionResult {
 pub struct ActionRequest {
     pub entity: Entity,
     pub action_type: ActionType,
-    pub utility: f32,
+    /// How desirable this action is (0.0-1.0) - now typed for clarity
+    pub utility: Utility,
     pub priority: i32,
 }
 

@@ -9,6 +9,7 @@ pub mod resources;
 pub mod serialization;
 pub mod simulation;
 pub mod tilemap;
+pub mod types;
 pub mod vegetation;
 pub mod web;
 pub mod world_loader;

@@ -5,6 +5,7 @@ use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
+use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types;
 use crate::entities::reproduction::{
     birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
@@ -127,12 +128,10 @@ pub fn plan_raccoon_actions(
         With<Raccoon>,
     >,
     raccoon_positions: Query<(Entity, &TilePosition), With<Raccoon>>,
-    world_loader: Res<WorldLoader>,
-    vegetation_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
-    tick: Res<SimulationTick>,
+    resources: PlanningResources,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    let loader = world_loader.as_ref();
+    let loader = resources.world_loader.as_ref();
 
     let _timer =
         crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_raccoon_actions");
@@ -150,7 +149,7 @@ pub fn plan_raccoon_actions(
                 energy,
                 behavior,
                 loader,
-                &vegetation_grid,
+                &resources.vegetation_grid,
                 fear_state,
             )
         },
@@ -166,7 +165,7 @@ pub fn plan_raccoon_actions(
         }),
         "🦝",
         "Raccoon",
-        tick.0,
+        resources.current_tick(),
     );
 }
 

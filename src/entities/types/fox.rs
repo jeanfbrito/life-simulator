@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
+use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types::{Fox, Rabbit};
 use crate::entities::reproduction::{
     birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
@@ -127,15 +128,13 @@ pub fn plan_fox_actions(
         With<Fox>,
     >,
     fox_positions: Query<(Entity, &TilePosition), With<Fox>>,
-    world_loader: Res<WorldLoader>,
+    resources: PlanningResources,
     carcasses: Query<(Entity, &TilePosition, &Carcass)>,
     rabbits: Query<(Entity, &TilePosition, Option<&Age>), With<Rabbit>>,
-    vegetation_grid: Res<ResourceGrid>,
-    tick: Res<SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    let loader = world_loader.as_ref();
-    let vegetation = vegetation_grid.as_ref();
+    let loader = resources.world_loader.as_ref();
+    let vegetation = resources.vegetation_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_fox_actions");
 
     plan_species_actions(
@@ -153,7 +152,7 @@ pub fn plan_fox_actions(
         None,
         "🦊",
         "Fox",
-        tick.0,
+        resources.current_tick(),
     );
 }
 

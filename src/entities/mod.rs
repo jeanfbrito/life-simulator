@@ -31,8 +31,8 @@ pub use movement_component::MovementComponent;
 pub use spatial_index::{EntityType as SpatialEntityType, SpatialEntityIndex};
 
 pub use spatial_cell::{
-    entities_in_radius_via_children, reparent_entities_to_cells, spawn_spatial_grid,
-    update_spatial_parent_on_movement, SpatialCell, SpatialCellGrid, SpatiallyParented,
+    entities_in_radius_via_children, spawn_spatial_grid,
+    SpatialCell, SpatialCellGrid, SpatiallyParented,
     CHUNK_SIZE,
 };
 
@@ -192,8 +192,7 @@ impl Plugin for EntitiesPlugin {
                     movement::initiate_pathfinding,
                     movement::initialize_movement_state,
                     entity_tracker::sync_entities_to_tracker, // Sync for web API
-                    // Phase 4.2: Update spatial parent when entities move
-                    update_spatial_parent_on_movement,
+                    // Phase 7: Spatial parent updates now handled by TilePosition component hooks
                 ),
             )
             // === PLANNING PHASE ===
@@ -269,8 +268,7 @@ impl Plugin for EntitiesPlugin {
                 (
                     stats::death_system,
                     tick_carcasses,
-                    // Phase 4.2: Budget-controlled reparenting (50 entities/tick)
-                    reparent_entities_to_cells,
+                    // Phase 7: Spatial reparenting now handled by TilePosition component hooks
                 )
                     .in_set(SimulationSet::Cleanup)
                     .after(SimulationSet::Stats)

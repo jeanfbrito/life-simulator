@@ -3,6 +3,7 @@
 /// Considerations evaluate context to produce utility scores (0.0 to 1.0).
 /// Multiple considerations combine to determine action utility.
 use bevy::prelude::*;
+use crate::types::newtypes::Utility;
 
 /// Response curve types for considerations
 /// Transforms input value (0-1) to output score (0-1)
@@ -38,6 +39,11 @@ impl ResponseCurve {
                 }
             }
         }
+    }
+
+    /// Apply the curve and return a typed Utility value
+    pub fn evaluate_utility(&self, input: f32) -> Utility {
+        Utility::new(self.evaluate(input))
     }
 }
 
@@ -92,7 +98,7 @@ impl ConsiderationSet {
         self.considerations.push(Box::new(consideration));
     }
 
-    /// Evaluate all considerations and combine into final utility
+    /// Evaluate all considerations and combine into final utility (raw f32)
     pub fn evaluate(&self, world: &World, entity: Entity) -> f32 {
         if self.considerations.is_empty() {
             return 0.0;
@@ -110,6 +116,11 @@ impl ConsiderationSet {
             CombinationMethod::Min => scores.iter().cloned().fold(f32::INFINITY, f32::min),
             CombinationMethod::Max => scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max),
         }
+    }
+
+    /// Evaluate all considerations and combine into final Utility (typed)
+    pub fn evaluate_utility(&self, world: &World, entity: Entity) -> Utility {
+        Utility::new(self.evaluate(world, entity))
     }
 }
 

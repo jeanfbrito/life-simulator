@@ -16,12 +16,14 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use super::action::{create_action, Action, ActionResult, ActionType};
 use crate::entities::{ActiveAction, CurrentAction};
 use crate::simulation::SimulationTick;
+use crate::types::newtypes::Utility;
 
 /// A queued action waiting to be executed
 pub struct QueuedAction {
     pub entity: Entity,
     pub action: Box<dyn Action>,
-    pub utility: f32,
+    /// How desirable this action is (0.0-1.0) - typed for clarity
+    pub utility: Utility,
     pub priority: i32,
     pub queued_at_tick: u64,
 }
@@ -46,8 +48,8 @@ impl Ord for QueuedAction {
         match self.priority.cmp(&other.priority) {
             Ordering::Equal => {
                 // If same priority, higher utility executes first
-                self.utility
-                    .partial_cmp(&other.utility)
+                self.utility.as_f32()
+                    .partial_cmp(&other.utility.as_f32())
                     .unwrap_or(Ordering::Equal)
             }
             other => other,
@@ -120,7 +122,7 @@ impl ActionQueue {
         self.pending.push(QueuedAction {
             entity,
             action,
-            utility,
+            utility: Utility::new(utility),
             priority,
             queued_at_tick: tick,
         });

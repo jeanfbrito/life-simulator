@@ -12,6 +12,7 @@ mod resources;
 mod serialization;
 mod simulation;
 mod tilemap;
+mod types;
 mod vegetation;
 mod web;
 mod world_loader;

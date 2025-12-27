@@ -16,6 +16,7 @@ pub mod planner;
 pub mod predator_toolkit;
 pub mod queue;
 pub mod replan_queue;
+pub mod system_params;
 pub mod test_collectable_pipeline;
 pub mod trigger_emitters;
 pub mod ultrathink;
@@ -39,6 +40,7 @@ pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
 pub use queue::{ActionQueue, QueuedAction, execute_active_actions_system};
 pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
+pub use system_params::PlanningResources;
 pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
 pub use ultrathink::{ThinkQueue, ThinkRequest, ThinkReason, ThinkPriority, UltraThinkPlugin};
 

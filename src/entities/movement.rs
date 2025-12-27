@@ -1,6 +1,9 @@
 /// Tick-based movement system for entities
 /// Movement happens discretely on simulation ticks, not smoothly over time
 use bevy::prelude::*;
+use bevy::ecs::component::ComponentId;
+use bevy::ecs::world::DeferredWorld;
+use bevy::ecs::component::HookContext;
 
 use crate::pathfinding::{GridPathRequest, Path};
 use super::Creature;  // For #[require] attribute
@@ -10,7 +13,14 @@ use super::Creature;  // For #[require] attribute
 // ============================================================================
 
 /// Entity's current tile position (discrete, not interpolated)
+///
+/// Phase 7: Component Hooks for Spatial Index
+/// This component has on_add and on_insert hooks that automatically synchronize
+/// the entity's position with the spatial hierarchy (Parent/Child relationships
+/// with SpatialCell entities). This eliminates the need for manual update systems.
 #[derive(Component, Debug, Clone, Copy, Default)]
+#[component(on_add = on_tile_position_add)]
+#[component(on_insert = on_tile_position_insert)]
 pub struct TilePosition {
     pub tile: IVec2,
 }
@@ -79,6 +89,101 @@ impl MovementSpeed {
 pub struct MovementState {
     /// Ticks since last movement
     ticks_since_move: u32,
+}
+
+// ============================================================================
+// COMPONENT HOOKS - Phase 7: Automatic Spatial Index Synchronization
+// ============================================================================
+
+/// Hook fired when TilePosition is first added to an entity
+///
+/// Automatically reparents the entity to its correct spatial cell
+/// in the spatial hierarchy. This eliminates the need for a separate
+/// reparent_entities_to_cells system.
+fn on_tile_position_add(
+    mut world: DeferredWorld,
+    HookContext { entity, .. }: HookContext,
+) {
+    // Get the position value
+    let position = match world.get::<TilePosition>(entity) {
+        Some(pos) => pos.tile,
+        None => return, // Entity already despawned?
+    };
+
+    // Get spatial grid resource
+    let grid = match world.get_resource::<super::spatial_cell::SpatialCellGrid>() {
+        Some(grid) => grid,
+        None => return, // Grid not initialized yet
+    };
+
+    // Calculate chunk coordinate
+    let chunk_coord = grid.chunk_coord_for_position(position);
+
+    // Get cell entity from grid
+    let cell_entity = match grid.get_cell(chunk_coord) {
+        Some(cell) => cell,
+        None => return, // Cell doesn't exist (out of bounds)
+    };
+
+    drop(grid); // Release resource borrow
+
+    // Queue deferred commands to reparent entity to cell
+    let mut commands = world.commands();
+    commands.entity(cell_entity).add_child(entity);
+    commands.entity(entity).insert(super::spatial_cell::SpatiallyParented);
+}
+
+/// Hook fired when TilePosition is inserted (including updates)
+///
+/// Detects if entity moved to a different chunk and reparents if needed.
+/// Optimizes away reparenting when entity stays in same chunk.
+fn on_tile_position_insert(
+    mut world: DeferredWorld,
+    HookContext { entity, .. }: HookContext,
+) {
+    // Get the new position value
+    let new_position = match world.get::<TilePosition>(entity) {
+        Some(pos) => pos.tile,
+        None => return,
+    };
+
+    // Get spatial grid resource
+    let grid = match world.get_resource::<super::spatial_cell::SpatialCellGrid>() {
+        Some(grid) => grid,
+        None => return,
+    };
+
+    // Calculate new chunk coordinate
+    let new_chunk = grid.chunk_coord_for_position(new_position);
+
+    // Get the entity's current parent (if any)
+    let current_parent = match world.get::<ChildOf>(entity) {
+        Some(child_of) => child_of.parent(),
+        None => return, // Not yet in hierarchy (shouldn't happen with on_add hook)
+    };
+
+    // Get current cell's chunk coordinate
+    let current_chunk = match world.get::<super::spatial_cell::SpatialCell>(current_parent) {
+        Some(cell) => cell.chunk_coord,
+        None => return, // Parent isn't a spatial cell?
+    };
+
+    // If still in same chunk, no reparenting needed (optimization)
+    if current_chunk == new_chunk {
+        return;
+    }
+
+    // Get new cell entity
+    let new_cell_entity = match grid.get_cell(new_chunk) {
+        Some(cell) => cell,
+        None => return, // Cell doesn't exist (out of bounds)
+    };
+
+    drop(grid); // Release resource borrow
+
+    // Queue deferred command to reparent to new cell
+    let mut commands = world.commands();
+    commands.entity(new_cell_entity).add_child(entity);
 }
 
 // ============================================================================

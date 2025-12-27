@@ -8,6 +8,7 @@ use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams, maybe_add_fle
 use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
+use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types;
 use crate::entities::entity_types::{Bear, Fox, Wolf};
 use crate::entities::reproduction::{
@@ -138,12 +139,10 @@ pub fn plan_deer_actions(
     >,
     deer_positions: Query<(Entity, &TilePosition), With<Deer>>,
     predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
-    world_loader: Res<WorldLoader>,
-    vegetation_grid: Res<crate::vegetation::resource_grid::ResourceGrid>,
-    tick: Res<SimulationTick>,
+    resources: PlanningResources,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
-    let loader = world_loader.as_ref();
+    let loader = resources.world_loader.as_ref();
 
     // Collect predator positions once for all deer
     let predator_pos_list: Vec<IVec2> = predator_positions.iter().map(|pos| pos.tile).collect();
@@ -163,7 +162,7 @@ pub fn plan_deer_actions(
                 energy,
                 behavior,
                 loader,
-                &vegetation_grid,
+                &resources.vegetation_grid,
                 fear_state,
             );
 
@@ -190,7 +189,7 @@ pub fn plan_deer_actions(
         }),
         "🦌",
         "Deer",
-        tick.0,
+        resources.current_tick(),
     );
 }
 
