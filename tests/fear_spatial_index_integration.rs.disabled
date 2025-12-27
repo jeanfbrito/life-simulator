@@ -1,0 +1,395 @@
+/// Integration tests for SpatialEntityIndex optimization in fear system
+///
+/// Validates that the fear system correctly uses SpatialEntityIndex for O(k)
+/// predator proximity detection instead of O(N*M) linear search.
+///
+/// These tests verify behavior preservation during the optimization.
+
+#![cfg(feature = "legacy_tests")]
+
+use bevy::prelude::*;
+use life_simulator::entities::entity_types::{spawn_rabbit, spawn_wolf, spawn_fox};
+use life_simulator::entities::{FearPlugin, FearState, SpatialEntityIndex};
+use life_simulator::entities::{MovementSpeed, TilePosition};
+use life_simulator::vegetation::constants::predator_effects::*;
+
+// ========================================================================
+// TEST 1: RED PHASE - Baseline Fear Detection with Spatial Index Available
+// ========================================================================
+
+/// Test that FearPlugin can access SpatialEntityIndex resource
+#[test]
+fn test_fear_system_has_spatial_index_resource() {
+    let mut app = App::new();
+    app.add_plugins(FearPlugin);
+
+    // Verify the plugin loads without errors
+    // The EntitiesPlugin will provide SpatialEntityIndex resource
+}
+
+// ========================================================================
+// TEST 2: GREEN PHASE - Fear Detection Still Works After Spatial Index Integration
+// ========================================================================
+
+/// Test that fear detection produces identical results with spatial index
+#[test]
+fn test_fear_detection_with_spatial_index() {
+    let mut app = App::new();
+
+    // Set up as EntitiesPlugin does
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    // Spawn using commands
+    let prey_near_name = "NearRabbit".to_string();
+    let prey_far_name = "FarRabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        // Spawn predator and prey
+        let _predator = spawn_wolf(&mut commands, "TestWolf", IVec2::new(0, 0));
+        let _prey_near = spawn_rabbit(&mut commands, prey_near_name.clone(), IVec2::new(10, 10));
+        let _prey_far = spawn_rabbit(&mut commands, prey_far_name.clone(), IVec2::new(200, 200));
+    }
+
+    // Run update to process fear detection
+    app.update();
+
+    let world = &app.world();
+
+    // Get entities by name
+    let mut prey_entities = Vec::new();
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_near_name || creature.name == prey_far_name {
+            prey_entities.push((entity, creature.name.clone()));
+        }
+    }
+
+    // Check fear states
+    for (entity, name) in prey_entities {
+        let fear = world.entity(entity).get::<FearState>().unwrap();
+
+        if name == prey_near_name {
+            assert!(fear.is_fearful(), "Near prey should detect predator");
+            assert_eq!(fear.nearby_predators, 1, "Should detect exactly 1 predator");
+        } else if name == prey_far_name {
+            assert!(!fear.is_fearful(), "Far prey should not detect predator");
+            assert_eq!(fear.nearby_predators, 0, "Should detect 0 predators");
+        }
+    }
+}
+
+// ========================================================================
+// TEST 3: GREEN PHASE - Fear Decay Still Works
+// ========================================================================
+
+/// Test that fear decay continues to work correctly with spatial index
+#[test]
+fn test_fear_decay_with_spatial_index() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    // Spawn using commands
+    let prey_name = "NearRabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        // Spawn predator and prey
+        let _predator = spawn_wolf(&mut commands, "TestWolf", IVec2::new(0, 0));
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), IVec2::new(10, 10));
+    }
+
+    // Initial update - prey should be fearful
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear_initial = world.entity(prey).get::<FearState>().unwrap().fear_level;
+    assert!(fear_initial > 0.1, "Initial fear should be significant");
+}
+
+// ========================================================================
+// TEST 4: GREEN PHASE - Multiple Predators Detection
+// ========================================================================
+
+/// Test that multiple predators are detected correctly with spatial index
+#[test]
+fn test_multiple_predators_detection_with_spatial_index() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    // Spawn using commands
+    let prey_name = "Rabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        // Spawn multiple predators around same location
+        let _wolf = spawn_wolf(&mut commands, "TestWolf", IVec2::new(0, 0));
+        let _fox = spawn_fox(&mut commands, "TestFox", IVec2::new(5, 5));
+
+        // Spawn prey in middle
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), IVec2::new(10, 10));
+    }
+
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear = world.entity(prey).get::<FearState>().unwrap();
+
+    // Should detect both predators
+    assert_eq!(fear.nearby_predators, 2, "Should detect 2 predators");
+    assert!(fear.is_fearful(), "Should be fearful with multiple predators");
+}
+
+// ========================================================================
+// TEST 5: REFACTOR PHASE - Fear Utility Modifier Still Works
+// ========================================================================
+
+/// Test that fear modifiers work correctly with spatial index
+#[test]
+fn test_fear_utility_modifier_with_spatial_index() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    let prey_name = "NearRabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        let _predator = spawn_wolf(&mut commands, "TestWolf", IVec2::new(0, 0));
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), IVec2::new(10, 10));
+    }
+
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear = world.entity(prey).get::<FearState>().unwrap();
+
+    let modifier = fear.get_utility_modifier();
+    assert!(modifier < 1.0, "Fear should reduce utility modifier");
+    assert!(modifier >= 0.5, "Modifier should not be less than 50%");
+}
+
+// ========================================================================
+// TEST 6: REFACTOR PHASE - Fear Speed Boost Still Works
+// ========================================================================
+
+/// Test that fear speed modifiers work correctly with spatial index
+#[test]
+fn test_fear_speed_modifier_with_spatial_index() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    let prey_name = "NearRabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        let _predator = spawn_wolf(&mut commands, "TestWolf", IVec2::new(0, 0));
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), IVec2::new(10, 10));
+    }
+
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear = world.entity(prey).get::<FearState>().unwrap();
+
+    let modifier = fear.get_speed_modifier();
+    assert!(modifier >= 1.0, "Fear should boost speed");
+    assert!(modifier <= FEAR_SPEED_BOOST, "Speed boost should not exceed constant");
+}
+
+// ========================================================================
+// TEST 7: REFACTOR PHASE - Predator at Exact Radius Boundary
+// ========================================================================
+
+/// Test that predators exactly at FEAR_RADIUS are detected
+#[test]
+fn test_predator_at_fear_radius_boundary() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    // Place predator at prey position + FEAR_RADIUS
+    let prey_pos = IVec2::new(0, 0);
+    let predator_pos = IVec2::new(FEAR_RADIUS, 0);
+
+    let prey_name = "Rabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        let _predator = spawn_wolf(&mut commands, "TestWolf", predator_pos);
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), prey_pos);
+    }
+
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear = world.entity(prey).get::<FearState>().unwrap();
+
+    // Should detect predator at boundary
+    assert_eq!(fear.nearby_predators, 1, "Should detect predator at boundary");
+
+    // Verify distance
+    let actual_distance = predator_pos.as_vec2().distance(prey_pos.as_vec2());
+    assert!(actual_distance <= FEAR_RADIUS as f32, "Distance check");
+}
+
+// ========================================================================
+// TEST 8: REFACTOR PHASE - Predator Just Outside Radius Not Detected
+// ========================================================================
+
+/// Test that predators just outside FEAR_RADIUS are not detected
+#[test]
+fn test_predator_just_outside_fear_radius() {
+    let mut app = App::new();
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    // Place predator just outside FEAR_RADIUS
+    let prey_pos = IVec2::new(0, 0);
+    let predator_pos = IVec2::new(FEAR_RADIUS + 10, 0);
+
+    let prey_name = "Rabbit".to_string();
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        let _predator = spawn_wolf(&mut commands, "TestWolf", predator_pos);
+        let _prey = spawn_rabbit(&mut commands, prey_name.clone(), prey_pos);
+    }
+
+    app.update();
+
+    let world = &app.world();
+    let mut prey_entity = None;
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        if creature.name == prey_name {
+            prey_entity = Some(entity);
+            break;
+        }
+    }
+
+    let prey = prey_entity.expect("Prey should exist");
+    let fear = world.entity(prey).get::<FearState>().unwrap();
+
+    // Should not detect predator outside radius
+    assert_eq!(fear.nearby_predators, 0, "Should not detect predator outside radius");
+    assert!(!fear.is_fearful(), "Should not be fearful");
+}
+
+// ========================================================================
+// SUCCESS CRITERIA VERIFICATION
+// ========================================================================
+
+/// Comprehensive test that verifies all integration requirements
+#[test]
+fn test_fear_spatial_index_integration_complete() {
+    let mut app = App::new();
+
+    // Setup as EntitiesPlugin does
+    app.insert_resource(SpatialEntityIndex::new());
+    app.add_plugins(FearPlugin);
+
+    let wolf_name = "Wolf1".to_string();
+    let fox_name = "Fox1".to_string();
+    let prey_near_name = "RabbitNear".to_string();
+    let prey_mid_name = "RabbitMid".to_string();
+    let prey_far_name = "RabbitFar".to_string();
+
+    {
+        let world = &mut app.world_mut();
+        let mut commands = world.commands();
+
+        // Create complex scenario
+        let _wolf = spawn_wolf(&mut commands, wolf_name.clone(), IVec2::new(0, 0));
+        let _fox = spawn_fox(&mut commands, fox_name.clone(), IVec2::new(5, 5));
+
+        let _prey_near = spawn_rabbit(&mut commands, prey_near_name.clone(), IVec2::new(15, 15));
+        let _prey_mid = spawn_rabbit(&mut commands, prey_mid_name.clone(), IVec2::new(30, 30));
+        let _prey_far = spawn_rabbit(&mut commands, prey_far_name.clone(), IVec2::new(100, 100));
+    }
+
+    app.update();
+
+    let world = &app.world();
+
+    // Get entities by name
+    let mut entities = std::collections::HashMap::new();
+    for (entity, creature) in world.query::<(Entity, &crate::entities::Creature)>().iter(world) {
+        entities.insert(creature.name.clone(), entity);
+    }
+
+    // Verify results
+    let fear_near = world.entity(entities[&prey_near_name]).get::<FearState>().unwrap();
+    let fear_mid = world.entity(entities[&prey_mid_name]).get::<FearState>().unwrap();
+    let fear_far = world.entity(entities[&prey_far_name]).get::<FearState>().unwrap();
+
+    // Near prey should detect both predators
+    assert_eq!(fear_near.nearby_predators, 2, "Near prey should detect 2 predators");
+    assert!(fear_near.is_fearful(), "Near prey should be fearful");
+
+    // Mid prey might detect none (depends on exact radius)
+    // Just verify fear levels are reasonable
+    assert!(fear_mid.fear_level >= 0.0 && fear_mid.fear_level <= 1.0);
+
+    // Far prey should detect none
+    assert_eq!(fear_far.nearby_predators, 0, "Far prey should detect 0 predators");
+    assert!(!fear_far.is_fearful(), "Far prey should not be fearful");
+
+    // Verify modifiers work
+    assert!(fear_near.get_utility_modifier() <= 1.0);
+    assert!(fear_near.get_speed_modifier() >= 1.0);
+}

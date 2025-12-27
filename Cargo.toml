@@ -17,7 +17,7 @@ authors = ["Jean"]
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-bevy = { version = "0.16", default-features = false, features = [
+bevy = { version = "0.16", features = [
   "multi_threaded",
   "serialize",
   "bevy_log",

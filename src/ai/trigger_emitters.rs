@@ -4,6 +4,7 @@ use crate::ai::queue::ActionQueue;
 /// This module provides systems that monitor various game state changes and
 /// emit replanning requests to the ReplanQueue when important stimuli occur.
 use crate::ai::replan_queue::{ReplanPriority, ReplanQueue};
+use crate::ai::ultrathink::{ThinkQueue, ThinkReason};
 use crate::entities::stats::{Energy, Hunger, Thirst};
 use crate::entities::BehaviorConfig;
 use crate::simulation::{SimulationTick, TickProfiler};
@@ -103,6 +104,7 @@ impl IdleTracker {
 pub fn stat_threshold_system(
     mut commands: Commands,
     mut replan_queue: ResMut<ReplanQueue>,
+    mut think_queue: ResMut<ThinkQueue>,
     mut query: Query<(
         Entity,
         &Hunger,
@@ -146,6 +148,17 @@ pub fn stat_threshold_system(
                 current_hunger * 100.0,
                 hunger_threshold * 100.0
             );
+
+            // ThinkQueue scheduling based on severity
+            if current_hunger >= 80.0 {
+                // Critical hunger (>= 80%)
+                debug!("🧠 ThinkQueue: Scheduling URGENT for critical hunger: {:.1}%", current_hunger * 100.0);
+                think_queue.schedule_urgent(entity, ThinkReason::HungerCritical, tick.0);
+            } else if current_hunger >= 50.0 {
+                // Moderate hunger (50-79%)
+                debug!("🧠 ThinkQueue: Scheduling NORMAL for moderate hunger: {:.1}%", current_hunger * 100.0);
+                think_queue.schedule_normal(entity, ThinkReason::HungerModerate, tick.0);
+            }
         } else if current_hunger < hunger_threshold {
             tracker.hunger_triggered = false; // Reset when below threshold
         }
@@ -160,6 +173,17 @@ pub fn stat_threshold_system(
                 current_thirst * 100.0,
                 thirst_threshold * 100.0
             );
+
+            // ThinkQueue scheduling based on severity
+            if current_thirst >= 80.0 {
+                // Critical thirst (>= 80%)
+                debug!("🧠 ThinkQueue: Scheduling URGENT for critical thirst: {:.1}%", current_thirst * 100.0);
+                think_queue.schedule_urgent(entity, ThinkReason::ThirstCritical, tick.0);
+            } else if current_thirst >= 50.0 {
+                // Moderate thirst (50-79%)
+                debug!("🧠 ThinkQueue: Scheduling NORMAL for moderate thirst: {:.1}%", current_thirst * 100.0);
+                think_queue.schedule_normal(entity, ThinkReason::ThirstModerate, tick.0);
+            }
         } else if current_thirst < thirst_threshold {
             tracker.thirst_triggered = false; // Reset when below threshold
         }
@@ -174,6 +198,15 @@ pub fn stat_threshold_system(
                 current_energy * 100.0,
                 energy_threshold * 100.0
             );
+
+            // ThinkQueue: Low energy is moderate priority
+            if current_energy <= 20.0 {
+                debug!("🧠 ThinkQueue: Scheduling URGENT for critical energy: {:.1}%", current_energy * 100.0);
+                think_queue.schedule_urgent(entity, ThinkReason::HungerCritical, tick.0);
+            } else {
+                debug!("🧠 ThinkQueue: Scheduling NORMAL for low energy: {:.1}%", current_energy * 100.0);
+                think_queue.schedule_normal(entity, ThinkReason::HungerModerate, tick.0);
+            }
         } else if current_energy > energy_threshold {
             tracker.energy_triggered = false; // Reset when above threshold
         }
@@ -197,6 +230,7 @@ pub fn stat_threshold_system(
 /// when entities detect predators or experience fear spikes.
 pub fn fear_trigger_system(
     mut replan_queue: ResMut<ReplanQueue>,
+    mut think_queue: ResMut<ThinkQueue>,
     mut query: Query<(
         Entity,
         &crate::entities::FearState,
@@ -220,6 +254,13 @@ pub fn fear_trigger_system(
             );
             replan_queue.push(entity, ReplanPriority::High, reason, tick.0);
 
+            // ThinkQueue: Fear is always URGENT
+            debug!(
+                "🧠 ThinkQueue: Scheduling URGENT for fear: {:.2} fear, {} predators",
+                fear_state.fear_level, fear_state.nearby_predators
+            );
+            think_queue.schedule_urgent(entity, ThinkReason::FearTriggered, tick.0);
+
             // Reset idle timer when fear triggered
             if let Some(ref mut idle) = idle_tracker {
                 idle.mark_action_completed(tick.0);
@@ -234,6 +275,7 @@ pub fn fear_trigger_system(
 /// complete actions or when actions fail.
 pub fn action_completion_system(
     mut replan_queue: ResMut<ReplanQueue>,
+    mut think_queue: ResMut<ThinkQueue>,
     mut action_queue: ResMut<ActionQueue>,
     mut query: Query<(Entity, &mut IdleTracker)>,
     tick: Res<SimulationTick>,
@@ -257,6 +299,10 @@ pub fn action_completion_system(
                 "Action completed".to_string(),
                 tick.0,
             );
+
+            // ThinkQueue: Action completion is NORMAL priority
+            debug!("🧠 ThinkQueue: Scheduling NORMAL for action completion");
+            think_queue.schedule_normal(entity, ThinkReason::ActionCompleted, tick.0);
         }
     }
 }
@@ -265,13 +311,21 @@ pub fn action_completion_system(
 ///
 /// This system prevents entities from getting stuck by triggering replanning
 /// when they haven't performed actions for too long.
+/// Modified for UltraThink: Runs every 20 ticks and schedules LOW priority think requests.
 pub fn long_idle_system(
     mut replan_queue: ResMut<ReplanQueue>,
+    mut think_queue: ResMut<ThinkQueue>,
     mut query: Query<(Entity, &BehaviorConfig, &mut IdleTracker)>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<TickProfiler>,
 ) {
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_idle");
+
+    // UltraThink optimization: Only check idle every 20 ticks
+    if tick.0 % 20 != 0 {
+        return;
+    }
+
     for (entity, behavior_config, mut idle_tracker) in query.iter_mut() {
         idle_tracker.update_idle_time(tick.0);
 
@@ -283,6 +337,10 @@ pub fn long_idle_system(
 
             debug!("⏰ Entity {:?} long idle trigger: {}", entity, reason);
             replan_queue.push(entity, ReplanPriority::Normal, reason, tick.0);
+
+            // ThinkQueue: Long idle is LOW priority (can wait)
+            debug!("🧠 ThinkQueue: Scheduling LOW for long idle: {} ticks", idle_tracker.ticks_since_action);
+            think_queue.schedule_low(entity, ThinkReason::Idle, tick.0);
 
             // Reset the timer to avoid spam
             idle_tracker.mark_action_completed(tick.0);
@@ -296,6 +354,7 @@ pub fn long_idle_system(
 /// action completion detection fails, providing a safety net for the AI system.
 pub fn aggressive_idle_fallback_system(
     mut replan_queue: ResMut<ReplanQueue>,
+    mut think_queue: ResMut<ThinkQueue>,
     mut query: Query<(Entity, &mut IdleTracker)>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<TickProfiler>,
@@ -321,6 +380,10 @@ pub fn aggressive_idle_fallback_system(
                 entity, reason
             );
             replan_queue.push(entity, ReplanPriority::Normal, reason, tick.0);
+
+            // ThinkQueue: Fallback idle is LOW priority
+            debug!("🧠 ThinkQueue: Scheduling LOW for aggressive idle fallback: {} ticks", idle_tracker.ticks_since_action);
+            think_queue.schedule_low(entity, ThinkReason::Idle, tick.0);
 
             // Reset the timer to avoid spam
             idle_tracker.mark_action_completed(tick.0);

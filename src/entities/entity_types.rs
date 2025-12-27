@@ -164,7 +164,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
         } else {
             Sex::Female
         };
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -189,7 +189,8 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
                 FearState::new(), // Initialize fear state for predator detection
                                   // NO Wanderer component - movement driven by utility AI!
             ))
-            .id()
+            .id();
+        entity
     }
 }
 
@@ -207,7 +208,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
         } else {
             Sex::Female
         };
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -231,7 +232,8 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
             ))
-            .id()
+            .id();
+        entity
     }
 }
 
@@ -248,7 +250,7 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
         } else {
             Sex::Female
         };
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -272,7 +274,8 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
             ))
-            .id()
+            .id();
+        entity
     }
 }
 
@@ -290,7 +293,7 @@ pub fn spawn_bear(commands: &mut Commands, name: impl Into<String>, position: IV
             Sex::Female
         };
 
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -312,7 +315,8 @@ pub fn spawn_bear(commands: &mut Commands, name: impl Into<String>, position: IV
                 CurrentAction::none(),
                 cfg,
             ))
-            .id()
+            .id();
+        entity
     }
 }
 
@@ -330,7 +334,7 @@ pub fn spawn_fox(commands: &mut Commands, name: impl Into<String>, position: IVe
             Sex::Female
         };
 
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -352,7 +356,8 @@ pub fn spawn_fox(commands: &mut Commands, name: impl Into<String>, position: IVe
                 CurrentAction::none(),
                 cfg,
             ))
-            .id()
+            .id();
+        entity
     }
 }
 
@@ -370,7 +375,7 @@ pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IV
             Sex::Female
         };
 
-        commands
+        let entity = commands
             .spawn((
                 Creature {
                     name: name.into(),
@@ -392,7 +397,8 @@ pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IV
                 CurrentAction::none(),
                 cfg,
             ))
-            .id()
+            .id();
+        entity
     }
 }
 

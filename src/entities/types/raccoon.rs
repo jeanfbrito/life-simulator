@@ -7,9 +7,10 @@ use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types;
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, Age, MatingIntent, Pregnancy, ReproductionConfig,
-    ReproductionCooldown, Sex, WellFedStreak,
+    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
 use crate::entities::Mother;
@@ -185,11 +186,19 @@ pub fn raccoon_mate_matching_system(
             Option<&MatingIntent>,
             &ReproductionConfig,
         ),
-        With<Raccoon>,
+        (With<Raccoon>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
+    grid: Res<SpatialCellGrid>,
+    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system::<Raccoon, '🦝'>(&mut commands, &animals, tick.0);
+    mate_matching_system_with_children::<Raccoon, '🦝'>(
+        &mut commands,
+        &animals,
+        &grid,
+        &cells,
+        tick.0,
+    );
 }
 
 pub fn raccoon_birth_system(

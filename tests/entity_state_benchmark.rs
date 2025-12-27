@@ -9,6 +9,7 @@ use life_simulator::entities::{
     spawn_deer, spawn_rabbit, spawn_raccoon, BehaviorConfig, Energy, Health, Hunger, Thirst,
 };
 use life_simulator::entities::{TilePosition, MovementSpeed};
+use bevy::ecs::world::CommandQueue;
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::time::Instant;
@@ -68,29 +69,37 @@ pub struct ProximityQueryBenchmarkResults {
 /// Create a test world with specified number of entities
 fn setup_test_world(entity_count: usize) -> World {
     let mut world = World::new();
+    let mut queue = CommandQueue::default();
 
     // Spawn entities in a grid pattern
     let grid_size = (entity_count as f32).sqrt().ceil() as i32;
     let mut entity_index = 0;
 
-    for x in 0..grid_size {
-        for y in 0..grid_size {
-            if entity_index >= entity_count {
-                break;
+    {
+        let mut commands = Commands::new(&mut queue, &world);
+
+        for x in 0..grid_size {
+            for y in 0..grid_size {
+                if entity_index >= entity_count {
+                    break;
+                }
+
+                let pos = IVec2::new(x * 10, y * 10);
+
+                // Spawn different entity types
+                match entity_index % 3 {
+                    0 => spawn_rabbit(&mut commands, format!("Rabbit_{}", entity_index), pos),
+                    1 => spawn_deer(&mut commands, format!("Deer_{}", entity_index), pos),
+                    _ => spawn_raccoon(&mut commands, format!("Raccoon_{}", entity_index), pos),
+                };
+
+                entity_index += 1;
             }
-
-            let pos = IVec2::new(x * 10, y * 10);
-
-            // Spawn different entity types
-            match entity_index % 3 {
-                0 => spawn_rabbit(&mut world, pos.as_vec2()),
-                1 => spawn_deer(&mut world, pos.as_vec2()),
-                _ => spawn_raccoon(&mut world, pos.as_vec2()),
-            }
-
-            entity_index += 1;
         }
     }
+
+    // Apply all pending commands to actually spawn entities
+    queue.apply(&mut world);
 
     world
 }
@@ -405,7 +414,7 @@ fn benchmark_proximity_queries() {
 }
 
 fn run_proximity_query_benchmark(entity_count: usize) -> ProximityQueryBenchmarkResults {
-    let world = setup_test_world(entity_count);
+    let mut world = setup_test_world(entity_count);
 
     // Collect all entity positions
     let entity_positions: Vec<(Entity, IVec2)> = {

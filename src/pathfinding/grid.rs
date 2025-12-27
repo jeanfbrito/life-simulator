@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use std::{
     cmp::Ordering,
     collections::{BinaryHeap, HashMap, HashSet},
+    sync::Arc,
 };
 
 use crate::tilemap::terrain::TerrainType;
@@ -23,7 +24,7 @@ pub struct PathNode {
 }
 
 impl PathNode {
-    #[inline]
+    #[inline(always)]
     pub fn new(index: IVec2, g_cost: u32, dest: IVec2, cost_to_pass: u32) -> Self {
         PathNode {
             index,
@@ -34,7 +35,7 @@ impl PathNode {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn weight(&self) -> u32 {
         self.g_cost + self.h_cost // A* evaluation: f = g + h
     }
@@ -73,11 +74,13 @@ impl Path {
     }
 
     /// Get current target tile (where entity should move next tick)
+    #[inline(always)]
     pub fn current_target(&self) -> Option<IVec2> {
         self.waypoints.get(self.current_index).copied()
     }
 
     /// Advance to next waypoint (call this when entity moves)
+    #[inline(always)]
     pub fn advance(&mut self) {
         if self.current_index < self.waypoints.len() {
             self.current_index += 1;
@@ -85,16 +88,19 @@ impl Path {
     }
 
     /// Check if path is complete
+    #[inline(always)]
     pub fn is_complete(&self) -> bool {
         self.current_index >= self.waypoints.len()
     }
 
     /// Get remaining waypoints
+    #[inline(always)]
     pub fn remaining(&self) -> &[IVec2] {
         &self.waypoints[self.current_index..]
     }
 
     /// Get all waypoints
+    #[inline(always)]
     pub fn all_waypoints(&self) -> &[IVec2] {
         &self.waypoints
     }
@@ -104,9 +110,9 @@ impl Path {
 // PATHFINDING REQUEST & RESULT
 // ============================================================================
 
-/// Component: Entity wants to find a path
+/// Component: Entity wants to find a path (legacy direct pathfinding)
 #[derive(Component, Debug)]
-pub struct PathRequest {
+pub struct GridPathRequest {
     pub origin: IVec2,
     pub destination: IVec2,
     pub allow_diagonal: bool,
@@ -147,7 +153,9 @@ pub struct PathfindingGrid {
 #[derive(Resource)]
 pub struct PathCache {
     /// Cache storage: (origin, destination) -> (path, tick_cached)
-    pub cache: HashMap<(IVec2, IVec2), (Vec<IVec2>, u64)>,
+    /// Uses Arc<Vec<IVec2>> for cheap cloning (Phase 3: Clone Reduction)
+    /// Arc is thread-safe (Send + Sync) for Bevy's parallel systems
+    pub cache: HashMap<(IVec2, IVec2), (Arc<Vec<IVec2>>, u64)>,
 
     /// Maximum number of cached paths (prevents unbounded growth)
     max_entries: usize,
@@ -206,11 +214,13 @@ impl PathCache {
     }
 
     /// Try to get cached path if still valid (tracks metrics)
-    pub fn get(&mut self, origin: IVec2, dest: IVec2, current_tick: u64) -> Option<Vec<IVec2>> {
+    /// Returns Arc<Vec<IVec2>> for cheap cloning
+    pub fn get(&mut self, origin: IVec2, dest: IVec2, current_tick: u64) -> Option<Arc<Vec<IVec2>>> {
         let result = self.cache.get(&(origin, dest)).and_then(|(path, cached_tick)| {
             // Check if cache entry is still valid
             if current_tick - cached_tick <= self.cache_duration_ticks {
-                Some(path.clone())
+                // Arc::clone is cheap - only increments atomic reference count
+                Some(Arc::clone(path))
             } else {
                 None // Expired
             }
@@ -243,6 +253,7 @@ impl PathCache {
     }
 
     /// Store path in cache with LRU eviction
+    /// Wraps path in Arc for cheap cloning on retrieval
     pub fn insert(&mut self, origin: IVec2, dest: IVec2, path: Vec<IVec2>, current_tick: u64) {
         // LRU eviction if full
         if self.cache.len() >= self.max_entries {
@@ -259,7 +270,8 @@ impl PathCache {
             }
         }
 
-        self.cache.insert((origin, dest), (path, current_tick));
+        // Wrap path in Arc for cheap cloning
+        self.cache.insert((origin, dest), (Arc::new(path), current_tick));
     }
 
     /// Clear entire cache (call when terrain changes)
@@ -312,7 +324,9 @@ pub fn find_path_with_cache(
             destination,
             cached_waypoints.len()
         );
-        return Some(Path::new(cached_waypoints));
+        // Convert Arc<Vec<IVec2>> to Vec<IVec2> for Path::new
+        // This is a cheap clone since we're just dereferencing Arc and cloning the Vec
+        return Some(Path::new((*cached_waypoints).clone()));
     }
 
     // Cache miss - calculate path
@@ -592,7 +606,7 @@ pub fn pathfinding_cache_cleanup_system(
 /// System: Process pathfinding requests with caching (runs async, not synced to ticks)
 pub fn process_pathfinding_requests(
     mut commands: Commands,
-    requests: Query<(Entity, &PathRequest)>,
+    requests: Query<(Entity, &GridPathRequest)>,
     grid: Res<PathfindingGrid>,
     mut cache: ResMut<PathCache>,
     tick: Res<crate::simulation::tick::SimulationTick>,
@@ -629,7 +643,7 @@ pub fn process_pathfinding_requests(
         }
 
         // Remove request (processed)
-        commands.entity(entity).remove::<PathRequest>();
+        commands.entity(entity).remove::<GridPathRequest>();
     }
 }
 
@@ -762,7 +776,8 @@ mod tests {
 
         let retrieved = cache.get(origin, dest, 0);
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap(), path);
+        // Cache returns Arc<Vec>, so we need to dereference for comparison
+        assert_eq!(*retrieved.unwrap(), path);
     }
 
     #[test]

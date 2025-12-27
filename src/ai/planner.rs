@@ -151,7 +151,9 @@ pub fn plan_species_actions<M: Component>(
     {
         let needs_replanning = needs_replan.is_some();
 
-        if !needs_replanning && queue.has_action(entity) {
+        // CRITICAL: Only plan if entity has been marked for replanning by UltraThink or triggers
+        // This ensures UltraThink budget controls planning frequency
+        if !needs_replanning {
             continue;
         }
 

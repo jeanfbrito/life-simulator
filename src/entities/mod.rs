@@ -1,3 +1,4 @@
+pub mod active_action;
 pub mod auto_eat;
 pub mod cached_state;
 pub mod carcass;
@@ -7,8 +8,10 @@ pub mod entity_types;
 /// Entities module - manages creatures and their behaviors
 pub mod fear;
 pub mod movement;
+pub mod movement_component;
 pub mod registry;
 pub mod reproduction;
+pub mod spatial_cell;
 pub mod spatial_index;
 pub mod spatial_maintenance;
 pub mod spawn_config;
@@ -19,11 +22,19 @@ pub mod types;
 use bevy::prelude::*;
 
 pub use movement::{
-    get_position, is_moving, issue_move_order, stop_movement, MoveOrder, MovementSpeed,
+    execute_movement_component, get_position, is_moving, issue_move_order, stop_movement, MoveOrder, MovementSpeed,
     MovementState, TilePosition,
 };
 
+pub use movement_component::MovementComponent;
+
 pub use spatial_index::{EntityType as SpatialEntityType, SpatialEntityIndex};
+
+pub use spatial_cell::{
+    entities_in_radius_via_children, reparent_entities_to_cells, spawn_spatial_grid,
+    update_spatial_parent_on_movement, SpatialCell, SpatialCellGrid, SpatiallyParented,
+    CHUNK_SIZE,
+};
 
 // Wandering component REMOVED - use utility AI Wander action instead!
 
@@ -120,6 +131,7 @@ pub use types::raccoon::{
 pub use types::wolf::{plan_wolf_actions, wolf_birth_system, wolf_mate_matching_system};
 pub use types::{BehaviorConfig, SpeciesNeeds};
 
+pub use active_action::ActiveAction;
 pub use current_action::CurrentAction;
 
 pub use spawn_config::{
@@ -132,10 +144,19 @@ pub use spawn_config::{
 // ============================================================================
 
 /// Basic creature entity
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Creature {
     pub name: String,
     pub species: String,
+}
+
+impl Default for Creature {
+    fn default() -> Self {
+        Self {
+            name: "Unknown".to_string(),
+            species: "Unknown".to_string(),
+        }
+    }
 }
 
 /// Marker for different entity types
@@ -154,14 +175,16 @@ pub struct EntitiesPlugin;
 
 impl Plugin for EntitiesPlugin {
     fn build(&self, app: &mut App) {
+        use crate::simulation::SimulationSet;
+
         app
-            // Add spatial entity index resource and maintenance systems
-            .insert_resource(SpatialEntityIndex::new())
-            .insert_resource(spatial_maintenance::EntityPositionCache::new())
             // Add fear system plugin
             .add_plugins(FearPlugin)
             // Startup
-            .add_systems(Startup, entity_tracker::init_entity_tracker)
+            .add_systems(Startup, (
+                entity_tracker::init_entity_tracker,
+                spawn_spatial_grid,  // Phase 4.1: Spawn spatial grid hierarchy
+            ))
             // Non-tick systems (run every frame)
             .add_systems(
                 Update,
@@ -169,36 +192,89 @@ impl Plugin for EntitiesPlugin {
                     movement::initiate_pathfinding,
                     movement::initialize_movement_state,
                     entity_tracker::sync_entities_to_tracker, // Sync for web API
-                    // Spatial index maintenance (runs every frame)
-                    spatial_maintenance::maintain_spatial_entity_index_insertions,
-                    spatial_maintenance::maintain_spatial_entity_index_updates,
-                    spatial_maintenance::maintain_spatial_entity_index_removals,
+                    // Phase 4.2: Update spatial parent when entities move
+                    update_spatial_parent_on_movement,
                 ),
             )
-            // Tick systems (run when should_tick is true)
+            // === PLANNING PHASE ===
+            // All species planning systems run in parallel
             .add_systems(
                 Update,
                 (
-                    stats::tick_stats_system,        // Update entity stats
-                    movement::tick_movement_system,  // Movement execution
-                    auto_eat::auto_eat_system,       // Auto-eat when on grass
-                    update_age_and_wellfed_system,   // Age and WellFed
-                    tick_reproduction_timers_system, // Timers for repro
-                    rabbit_mate_matching_system,     // Pairing (rabbits)
-                    deer_mate_matching_system,       // Pairing (deer)
-                    raccoon_mate_matching_system,    // Pairing (raccoons)
-                    bear_mate_matching_system,       // Pairing (bears)
-                    fox_mate_matching_system,        // Pairing (foxes)
-                    wolf_mate_matching_system,       // Pairing (wolves)
-                    rabbit_birth_system,             // Rabbit births
-                    deer_birth_system,               // Deer births
-                    raccoon_birth_system,            // Raccoon births
-                    bear_birth_system,               // Bear births
-                    fox_birth_system,                // Fox births
-                    wolf_birth_system,               // Wolf births
-                    stats::death_system,             // Handle death
-                    tick_carcasses,                  // Decay carcasses
+                    plan_rabbit_actions,
+                    plan_deer_actions,
+                    plan_raccoon_actions,
+                    plan_bear_actions,
+                    plan_fox_actions,
+                    plan_wolf_actions,
                 )
+                    .in_set(SimulationSet::Planning)
+                    .run_if(should_run_tick_systems),
+            )
+            // === MOVEMENT PHASE ===
+            // Movement systems run in parallel
+            .add_systems(
+                Update,
+                (
+                    movement::tick_movement_system,       // Legacy movement
+                    movement::execute_movement_component, // Phase 3 movement
+                )
+                    .in_set(SimulationSet::Movement)
+                    .after(SimulationSet::ActionExecution)
+                    .run_if(should_run_tick_systems),
+            )
+            // === STATS PHASE ===
+            // Stats systems run in parallel
+            .add_systems(
+                Update,
+                (
+                    stats::tick_stats_system, // Hunger, thirst, energy decay
+                    auto_eat::auto_eat_system, // Auto-eat when on grass
+                )
+                    .in_set(SimulationSet::Stats)
+                    .after(SimulationSet::Movement)
+                    .run_if(should_run_tick_systems),
+            )
+            // === REPRODUCTION PHASE ===
+            // Reproduction systems run in parallel (can also run parallel with Stats)
+            .add_systems(
+                Update,
+                (
+                    // Age and timers
+                    update_age_and_wellfed_system,
+                    tick_reproduction_timers_system,
+                    // Mate matching (all species)
+                    rabbit_mate_matching_system,
+                    deer_mate_matching_system,
+                    raccoon_mate_matching_system,
+                    bear_mate_matching_system,
+                    fox_mate_matching_system,
+                    wolf_mate_matching_system,
+                    // Birth systems (all species)
+                    rabbit_birth_system,
+                    deer_birth_system,
+                    raccoon_birth_system,
+                    bear_birth_system,
+                    fox_birth_system,
+                    wolf_birth_system,
+                )
+                    .in_set(SimulationSet::Reproduction)
+                    .after(SimulationSet::Movement)
+                    .run_if(should_run_tick_systems),
+            )
+            // === CLEANUP PHASE ===
+            // Cleanup must run last
+            .add_systems(
+                Update,
+                (
+                    stats::death_system,
+                    tick_carcasses,
+                    // Phase 4.2: Budget-controlled reparenting (50 entities/tick)
+                    reparent_entities_to_cells,
+                )
+                    .in_set(SimulationSet::Cleanup)
+                    .after(SimulationSet::Stats)
+                    .after(SimulationSet::Reproduction)
                     .run_if(should_run_tick_systems),
             );
     }

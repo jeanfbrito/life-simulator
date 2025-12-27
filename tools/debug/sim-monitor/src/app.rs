@@ -139,7 +139,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api_client::Entity;
+    use crate::api_client::{Entity, Position};
 
     #[test]
     fn test_app_creation() {
@@ -155,9 +155,9 @@ mod tests {
 
         let entities = EntitiesResponse {
             entities: vec![
-                Entity { id: 1, species: "Rabbit".to_string(), x: 0.0, y: 0.0, health: Some(100.0) },
-                Entity { id: 2, species: "Rabbit".to_string(), x: 1.0, y: 1.0, health: Some(100.0) },
-                Entity { id: 3, species: "Fox".to_string(), x: 2.0, y: 2.0, health: Some(100.0) },
+                Entity { id: 1, species: "Rabbit".to_string(), position: Position { x: 0, y: 0 }, health: Some(100.0) },
+                Entity { id: 2, species: "Rabbit".to_string(), position: Position { x: 1, y: 1 }, health: Some(100.0) },
+                Entity { id: 3, species: "Fox".to_string(), position: Position { x: 2, y: 2 }, health: Some(100.0) },
             ],
         };
 
@@ -175,8 +175,8 @@ mod tests {
         // Initial state
         let entities1 = EntitiesResponse {
             entities: vec![
-                Entity { id: 1, species: "Rabbit".to_string(), x: 0.0, y: 0.0, health: Some(100.0) },
-                Entity { id: 2, species: "Rabbit".to_string(), x: 1.0, y: 1.0, health: Some(100.0) },
+                Entity { id: 1, species: "Rabbit".to_string(), position: Position { x: 0, y: 0 }, health: Some(100.0) },
+                Entity { id: 2, species: "Rabbit".to_string(), position: Position { x: 1, y: 1 }, health: Some(100.0) },
             ],
         };
         app.update_entity_counts(entities1);
@@ -184,7 +184,7 @@ mod tests {
         // Updated state - one rabbit died
         let entities2 = EntitiesResponse {
             entities: vec![
-                Entity { id: 1, species: "Rabbit".to_string(), x: 0.0, y: 0.0, health: Some(100.0) },
+                Entity { id: 1, species: "Rabbit".to_string(), position: Position { x: 0, y: 0 }, health: Some(100.0) },
             ],
         };
         app.update_entity_counts(entities2);
@@ -199,7 +199,7 @@ mod tests {
 
         let entities = EntitiesResponse {
             entities: vec![
-                Entity { id: 1, species: "Wolf".to_string(), x: 0.0, y: 0.0, health: Some(100.0) },
+                Entity { id: 1, species: "Wolf".to_string(), position: Position { x: 0, y: 0 }, health: Some(100.0) },
             ],
         };
         app.update_entity_counts(entities);
@@ -249,9 +249,9 @@ mod tests {
 
         let entities = EntitiesResponse {
             entities: vec![
-                Entity { id: 1, species: "Rabbit".to_string(), x: 0.0, y: 0.0, health: Some(100.0) },
-                Entity { id: 2, species: "Fox".to_string(), x: 1.0, y: 1.0, health: Some(100.0) },
-                Entity { id: 3, species: "Wolf".to_string(), x: 2.0, y: 2.0, health: Some(100.0) },
+                Entity { id: 1, species: "Rabbit".to_string(), position: Position { x: 0, y: 0 }, health: Some(100.0) },
+                Entity { id: 2, species: "Fox".to_string(), position: Position { x: 1, y: 1 }, health: Some(100.0) },
+                Entity { id: 3, species: "Wolf".to_string(), position: Position { x: 2, y: 2 }, health: Some(100.0) },
             ],
         };
         app.update_entity_counts(entities);

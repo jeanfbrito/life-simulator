@@ -35,14 +35,22 @@ mod config {
 // -----------------------------
 mod components {
     use bevy::prelude::*;
+    use crate::entities::Creature;  // For #[require] attribute
 
-    #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+    /// Phase 4: Required Components
+    /// Sex automatically requires Creature - compile-time guarantee.
+    #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+    #[require(crate::entities::Creature)]
     pub enum Sex {
+        #[default]
         Male,
         Female,
     }
 
-    #[derive(Component, Debug, Clone, Copy)]
+    /// Phase 4: Required Components
+    /// Age automatically requires Creature - compile-time guarantee.
+    #[derive(Component, Debug, Clone, Copy, Default)]
+    #[require(crate::entities::Creature)]
     pub struct Age {
         pub ticks_alive: u64,
         pub mature_at_ticks: u32,
@@ -53,7 +61,10 @@ mod components {
         }
     }
 
+    /// Phase 4: Required Components
+    /// ReproductionCooldown automatically requires Creature - compile-time guarantee.
     #[derive(Component, Debug, Clone, Copy)]
+    #[require(crate::entities::Creature)]
     pub struct ReproductionCooldown {
         pub remaining_ticks: u32,
     }
@@ -63,7 +74,11 @@ mod components {
         }
     }
 
+    /// Phase 4: Required Components
+    /// Pregnancy automatically requires Age and Sex - compile-time guarantee
+    /// that pregnant entities have age and sex attributes.
     #[derive(Component, Debug, Clone, Copy)]
+    #[require(Age, Sex)]
     pub struct Pregnancy {
         pub remaining_ticks: u32,
         pub litter_size: u8,
@@ -73,7 +88,10 @@ mod components {
     #[derive(Component, Debug, Clone, Copy)]
     pub struct Mother(pub Entity);
 
+    /// Phase 4: Required Components
+    /// WellFedStreak automatically requires Creature - compile-time guarantee.
     #[derive(Component, Debug, Clone, Copy)]
+    #[require(crate::entities::Creature)]
     pub struct WellFedStreak {
         pub ticks: u32,
     }
@@ -173,7 +191,7 @@ mod systems {
                 Option<&MatingIntent>,
                 &ReproductionConfig,
             ),
-            With<M>,
+            (With<M>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
         >,
         current_tick: u64,
     ) {
@@ -275,6 +293,179 @@ mod systems {
         }
     }
 
+    /// Optimized mate matching system using Bevy Children component queries
+    ///
+    /// Phase 4.3: Replaces HashMap-based spatial queries with hierarchical Parent/Child queries.
+    /// Maintains O(M*k) performance where k = entities in nearby chunks.
+    ///
+    /// This is the preferred implementation for Phase 4.3+.
+    ///
+    /// Change Detection: Only processes entities that have moved (Changed<TilePosition>)
+    /// or changed reproductive state (Changed<ReproductiveState> via Age, ReproductionCooldown, etc.)
+    pub fn mate_matching_system_with_children<M: Component, const EMOJI: char>(
+        commands: &mut Commands,
+        animals: &Query<
+            (
+                Entity,
+                &TilePosition,
+                &Age,
+                &ReproductionCooldown,
+                &Energy,
+                &Health,
+                &WellFedStreak,
+                Option<&Pregnancy>,
+                Option<&Sex>,
+                Option<&MatingIntent>,
+                &ReproductionConfig,
+            ),
+            (With<M>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        >,
+        grid: &crate::entities::SpatialCellGrid,
+        cells: &Query<&bevy::prelude::Children, With<crate::entities::SpatialCell>>,
+        current_tick: u64,
+    ) {
+        use std::collections::HashSet;
+
+        let mut sampled_interval: Option<u64> = None;
+        let mut females: Vec<(
+            Entity,
+            IVec2,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            &ReproductionConfig,
+        )> = Vec::new();
+
+        // First pass: collect eligible females only
+        for (entity, pos, age, cd, en, hp, wf, preg_opt, sex_opt, intent_opt, cfg) in animals.iter()
+        {
+            if sampled_interval.is_none() {
+                sampled_interval = Some(cfg.matching_interval_ticks as u64);
+                if current_tick % cfg.matching_interval_ticks as u64 != 0 {
+                    return;
+                }
+            }
+
+            let Some(sex) = sex_opt.copied() else {
+                continue;
+            };
+
+            // Only process females in this optimized version
+            if sex != Sex::Female {
+                continue;
+            }
+
+            if preg_opt.is_some() || intent_opt.is_some() {
+                continue;
+            }
+            if !is_eligible(age, cd, en, hp, wf, cfg) {
+                continue;
+            }
+
+            females.push((entity, pos.tile, age, cd, en, hp, wf, cfg));
+        }
+
+        if females.is_empty() {
+            return;
+        }
+
+        let mut used_males: HashSet<Entity> = HashSet::new();
+
+        // For each female, use Children-based spatial query to find nearby males
+        for (female_e, fpos, _fa, _fcd, _fen, _fhp, _fwf, fcfg) in females.into_iter() {
+            // O(k) spatial query using Children component
+            let nearby_entities = crate::entities::entities_in_radius_via_children(
+                grid,
+                cells,
+                fpos,
+                fcfg.mating_search_radius as f32,
+            );
+
+            let mut best: Option<(Entity, i32)> = None;
+            let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
+
+            // Check nearby entities for compatible males
+            for nearby_entity in nearby_entities {
+                if used_males.contains(&nearby_entity) {
+                    continue;
+                }
+
+                // Verify the entity is in our query and meets criteria
+                if let Ok((
+                    male_e,
+                    male_pos,
+                    male_age,
+                    male_cd,
+                    male_en,
+                    male_hp,
+                    male_wf,
+                    male_preg_opt,
+                    male_sex_opt,
+                    male_intent_opt,
+                    mcfg,
+                )) = animals.get(nearby_entity)
+                {
+                    let Some(male_sex) = male_sex_opt.copied() else {
+                        continue;
+                    };
+
+                    // Must be male and not already mating
+                    if male_sex != Sex::Male {
+                        continue;
+                    }
+
+                    if male_preg_opt.is_some() || male_intent_opt.is_some() {
+                        continue;
+                    }
+
+                    if !is_eligible(male_age, male_cd, male_en, male_hp, male_wf, mcfg) {
+                        continue;
+                    }
+
+                    // Check distance is within radius
+                    let d = fpos - male_pos.tile;
+                    let d2 = d.x * d.x + d.y * d.y;
+
+                    if d2 <= radius2 && best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
+                        best = Some((male_e, d2));
+                    }
+                }
+            }
+
+            let Some((male_e, _)) = best else {
+                continue;
+            };
+
+            used_males.insert(male_e);
+
+            let meet = fpos;
+            commands.entity(female_e).insert(MatingIntent {
+                partner: male_e,
+                meeting_tile: meet,
+                duration_ticks: fcfg.mating_duration_ticks,
+            });
+
+            // Get male's config for mating duration
+            if let Ok((_, _, _, _, _, _, _, _, _, _, mcfg)) = animals.get(male_e) {
+                commands.entity(male_e).insert(MatingIntent {
+                    partner: female_e,
+                    meeting_tile: meet,
+                    duration_ticks: mcfg.mating_duration_ticks,
+                });
+            }
+
+            info!(
+                "{emoji}💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
+                female_e,
+                male_e,
+                meet,
+                emoji = EMOJI,
+            );
+        }
+    }
+
     // Shared birth helper used by species modules
     pub fn birth_common<E: Component>(
         commands: &mut Commands,
@@ -330,8 +521,8 @@ pub use components::{
 };
 pub use config::ReproductionConfig;
 pub use systems::{
-    birth_common, mate_matching_system, tick_reproduction_timers_system,
-    update_age_and_wellfed_system,
+    birth_common, mate_matching_system, mate_matching_system_with_children,
+    tick_reproduction_timers_system, update_age_and_wellfed_system,
 };
 
 // -----------------------------

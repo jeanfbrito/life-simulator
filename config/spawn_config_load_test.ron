@@ -1,0 +1,110 @@
+(
+    spawn_groups: [
+        (
+            species: "Rabbit",
+            count: 150,
+            names: [],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐇 Spawning 150 rabbits for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 150 rabbits",
+            )),
+        ),
+        (
+            species: "Deer",
+            count: 100,
+            names: [],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦌 Spawning 100 deer for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 100 deer",
+            )),
+        ),
+        (
+            species: "Raccoon",
+            count: 80,
+            names: [],
+            spawn_area: (
+                center: (10, 10),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦝 Spawning 80 raccoons for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 80 raccoons",
+            )),
+        ),
+        (
+            species: "Fox",
+            count: 40,
+            names: [],
+            spawn_area: (
+                center: (-10, -10),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦊 Spawning 40 foxes for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 40 foxes",
+            )),
+        ),
+        (
+            species: "Wolf",
+            count: 20,
+            names: [],
+            spawn_area: (
+                center: (20, -20),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐺 Spawning 20 wolves for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 20 wolves",
+            )),
+        ),
+        (
+            species: "Bear",
+            count: 10,
+            names: [],
+            spawn_area: (
+                center: (-20, 20),
+                search_radius: 40,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🐻 Spawning 10 bears for load testing...",
+                success_template: "",
+                completion_message: "✅ Spawned 10 bears",
+            )),
+        ),
+    ],
+    settings: (
+        verbose_logging: false,
+        enable_spawning: true,
+        completion_message: "🎯 Load Test: 400 total entities spawned\n📊 Mix: 150 rabbits, 100 deer, 80 raccoons, 40 foxes, 20 wolves, 10 bears",
+        post_spawn_messages: [
+            "🔥 Running performance load test with 400 entities",
+            "⏱️  Measuring TPS (ticks per second) under load",
+            "🎯 Target: 10 TPS at 500 entities",
+        ],
+    ),
+)

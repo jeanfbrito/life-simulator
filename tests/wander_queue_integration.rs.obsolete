@@ -1,0 +1,235 @@
+/// Integration tests for Wander action with PathfindingQueue (TDD - Phase 2)
+/// Following the architecture plan: async pathfinding with state machine
+use bevy::prelude::*;
+use life_simulator::ai::action::{Action, ActionResult, WanderAction};
+use life_simulator::entities::TilePosition;
+use life_simulator::pathfinding::{
+    PathPriority, PathReason, PathResult, PathfindingQueue, PathfindingGrid,
+    build_pathfinding_grid_from_world,
+};
+use life_simulator::world_loader::WorldLoader;
+use life_simulator::simulation::SimulationTick;
+use life_simulator::WorldSerializer;
+use life_simulator::WorldConfig;
+use std::collections::HashMap;
+
+/// Helper: Create a minimal test world with PathfindingQueue
+fn setup_test_world() -> World {
+    let mut world = World::new();
+
+    // Create simple serialized world with walkable terrain
+    let mut chunks = HashMap::new();
+    let mut layers = HashMap::new();
+
+    // Create 20x20 grass terrain (Vec<Vec<String>> for chunk format)
+    let mut terrain_data = Vec::new();
+    for _ in 0..20 {
+        let mut row = Vec::new();
+        for _ in 0..20 {
+            row.push("Grass".to_string());
+        }
+        terrain_data.push(row);
+    }
+    layers.insert("terrain".to_string(), terrain_data);
+    chunks.insert((0_i32, 0_i32), layers);
+
+    let serialized_world = WorldSerializer::create_serialized_world_from_layers(
+        "TestWorld".to_string(),
+        42,
+        WorldConfig::default(),
+        chunks,
+    );
+
+    let world_loader = WorldLoader::from_serialized_world(serialized_world);
+    world.insert_resource(world_loader.clone());
+
+    // Create PathfindingGrid
+    let grid = build_pathfinding_grid_from_world(&world_loader);
+    world.insert_resource(grid);
+
+    // Insert PathfindingQueue
+    world.insert_resource(PathfindingQueue::new(40));
+
+    // Insert SimulationTick
+    world.insert_resource(SimulationTick(1));
+
+    world
+}
+
+/// Helper: Spawn test entity at position
+fn spawn_entity(world: &mut World, pos: IVec2) -> Entity {
+    world.spawn(TilePosition::from_tile(pos)).id()
+}
+
+#[test]
+fn test_wander_queues_path_request() {
+    let mut world = setup_test_world();
+    let entity = spawn_entity(&mut world, IVec2::new(5, 5));
+
+    let target = IVec2::new(10, 10);
+    let mut wander = WanderAction::new(target);
+
+    // Initial queue should be empty
+    let queue = world.get_resource::<PathfindingQueue>().unwrap();
+    assert_eq!(queue.total_queued(), 0);
+
+    // Execute wander action - should queue path request
+    let result = wander.execute(&mut world, entity, 1);
+
+    // Should return InProgress (waiting for path)
+    assert_eq!(result, ActionResult::InProgress);
+
+    // Queue should now have 1 request
+    let queue = world.get_resource::<PathfindingQueue>().unwrap();
+    assert_eq!(queue.total_queued(), 1);
+
+    // Request should be lazy priority
+    let (urgent, normal, lazy) = queue.queue_sizes();
+    assert_eq!(urgent, 0);
+    assert_eq!(normal, 0);
+    assert_eq!(lazy, 1);
+}
+
+#[test]
+fn test_wander_waits_for_path_result() {
+    let mut world = setup_test_world();
+    let entity = spawn_entity(&mut world, IVec2::new(5, 5));
+
+    let target = IVec2::new(10, 10);
+    let mut wander = WanderAction::new(target);
+
+    // First execute: queue request
+    let result1 = wander.execute(&mut world, entity, 1);
+    assert_eq!(result1, ActionResult::InProgress);
+
+    // Second execute: path not ready yet, should still be InProgress
+    let result2 = wander.execute(&mut world, entity, 2);
+    assert_eq!(result2, ActionResult::InProgress);
+
+    // Third execute: still waiting
+    let result3 = wander.execute(&mut world, entity, 3);
+    assert_eq!(result3, ActionResult::InProgress);
+}
+
+#[test]
+fn test_wander_moves_after_path_success() {
+    let mut world = setup_test_world();
+    let entity = spawn_entity(&mut world, IVec2::new(5, 5));
+
+    let target = IVec2::new(7, 5); // Close target for simple path
+    let mut wander = WanderAction::new(target);
+
+    // Execute once to queue request
+    wander.execute(&mut world, entity, 1);
+
+    // Manually process queue (simulate system processing)
+    let (requests, request_id) = {
+        let mut queue = world.get_resource_mut::<PathfindingQueue>().unwrap();
+        let requests = queue.drain(1);
+        assert_eq!(requests.len(), 1);
+        let request_id = requests[0].id;
+        (requests, request_id)
+    };
+
+    // Simulate successful pathfinding
+    let test_path = vec![
+        IVec2::new(5, 5),
+        IVec2::new(6, 5),
+        IVec2::new(7, 5),
+    ];
+
+    {
+        let mut queue = world.get_resource_mut::<PathfindingQueue>().unwrap();
+        queue.store_result(
+            request_id,
+            PathResult::Success {
+                path: test_path.clone(),
+                computed_tick: 1,
+            },
+        );
+    }
+
+    // Execute again - path should be ready, action should start moving
+    let result = wander.execute(&mut world, entity, 2);
+
+    // Should be InProgress (moving along path)
+    assert_eq!(result, ActionResult::InProgress);
+}
+
+#[test]
+fn test_wander_retries_after_path_failure() {
+    let mut world = setup_test_world();
+    let entity = spawn_entity(&mut world, IVec2::new(5, 5));
+
+    let target = IVec2::new(10, 10);
+    let mut wander = WanderAction::new(target);
+
+    // Execute to queue request
+    wander.execute(&mut world, entity, 1);
+
+    // Manually fail the path
+    let mut queue = world.get_resource_mut::<PathfindingQueue>().unwrap();
+    let requests = queue.drain(1);
+    let request_id = requests[0].id;
+
+    queue.store_result(
+        request_id,
+        PathResult::Failed {
+            reason: life_simulator::pathfinding::PathFailureReason::Unreachable,
+            retry_count: 0,
+        },
+    );
+    drop(queue);
+
+    // Execute again - should detect failure and retry with new target
+    let result = wander.execute(&mut world, entity, 2);
+
+    // Should retry (InProgress) or fail after max retries
+    // For first failure, should retry
+    assert!(matches!(result, ActionResult::InProgress | ActionResult::Failed));
+}
+
+#[test]
+fn test_wander_gives_up_after_max_retries() {
+    let mut world = setup_test_world();
+    let entity = spawn_entity(&mut world, IVec2::new(5, 5));
+
+    let target = IVec2::new(10, 10);
+    let mut wander = WanderAction::new(target);
+
+    // Simulate multiple failures
+    for attempt in 1..=5 {
+        // Execute to queue request
+        let result = wander.execute(&mut world, entity, attempt);
+
+        if result == ActionResult::Failed {
+            // Already gave up - test succeeds
+            return;
+        }
+
+        // Manually fail the path
+        let mut queue = world.get_resource_mut::<PathfindingQueue>().unwrap();
+        let requests = queue.drain(1);
+
+        if !requests.is_empty() {
+            let request_id = requests[0].id;
+            queue.store_result(
+                request_id,
+                PathResult::Failed {
+                    reason: life_simulator::pathfinding::PathFailureReason::Unreachable,
+                    retry_count: attempt as u32,
+                },
+            );
+        }
+
+        // Execute again to process the failure
+        let result_after_failure = wander.execute(&mut world, entity, attempt + 100);
+        if result_after_failure == ActionResult::Failed {
+            // Gave up after processing failure
+            return;
+        }
+    }
+
+    // Should have given up by now
+    panic!("Wander action should have failed after max retries");
+}

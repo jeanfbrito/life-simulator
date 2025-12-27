@@ -7,9 +7,10 @@ use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types::{Bear, Deer};
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, Age, MatingIntent, Mother, Pregnancy, ReproductionConfig,
-    ReproductionCooldown, Sex, WellFedStreak,
+    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
@@ -172,6 +173,7 @@ pub fn plan_bear_actions(
 }
 
 /// Bear mate-matching uses the generic reproduction helper.
+/// Change detection: Only processes bears that moved or changed reproductive state
 pub fn bear_mate_matching_system(
     mut commands: Commands,
     animals: Query<
@@ -188,11 +190,19 @@ pub fn bear_mate_matching_system(
             Option<&MatingIntent>,
             &ReproductionConfig,
         ),
-        With<Bear>,
+        (With<Bear>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
+    grid: Res<SpatialCellGrid>,
+    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system::<Bear, '🐻'>(&mut commands, &animals, tick.0);
+    mate_matching_system_with_children::<Bear, '🐻'>(
+        &mut commands,
+        &animals,
+        &grid,
+        &cells,
+        tick.0,
+    );
 }
 
 /// Bear birth system wrapper.

@@ -1,9 +1,29 @@
 /// Spatial index maintenance system for keeping SpatialEntityIndex in sync with ECS
 ///
 /// This module provides systems to maintain the SpatialEntityIndex by tracking:
-/// - New entities being spawned
-/// - Entities moving between locations
-/// - Entities being despawned
+/// - New entities being spawned (using Added<TilePosition> filter)
+/// - Entities moving between locations (using Changed<TilePosition> filter)
+/// - Entities being despawned (periodic dead entity cleanup)
+///
+/// # Change Detection Patterns
+///
+/// All systems use Bevy's change detection to only process entities when necessary:
+///
+/// 1. **Insertions** (maintain_spatial_entity_index_insertions):
+///    - Uses `Added<TilePosition>` filter
+///    - Only processes entities when TilePosition component is first added
+///    - Prevents duplicate insertions for existing entities
+///
+/// 2. **Updates** (maintain_spatial_entity_index_updates):
+///    - Uses `Changed<TilePosition>` filter
+///    - Only processes entities when position actually changes
+///    - Combined with EntityPositionCache for old position tracking
+///    - Prevents redundant updates when position doesn't change
+///
+/// 3. **Removals** (maintain_spatial_entity_index_removals):
+///    - Queries all entities to detect dead entities (not in world)
+///    - Removes them from index and position cache
+///    - Should be paired with budget control or run periodically to prevent growth
 ///
 /// The spatial index must stay synchronized for:
 /// - O(k) proximity queries used by fear system, mate finding, etc.
@@ -14,7 +34,7 @@ use bevy::prelude::*;
 use crate::entities::{
     spatial_index::{EntityType, SpatialEntityIndex},
     TilePosition,
-    entity_types::{Bear, Fox, Wolf, Raccoon},
+    entity_types::{Bear, Deer, Fox, Rabbit, Raccoon, Wolf},
 };
 use std::collections::HashMap;
 
@@ -84,11 +104,24 @@ pub fn maintain_spatial_entity_index_insertions(
     mut spatial_index: ResMut<SpatialEntityIndex>,
     mut position_cache: ResMut<EntityPositionCache>,
     new_entities: Query<(Entity, &TilePosition), Added<TilePosition>>,
-    world: &World,
+    // Specific queries for entity type classification (to avoid &World conflict)
+    predators: Query<(), Or<(With<Fox>, With<Wolf>)>>,
+    herbivores: Query<(), Or<(With<Rabbit>, With<Deer>)>>,
+    omnivores: Query<(), Or<(With<Bear>, With<Raccoon>)>>,
 ) {
     for (entity, tile_pos) in new_entities.iter() {
         let pos = tile_pos.tile;
-        let entity_type = classify_entity_type(entity, world);
+
+        // Classify entity type using queries instead of &World
+        let entity_type = if predators.contains(entity) {
+            EntityType::Predator
+        } else if herbivores.contains(entity) {
+            EntityType::Herbivore
+        } else if omnivores.contains(entity) {
+            EntityType::Omnivore
+        } else {
+            EntityType::Predator // default
+        };
 
         // Insert into spatial index
         spatial_index.insert(entity, pos, entity_type);
@@ -108,11 +141,24 @@ pub fn maintain_spatial_entity_index_updates(
     mut spatial_index: ResMut<SpatialEntityIndex>,
     mut position_cache: ResMut<EntityPositionCache>,
     moved_entities: Query<(Entity, &TilePosition), Changed<TilePosition>>,
-    world: &World,
+    // Specific queries for entity type classification (to avoid &World conflict)
+    predators: Query<(), Or<(With<Fox>, With<Wolf>)>>,
+    herbivores: Query<(), Or<(With<Rabbit>, With<Deer>)>>,
+    omnivores: Query<(), Or<(With<Bear>, With<Raccoon>)>>,
 ) {
     for (entity, tile_pos) in moved_entities.iter() {
         let new_pos = tile_pos.tile;
-        let entity_type = classify_entity_type(entity, world);
+
+        // Classify entity type using queries instead of &World
+        let entity_type = if predators.contains(entity) {
+            EntityType::Predator
+        } else if herbivores.contains(entity) {
+            EntityType::Herbivore
+        } else if omnivores.contains(entity) {
+            EntityType::Omnivore
+        } else {
+            EntityType::Predator // default
+        };
 
         // Get previous position from cache
         if let Some((old_pos, _)) = position_cache.get_position(entity) {

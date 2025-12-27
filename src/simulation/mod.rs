@@ -3,17 +3,21 @@
 use bevy::prelude::*;
 
 pub mod profiler;
+pub mod system_sets;
 pub mod tick;
 
 // Re-exports
 pub use tick::{
-    every_n_ticks, increment_tick_counter, log_tick_metrics, SimulationSpeed, SimulationState,
-    SimulationTick, TickAccumulator, TickMetrics,
+    every_n_ticks, increment_tick_counter, log_realtime_performance, log_tick_metrics,
+    RealtimePerformanceTimer, SimulationSpeed, SimulationState, SimulationTick, TickAccumulator,
+    TickMetrics,
 };
 
 pub use profiler::{
     end_timing_resource, start_timing_resource, ScopedTimer, TickProfiler, TickProfilerPlugin,
 };
+
+pub use system_sets::SimulationSet;
 
 /// Base tick rate: 10 ticks per second (100ms per tick)
 /// This is a good balance between responsiveness and performance
@@ -34,6 +38,7 @@ impl Plugin for SimulationPlugin {
             .insert_resource(SimulationState { should_tick: false })
             .insert_resource(TickMetrics::default())
             .insert_resource(TickAccumulator::default())
+            .insert_resource(RealtimePerformanceTimer::default())
             // Core tick systems run in Update schedule
             .add_systems(
                 Update,
@@ -42,6 +47,7 @@ impl Plugin for SimulationPlugin {
                     accumulate_ticks.before(run_simulation_ticks),
                     run_simulation_ticks,
                     handle_speed_controls,
+                    log_realtime_performance, // Runs every frame, checks timer internally
                 ),
             )
             .add_plugins(TickProfilerPlugin)

@@ -170,21 +170,32 @@ pub fn sync_entities_to_tracker(
         Option<&ReproductionConfig>,
     )>,
 ) {
+    // Verify function is called
+    static mut CALL_COUNT: u64 = 0;
+    unsafe {
+        CALL_COUNT += 1;
+        if CALL_COUNT <= 3 || CALL_COUNT % 600 == 0 {
+            eprintln!("🔍 ENTITY_TRACKER: sync_entities_to_tracker() call #{}", CALL_COUNT);
+        }
+    }
+
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {
-            // Clear and rebuild (simple approach)
-            tracker.entities.clear();
-            
-            // DIAGNOSTIC: Log sync operation
-            static mut LAST_SYNC_LOG: u64 = 0;
+            // Track which entities we've seen in this sync
+            use std::collections::HashSet;
+            let mut seen_entities = HashSet::new();
+
+            // Periodic logging to verify sync is running
+            static mut SYNC_COUNT: u64 = 0;
             unsafe {
-                let current_tick = Instant::now().elapsed().as_secs();
-                if current_tick - LAST_SYNC_LOG >= 5 {
-                    eprintln!("🔍 ENTITY_TRACKER: Syncing entities - clearing tracker");
-                    LAST_SYNC_LOG = current_tick;
+                SYNC_COUNT += 1;
+                if SYNC_COUNT == 1 || SYNC_COUNT % 600 == 0 {
+                    eprintln!("🔍 ENTITY_TRACKER: Sync #{} - tracking {} entities",
+                        SYNC_COUNT, tracker.entities.len());
                 }
             }
 
+            // Update existing entities and add new ones
             for (
                 entity,
                 creature,
@@ -202,6 +213,8 @@ pub fn sync_entities_to_tracker(
                 config,
             ) in query.iter()
             {
+                let entity_id = entity.index();
+                seen_entities.insert(entity_id);
                 let sex_str = sex.map(|s| match s {
                     Sex::Male => "male".to_string(),
                     Sex::Female => "female".to_string(),
@@ -276,17 +289,25 @@ pub fn sync_entities_to_tracker(
                     reproduction_cooldown_ticks,
                     ticks_to_adult,
                 };
-                tracker.update(entity.index(), data);
+                tracker.update(entity_id, data);
             }
-            
-            // DIAGNOSTIC: Log sync results
-            static mut LAST_SYNC_RESULT_LOG: u64 = 0;
-            unsafe {
-                let current_tick = Instant::now().elapsed().as_secs();
-                if current_tick - LAST_SYNC_RESULT_LOG >= 5 {
-                    eprintln!("🔍 ENTITY_TRACKER: Sync complete - {} entities tracked", tracker.entities.len());
-                    LAST_SYNC_RESULT_LOG = current_tick;
-                }
+
+            // Remove entities that no longer exist in the world
+            let to_remove: Vec<u32> = tracker
+                .entities
+                .keys()
+                .filter(|id| !seen_entities.contains(id))
+                .copied()
+                .collect();
+
+            for entity_id in &to_remove {
+                tracker.remove(*entity_id);
+            }
+
+            // Optional logging for debugging (can be enabled with environment variable)
+            if std::env::var("DEBUG_ENTITY_TRACKER").is_ok() {
+                eprintln!("🔍 ENTITY_TRACKER: Sync complete - {} entities tracked, {} removed",
+                    tracker.entities.len(), to_remove.len());
             }
         }
     }

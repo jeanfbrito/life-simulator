@@ -7,9 +7,10 @@ use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::entities::entity_types::{Fox, Rabbit};
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, Age, MatingIntent, Mother, Pregnancy, ReproductionConfig,
-    ReproductionCooldown, Sex, WellFedStreak,
+    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
@@ -172,11 +173,19 @@ pub fn fox_mate_matching_system(
             Option<&MatingIntent>,
             &ReproductionConfig,
         ),
-        With<Fox>,
+        (With<Fox>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
+    grid: Res<SpatialCellGrid>,
+    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system::<Fox, '🦊'>(&mut commands, &animals, tick.0);
+    mate_matching_system_with_children::<Fox, '🦊'>(
+        &mut commands,
+        &animals,
+        &grid,
+        &cells,
+        tick.0,
+    );
 }
 
 pub fn fox_birth_system(

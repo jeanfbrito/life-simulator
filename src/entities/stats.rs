@@ -40,6 +40,7 @@ impl Stat {
     }
 
     /// Get normalized value (0.0 = min, 1.0 = max)
+    #[inline(always)]
     pub fn normalized(&self) -> f32 {
         if self.max == self.min {
             1.0
@@ -50,6 +51,7 @@ impl Stat {
 
     /// Get inverted normalized value (1.0 = min, 0.0 = max)
     /// Useful for needs like hunger where higher = worse
+    #[inline(always)]
     pub fn normalized_inverted(&self) -> f32 {
         1.0 - self.normalized()
     }
@@ -70,26 +72,31 @@ impl Stat {
     }
 
     /// Check if stat is at or below critical threshold (10%)
+    #[inline(always)]
     pub fn is_critical(&self) -> bool {
         self.normalized() <= 0.1
     }
 
     /// Check if stat is below low threshold (30%)
+    #[inline(always)]
     pub fn is_low(&self) -> bool {
         self.normalized() <= 0.3
     }
 
     /// Check if stat is above high threshold (70%)
+    #[inline(always)]
     pub fn is_high(&self) -> bool {
         self.normalized() >= 0.7
     }
 
     /// Check if stat is full
+    #[inline(always)]
     pub fn is_full(&self) -> bool {
         self.current >= self.max
     }
 
     /// Check if stat is empty
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.current <= self.min
     }
@@ -105,7 +112,12 @@ impl Stat {
 // ============================================================================
 
 /// Hunger stat - increases over time, needs food
+///
+/// Phase 4: Required Components
+/// Hunger automatically requires Creature - compile-time guarantee
+/// that any entity with hunger is a creature.
 #[derive(Component, Debug, Clone)]
+#[require(crate::entities::Creature)]
 pub struct Hunger(pub Stat);
 
 impl Hunger {
@@ -116,13 +128,18 @@ impl Hunger {
     }
 
     /// Get hunger urgency for utility AI (0.0 = not hungry, 1.0 = starving)
+    #[inline(always)]
     pub fn urgency(&self) -> f32 {
         self.0.normalized()
     }
 }
 
 /// Thirst stat - increases faster than hunger
+///
+/// Phase 4: Required Components
+/// Thirst automatically requires Creature - compile-time guarantee.
 #[derive(Component, Debug, Clone)]
+#[require(crate::entities::Creature)]
 pub struct Thirst(pub Stat);
 
 impl Thirst {
@@ -133,13 +150,18 @@ impl Thirst {
     }
 
     /// Get thirst urgency for utility AI
+    #[inline(always)]
     pub fn urgency(&self) -> f32 {
         self.0.normalized()
     }
 }
 
 /// Energy stat - depletes during activity, regenerates during rest
+///
+/// Phase 4: Required Components
+/// Energy automatically requires Creature - compile-time guarantee.
 #[derive(Component, Debug, Clone)]
+#[require(crate::entities::Creature)]
 pub struct Energy(pub Stat);
 
 impl Energy {
@@ -150,6 +172,7 @@ impl Energy {
     }
 
     /// Get tiredness urgency for utility AI (0.0 = full energy, 1.0 = exhausted)
+    #[inline(always)]
     pub fn urgency(&self) -> f32 {
         self.0.normalized_inverted()
     }
@@ -166,7 +189,11 @@ impl Energy {
 }
 
 /// Health stat - damaged by hazards, regenerates slowly
+///
+/// Phase 4: Required Components
+/// Health automatically requires Creature - compile-time guarantee.
 #[derive(Component, Debug, Clone)]
+#[require(crate::entities::Creature)]
 pub struct Health(pub Stat);
 
 impl Health {
@@ -176,11 +203,13 @@ impl Health {
     }
 
     /// Get health urgency for utility AI (0.0 = healthy, 1.0 = dying)
+    #[inline(always)]
     pub fn urgency(&self) -> f32 {
         self.0.normalized_inverted()
     }
 
     /// Check if entity is dead
+    #[inline(always)]
     pub fn is_dead(&self) -> bool {
         self.0.is_empty()
     }
@@ -253,6 +282,7 @@ impl Default for EntityStatsBundle {
 
 /// Update all stats by their tick rates
 /// MUST run in FixedUpdate schedule (tick-synced)
+/// Only processes entities with changed stats (using Changed<T> filters)
 pub fn tick_stats_system(
     mut query: Query<(
         Entity,
@@ -260,7 +290,7 @@ pub fn tick_stats_system(
         Option<&mut Thirst>,
         Option<&mut Energy>,
         Option<&mut Health>,
-    )>,
+    ), Or<(Changed<Hunger>, Changed<Thirst>, Changed<Energy>, Changed<Health>)>>,
     tick: Res<crate::simulation::SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {
@@ -325,8 +355,9 @@ pub fn tick_stats_system(
 
 /// Apply progressive damage from starvation and dehydration
 /// MUST run in FixedUpdate schedule (tick-synced)
+/// Only processes entities with changed hunger, thirst, or health
 pub fn need_damage_system(
-    mut query: Query<(Entity, &mut Health, &Hunger, &Thirst)>,
+    mut query: Query<(Entity, &mut Health, &Hunger, &Thirst), Or<(Changed<Hunger>, Changed<Thirst>, Changed<Health>)>>,
     tick: Res<crate::simulation::SimulationTick>,
 ) {
     for (entity, mut health, hunger, thirst) in query.iter_mut() {

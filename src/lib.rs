@@ -3,6 +3,7 @@ pub mod cached_world;
 pub mod debug;
 pub mod entities;
 pub mod errors;
+pub mod events;
 pub mod pathfinding;
 pub mod resources;
 pub mod serialization;

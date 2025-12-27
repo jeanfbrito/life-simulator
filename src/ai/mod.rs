@@ -18,6 +18,7 @@ pub mod queue;
 pub mod replan_queue;
 pub mod test_collectable_pipeline;
 pub mod trigger_emitters;
+pub mod ultrathink;
 
 pub use action::{
     create_action, Action, ActionRequest, ActionResult, ActionType, DrinkWaterAction, GrazeAction,
@@ -36,9 +37,10 @@ pub use debug_collectables::CollectableDebugPlugin;
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
-pub use queue::{ActionQueue, QueuedAction};
+pub use queue::{ActionQueue, QueuedAction, execute_active_actions_system};
 pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
 pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
+pub use ultrathink::{ThinkQueue, ThinkRequest, ThinkReason, ThinkPriority, UltraThinkPlugin};
 
 use bevy::prelude::*;
 
@@ -47,6 +49,8 @@ pub struct TQUAIPlugin;
 
 impl Plugin for TQUAIPlugin {
     fn build(&self, app: &mut App) {
+        use crate::simulation::SimulationSet;
+
         app
             // Resources
             .init_resource::<ActionQueue>()
@@ -54,8 +58,23 @@ impl Plugin for TQUAIPlugin {
             // Plugins
             .add_plugins(TriggerEmittersPlugin)
             .add_plugins(EventDrivenPlannerPlugin)
-            // Tick-synced systems (run on simulation ticks)
-            .add_systems(FixedUpdate, (execute_queued_actions,).run_if(should_tick));
+            .add_plugins(UltraThinkPlugin::default())
+            // === ACTION EXECUTION PHASE ===
+            // Tick-synced action execution (must run after Planning, before Movement)
+            .add_systems(
+                Update,
+                execute_active_actions_system
+                    .in_set(SimulationSet::ActionExecution)
+                    .before(execute_queued_actions)
+                    .run_if(should_tick),
+            )
+            .add_systems(
+                Update,
+                execute_queued_actions
+                    .in_set(SimulationSet::ActionExecution)
+                    .after(SimulationSet::Planning)
+                    .run_if(should_tick),
+            );
     }
 }
 

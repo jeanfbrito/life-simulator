@@ -351,12 +351,121 @@ impl UpdateFrequency {
 }
 
 // ============================================================================
+// REAL-TIME PERFORMANCE LOGGING
+// ============================================================================
+
+/// Timer resource for wall-clock based performance logging
+#[derive(Resource)]
+pub struct RealtimePerformanceTimer {
+    /// Last time we logged performance metrics
+    last_log_time: Instant,
+    /// Log interval in seconds
+    log_interval_seconds: f64,
+}
+
+impl Default for RealtimePerformanceTimer {
+    fn default() -> Self {
+        Self {
+            last_log_time: Instant::now(),
+            log_interval_seconds: 5.0, // Log every 5 seconds
+        }
+    }
+}
+
+impl RealtimePerformanceTimer {
+    /// Create a new timer with custom interval
+    pub fn new(interval_seconds: f64) -> Self {
+        Self {
+            last_log_time: Instant::now(),
+            log_interval_seconds: interval_seconds,
+        }
+    }
+
+    /// Check if enough time has passed since last log
+    pub fn should_log(&self) -> bool {
+        self.last_log_time.elapsed().as_secs_f64() >= self.log_interval_seconds
+    }
+
+    /// Reset the timer after logging
+    pub fn reset(&mut self) {
+        self.last_log_time = Instant::now();
+    }
+
+    /// Get elapsed time since last log
+    pub fn elapsed_seconds(&self) -> f64 {
+        self.last_log_time.elapsed().as_secs_f64()
+    }
+}
+
+/// System that logs real-time performance metrics every N seconds of wall-clock time
+/// This runs independently of tick count and is useful for monitoring during load tests
+pub fn log_realtime_performance(
+    mut timer: ResMut<RealtimePerformanceTimer>,
+    tick: Res<SimulationTick>,
+    metrics: Res<TickMetrics>,
+    speed: Res<SimulationSpeed>,
+    time: Res<Time>,
+    entities: Query<Entity>,
+) {
+    if !timer.should_log() {
+        return;
+    }
+
+    let elapsed = timer.elapsed_seconds();
+    let actual_tps = metrics.actual_tps();
+    let avg_duration = metrics.average_duration();
+    let frame_rate = 1.0 / time.delta_secs_f64();
+    let entity_count = entities.iter().count();
+
+    info!("╔════════════════════════════════════════════════╗");
+    info!("║    REAL-TIME PERFORMANCE ({:.1}s elapsed)      ║", elapsed);
+    info!("╠════════════════════════════════════════════════╣");
+    info!("║ Current Tick:       {:>10}                 ║", tick.get());
+    info!("║ Entity Count:       {:>10}                 ║", entity_count);
+    info!("║ Actual TPS:         {:>10.1}                 ║", actual_tps);
+    info!("║ Frame Rate:         {:>10.1} FPS            ║", frame_rate);
+    info!("║ Speed Multiplier:   {:>10.1}x               ║", speed.multiplier);
+    info!("║ Status:             {:>10}                 ║",
+        if speed.is_paused() { "PAUSED" } else { "RUNNING" });
+    info!("║ Avg Tick Duration:  {:>10.2}ms              ║",
+        avg_duration.as_secs_f64() * 1000.0);
+    info!("╚════════════════════════════════════════════════╝");
+
+    timer.reset();
+}
+
+// ============================================================================
 // TESTS
 // ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_realtime_performance_timer() {
+        let mut timer = RealtimePerformanceTimer::new(0.1); // 100ms interval
+
+        // Should not log immediately after creation
+        assert!(!timer.should_log());
+
+        // Wait for interval to pass
+        std::thread::sleep(Duration::from_millis(150));
+
+        // Should log now
+        assert!(timer.should_log());
+
+        // Reset timer
+        timer.reset();
+
+        // Should not log immediately after reset
+        assert!(!timer.should_log());
+
+        // Verify elapsed time is tracked
+        std::thread::sleep(Duration::from_millis(50));
+        let elapsed = timer.elapsed_seconds();
+        assert!(elapsed >= 0.05 && elapsed < 0.15);
+    }
 
     #[test]
     fn test_tick_increment() {

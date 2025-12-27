@@ -88,28 +88,23 @@ pub fn test_collectable_pipeline(
             first_target.resource_type.clone()
         );
 
-        // Test action execution
-        let initial_tick = tick.0;
-        let result = harvest_action.execute(&mut world, test_entity, initial_tick);
+        // Test action execution (using read-only &World, no tick parameter)
+        let result = harvest_action.execute(&world, test_entity);
 
         match result {
             ActionResult::Success => {
                 println!("   ✅ Harvest action executed successfully");
 
-                // Verify ResourceGrid was updated
+                // NOTE: ResourceGrid mutations now handled by system layer
+                // Verify cell state is still readable
                 if let Some(updated_grid) = world.get_resource::<ResourceGrid>() {
                     if let Some(cell) = updated_grid.get_cell(first_target.position) {
                         println!("   📊 Post-harvest cell state:");
-                        println!("      Biomass: {:.1} → {:.1}",
-                            first_target.biomass, cell.total_biomass);
-                        println!("      Regrowth tick: {} → {}",
-                            first_target.regrowth_available_tick, cell.regrowth_available_tick);
-
-                        if cell.regrowth_available_tick > initial_tick {
-                            println!("      ✅ Regrowth delay applied correctly");
-                        } else {
-                            println!("      ⚠️  Regrowth delay may not be applied");
-                        }
+                        println!("      Biomass: {:.1}",
+                            cell.total_biomass);
+                        println!("      Regrowth tick: {}",
+                            cell.regrowth_available_tick);
+                        println!("      ⚠️  Note: Actual harvest mutations now handled by system layer");
                     }
                 }
             }
