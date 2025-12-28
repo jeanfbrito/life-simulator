@@ -13,23 +13,31 @@ pub fn auto_eat_system(
     world_loader: Res<WorldLoader>,
 ) {
     for (entity, position, mut hunger, needs) in query.iter_mut() {
-        // Eat while at or above a lower hysteresis threshold (15%)
-        // This lets entities keep eating a bit more once they start, for completeness.
+        // Eat when hungry (normalized >= 0.15, i.e., hunger >= 15 out of 100)
+        // normalized() = 0.0 (not hungry) to 1.0 (starving)
+        // Skip if not hungry enough (normalized < 0.15, i.e., hunger < 15)
         if hunger.0.normalized() < 0.15 {
+            // Entity is not hungry enough, skip
             continue;
         }
 
-        // Check if standing on grass
+        // Check if standing on herbivore-friendly terrain (grass, forest, swamp where vegetation grows)
         if let Some(terrain_str) = world_loader.get_terrain_at(position.tile.x, position.tile.y) {
             if let Some(terrain) = TerrainType::from_str(&terrain_str) {
-                if matches!(terrain, TerrainType::Grass) {
-                    // Eat the grass! Use species-specific amount if available
+                // Can eat on grass, forest, and other fertile terrains
+                let can_eat = matches!(terrain,
+                    TerrainType::Grass | TerrainType::Forest | TerrainType::Swamp | TerrainType::Dirt
+                );
+
+                if can_eat {
+                    // Eat the vegetation! Use species-specific amount if available
                     let amount = needs.map(|n| n.eat_amount).unwrap_or(25.0);
                     hunger.0.change(-amount);
 
                     info!(
-                        "🐇 Entity {:?} ate grass at {:?}! Hunger reduced by {:.1} (now: {:.1}%)",
+                        "🐇 Entity {:?} ate vegetation on {:?} at {:?}! Hunger reduced by {:.1} (now: {:.1}%)",
                         entity,
+                        format!("{:?}", terrain),
                         position.tile,
                         amount,
                         hunger.0.percentage()

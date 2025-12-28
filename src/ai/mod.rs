@@ -6,6 +6,7 @@
 /// - Execution happens SYNCHRONOUSLY on simulation ticks
 /// - Resource contention resolved through queue ordering
 pub mod action;
+pub mod action_pathfinding_bridge;
 pub mod behaviors;
 pub mod collectables;
 pub mod consideration;
@@ -104,15 +105,18 @@ impl Plugin for TQUAIPlugin {
             )
             // === ACTION EXECUTION PHASE ===
             // Tick-synced action execution (must run after Planning, before Movement)
-            // Split into two systems to avoid &World + Commands parameter conflict:
+            // Split into multiple systems to avoid &World + Commands parameter conflict:
             // 1. execute_active_actions_read_only: Execute actions with &World (parallelizable)
-            // 2. handle_action_results: Handle results with Commands (mutations)
-            // 3. execute_queued_actions: Process pending action queue
+            // 2. bridge_actions_to_pathfinding: Queue pathfinding for NeedsPathfinding results
+            // 3. handle_action_results: Handle results with Commands (mutations)
+            // 4. execute_queued_actions: Process pending action queue
             .add_systems(
                 Update,
                 (
                     execute_active_actions_read_only,
                     apply_deferred, // CRITICAL: flush commands between systems
+                    action_pathfinding_bridge::bridge_actions_to_pathfinding,
+                    apply_deferred, // CRITICAL: flush pathfinding queue before result handling
                     handle_action_results,
                 )
                     .chain()

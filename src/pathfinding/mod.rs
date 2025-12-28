@@ -12,6 +12,7 @@ mod grid;
 mod path_request;
 mod pathfinding_queue;
 mod path_components;
+mod path_to_movement_bridge;
 
 // Re-export existing pathfinding types from grid.rs
 pub use grid::{
@@ -28,6 +29,9 @@ pub use pathfinding_queue::PathfindingQueue;
 // Re-export path components (new Phase 2 additions)
 pub use path_components::{PathRequested, PathReady, PathFailed};
 
+// Re-export PathReady → MovementComponent bridge
+pub use path_to_movement_bridge::bridge_path_ready_to_movement;
+
 // Bevy plugin and system
 use bevy::prelude::*;
 use crate::simulation::{profiler::ScopedTimer, SimulationTick, TickProfiler};
@@ -38,13 +42,21 @@ pub struct PathfindingQueuePlugin;
 
 impl Plugin for PathfindingQueuePlugin {
     fn build(&self, app: &mut App) {
+        println!("✅ PathfindingQueuePlugin initialized");
         // Insert PathfindingQueue resource with default budget (40 paths/tick)
         app.insert_resource(PathfindingQueue::default());
 
-        // Add processing system to FixedUpdate schedule
+        // CRITICAL FIX: Move to Update schedule to sync with AI systems
+        // AI systems (bridge_actions_to_pathfinding) run in Update,
+        // so pathfinding must also run in Update to ensure same-frame processing
         app.add_systems(
-            FixedUpdate,
-            process_pathfinding_queue.run_if(should_tick),
+            Update,
+            (
+                process_pathfinding_queue,
+                path_to_movement_bridge::bridge_path_ready_to_movement.after(process_pathfinding_queue),
+            )
+                .in_set(crate::simulation::SimulationSet::Movement)
+                .run_if(should_tick),
         );
     }
 }

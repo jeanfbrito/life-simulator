@@ -1,0 +1,26 @@
+(
+    spawn_groups: [
+        (
+            species: "Rabbit",
+            count: 1,
+            names: ["TestRabbit"],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 15,
+                max_attempts: 50,
+            ),
+            sex_sequence: Some([male]),
+            messages: Some((
+                start_message: "🧪 TEST: Spawning single rabbit for debugging...",
+                success_template: "   ✅ TEST: Spawned rabbit {name} at {pos}",
+                completion_message: "✅ TEST: Single rabbit spawned!",
+            )),
+        ),
+    ],
+    settings: (
+        verbose_logging: true,
+        enable_spawning: true,
+        completion_message: "🎯 TEST MODE: Single rabbit test",
+        post_spawn_messages: [],
+    ),
+)

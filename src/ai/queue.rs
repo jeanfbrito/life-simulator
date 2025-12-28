@@ -289,6 +289,11 @@ pub fn handle_action_results(
                 // Action still running - ActiveAction component stays
                 // No commands needed - just keep going next tick
             }
+            ActionResult::NeedsPathfinding { .. } => {
+                // Pathfinding bridge system handles this - action stays active
+                // The bridge system will queue pathfinding and transition action state
+                // Treat as InProgress - no commands needed
+            }
         }
 
         // Always remove the result component after processing
@@ -386,6 +391,18 @@ impl ActionQueue {
                     // Action needs multiple ticks - insert as component
                     debug!(
                         "⏳ Entity {:?} started multi-tick action '{}'",
+                        queued.entity,
+                        queued.action.name()
+                    );
+                    if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
+                        entity_mut.insert(ActiveAction::new(queued.action, tick));
+                    }
+                }
+                ActionResult::NeedsPathfinding { .. } => {
+                    // Action needs pathfinding - insert as active action
+                    // Next tick, the action will be executed and bridge system will queue pathfinding
+                    debug!(
+                        "🗺️ Entity {:?} action '{}' needs pathfinding, activating",
                         queued.entity,
                         queued.action.name()
                     );

@@ -117,6 +117,9 @@ pub fn test_collectable_pipeline(
             ActionResult::TriggerFollowUp => {
                 println!("   🔄 Harvest action triggered follow-up");
             }
+            ActionResult::NeedsPathfinding { target } => {
+                println!("   🗺️ Harvest action needs pathfinding to {:?}", target);
+            }
         }
     }
 

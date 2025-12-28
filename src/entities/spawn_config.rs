@@ -189,22 +189,30 @@ impl SpawnConfig {
 
     /// Load spawn configuration from default location, or create default if file doesn't exist
     pub fn load_or_default() -> Self {
-        match Self::load_from_file("config/spawn_config.ron") {
+        // Check for environment variable to override config file
+        let config_path = std::env::var("SPAWN_CONFIG")
+            .unwrap_or_else(|_| "config/spawn_config.ron".to_string());
+
+        match Self::load_from_file(&config_path) {
             Ok(config) => {
-                println!("📋 Loaded spawn configuration from config/spawn_config.ron");
+                println!("📋 Loaded spawn configuration from {}", config_path);
                 config
             }
-            Err(_) => {
+            Err(e) => {
                 println!(
-                    "📋 Using default spawn configuration (config/spawn_config.ron not found)"
+                    "📋 Could not load spawn config from {} ({}), using defaults",
+                    config_path, e
                 );
                 let default_config = Self::default();
 
-                // Try to create the default config file for future modification
-                if let Err(e) = default_config.save_to_file("config/spawn_config.ron") {
-                    println!("⚠️  Could not create default config file: {}", e);
-                } else {
-                    println!("💾 Created default config file at config/spawn_config.ron");
+                // Only create default config file if using the default path
+                // Don't overwrite test configs!
+                if config_path == "config/spawn_config.ron" {
+                    if let Err(e) = default_config.save_to_file(&config_path) {
+                        println!("⚠️  Could not create default config file: {}", e);
+                    } else {
+                        println!("💾 Created default config file at {}", config_path);
+                    }
                 }
 
                 default_config

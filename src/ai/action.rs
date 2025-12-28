@@ -102,6 +102,10 @@ pub trait Action: Send + Sync {
 
     /// Get action name for debugging
     fn name(&self) -> &'static str;
+
+    /// Downcast to concrete type for state transitions
+    /// Required for pathfinding bridge system to transition action states
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
 }
 
 // =============================================================================
@@ -208,6 +212,12 @@ impl DrinkWaterAction {
             move_target: None,
         }
     }
+
+    /// Transition from NeedPath to WaitingForPath state
+    /// Called by pathfinding bridge system after queuing pathfinding request
+    pub fn transition_to_waiting(&mut self, request_id: crate::pathfinding::PathRequestId) {
+        self.state = DrinkWaterState::WaitingForPath { request_id };
+    }
 }
 
 impl Action for DrinkWaterAction {
@@ -274,11 +284,8 @@ impl Action for DrinkWaterAction {
         // State machine for async pathfinding
         match &self.state {
             DrinkWaterState::NeedPath => {
-                // NOTE: Cannot queue pathfinding request with read-only World
-                // This mutation will be handled by the system layer
-                // For now, mark as in progress - system will detect NeedPath state
-                warn!("DrinkWater: NeedPath state requires system layer to queue pathfinding");
-                ActionResult::InProgress
+                // Signal system layer to queue pathfinding
+                ActionResult::NeedsPathfinding { target: move_target }
             }
 
             DrinkWaterState::WaitingForPath { request_id: _ } => {
@@ -379,6 +386,10 @@ impl Action for DrinkWaterAction {
     fn name(&self) -> &'static str {
         "DrinkWater"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 // =============================================================================
@@ -440,6 +451,12 @@ impl GrazeAction {
         }
     }
 
+    /// Transition from NeedPath to WaitingForPath state
+    /// Called by pathfinding bridge system after queuing pathfinding request
+    pub fn transition_to_waiting(&mut self, request_id: crate::pathfinding::PathRequestId) {
+        self.state = GrazeState::WaitingForPath { request_id };
+    }
+
     /// Calculate grazing duration based on biomass availability
     /// Higher biomass = longer feeding time, lower biomass = shorter feeding time
     fn calculate_duration(biomass: f32) -> u32 {
@@ -499,6 +516,11 @@ impl Action for GrazeAction {
         // Check if we've arrived at target - transition to Grazing state
         if current_pos == self.target_tile && !matches!(self.state, GrazeState::Grazing) {
             self.state = GrazeState::Grazing;
+            info!(
+                "🎯 Entity {:?} arrived at grazing target {:?}",
+                entity,
+                self.target_tile
+            );
         }
 
         // State machine for async pathfinding
@@ -570,13 +592,40 @@ impl Action for GrazeAction {
                         if let Some(cell) = resource_grid.get_cell(self.target_tile) {
                             self.initial_biomass = Some(cell.total_biomass);
                             self.duration_ticks = Self::calculate_duration(cell.total_biomass);
+                            info!(
+                                "🌾 Entity {:?} started grazing at {:?} (biomass: {:.1}, duration: {} ticks)",
+                                entity,
+                                self.target_tile,
+                                cell.total_biomass,
+                                self.duration_ticks
+                            );
+                        } else {
+                            warn!(
+                                "🌾 Entity {:?} arrived at grazing tile {:?} but found no biomass cell!",
+                                entity,
+                                self.target_tile
+                            );
                         }
+                    } else {
+                        warn!(
+                            "🌾 Entity {:?} arrived at grazing tile {:?} but ResourceGrid not available!",
+                            entity,
+                            self.target_tile
+                        );
                     }
                 }
 
                 // Check if we should continue grazing
                 if self.ticks_elapsed < self.duration_ticks {
                     self.ticks_elapsed += 1;
+
+                    // Log grazing progress periodically
+                    if self.ticks_elapsed == 1 || self.ticks_elapsed % 5 == 0 || self.ticks_elapsed == self.duration_ticks {
+                        debug!(
+                            "🐇 Entity {:?} grazing tick {}/{} at {:?}",
+                            entity, self.ticks_elapsed, self.duration_ticks, self.target_tile
+                        );
+                    }
 
                     // Still have time to graze, check biomass every 2 ticks
                     if self.ticks_elapsed % 2 == 0 {
@@ -640,6 +689,10 @@ impl Action for GrazeAction {
 
     fn name(&self) -> &'static str {
         "Graze"
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 
     fn cancel(&mut self, world: &World, entity: Entity) {
@@ -745,6 +798,10 @@ impl Action for RestAction {
     fn name(&self) -> &'static str {
         "Rest"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 // =============================================================================
@@ -814,6 +871,10 @@ impl Action for ScavengeAction {
     fn name(&self) -> &'static str {
         "Scavenge"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 // =============================================================================
@@ -860,6 +921,15 @@ impl HuntAction {
             last_prey_pos: None,
         }
     }
+
+    /// Transition from NeedPath to WaitingForPath state
+    /// Called by pathfinding bridge system after queuing pathfinding request
+    pub fn transition_to_waiting(&mut self, request_id: crate::pathfinding::PathRequestId) {
+        // Hunt needs to track target position in WaitingForPath state
+        // Use last known prey position
+        let target_pos = self.last_prey_pos.unwrap_or(IVec2::ZERO);
+        self.state = HuntState::WaitingForPath { request_id, target_pos };
+    }
 }
 
 impl Action for HuntAction {
@@ -897,9 +967,8 @@ impl Action for HuntAction {
         // State machine for async pathfinding
         match &self.state {
             HuntState::NeedPath => {
-                // NOTE: Pathfinding queue mutation handled by system layer
-                warn!("Hunt: NeedPath state requires system layer to queue pathfinding");
-                ActionResult::InProgress
+                // Signal system layer to queue pathfinding
+                ActionResult::NeedsPathfinding { target: prey_pos.tile }
             }
 
             HuntState::WaitingForPath { request_id: _, target_pos } => {
@@ -990,6 +1059,10 @@ impl Action for HuntAction {
     fn name(&self) -> &'static str {
         "Hunt"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 // =============================================================================
@@ -1069,6 +1142,10 @@ impl Action for FollowAction {
 
     fn name(&self) -> &'static str {
         "Follow"
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 
@@ -1234,6 +1311,10 @@ impl Action for MateAction {
     fn name(&self) -> &'static str {
         "Mate"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 /// Harvest Action - Collect harvestable resources like mushrooms, roots, etc.
@@ -1349,6 +1430,10 @@ impl Action for HarvestAction {
     fn name(&self) -> &'static str {
         "Harvest"
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 // =============================================================================
@@ -1393,6 +1478,12 @@ impl WanderAction {
             max_retries: 3,
         }
     }
+
+    /// Transition from NeedPath to WaitingForPath state
+    /// Called by pathfinding bridge system after queuing pathfinding request
+    pub fn transition_to_waiting(&mut self, request_id: crate::pathfinding::PathRequestId) {
+        self.state = WanderState::WaitingForPath { request_id };
+    }
 }
 
 impl Action for WanderAction {
@@ -1435,9 +1526,8 @@ impl Action for WanderAction {
         // State machine for async pathfinding
         match &self.state {
             WanderState::NeedPath => {
-                // NOTE: Pathfinding queue mutation handled by system layer
-                warn!("Wander: NeedPath state requires system layer to queue pathfinding");
-                ActionResult::InProgress
+                // Signal system layer to queue pathfinding
+                ActionResult::NeedsPathfinding { target: self.target_tile }
             }
 
             WanderState::WaitingForPath { request_id: _ } => {
@@ -1504,6 +1594,10 @@ impl Action for WanderAction {
 
     fn name(&self) -> &'static str {
         "Wander"
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

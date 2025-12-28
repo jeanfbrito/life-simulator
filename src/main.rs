@@ -21,7 +21,7 @@ use ai::TQUAIPlugin;
 use cached_world::CachedWorldPlugin;
 use debug::{HealthCheckPlugin, HealthCheckApiPlugin};
 use entities::EntitiesPlugin;
-use pathfinding::{pathfinding_cache_cleanup_system, process_pathfinding_requests, PathCache, PathfindingGrid};
+use pathfinding::{pathfinding_cache_cleanup_system, process_pathfinding_requests, PathCache, PathfindingGrid, PathfindingQueuePlugin};
 use serialization::{WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin};
 use simulation::SimulationPlugin;
 use tilemap::{TilemapPlugin, WorldConfig};
@@ -48,6 +48,7 @@ fn main() {
             SimulationPlugin,
             EntitiesPlugin,
             TQUAIPlugin,
+            PathfindingQueuePlugin,
             VegetationPlugin,
             HealthCheckPlugin,
             HealthCheckApiPlugin,
