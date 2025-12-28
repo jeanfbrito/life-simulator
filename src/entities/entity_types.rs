@@ -367,6 +367,7 @@ pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IV
 
     {
         use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        use crate::entities::GroupFormationConfig;
         let cfg = WolfBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
         let sex = if rng.gen_bool(0.5) {
@@ -396,6 +397,7 @@ pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IV
                 WellFedStreak::default(),
                 CurrentAction::none(),
                 cfg,
+                GroupFormationConfig::wolf_pack(), // Enable generic group formation
             ))
             .id();
         entity

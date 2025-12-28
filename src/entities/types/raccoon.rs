@@ -8,9 +8,10 @@ use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types;
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    birth_common, mate_matching_system, mate_matching_system_with_relationships, Age,
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::ActiveMate;
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
@@ -120,7 +121,7 @@ pub fn plan_raccoon_actions(
             &BehaviorConfig,
             Option<&Age>,
             Option<&Mother>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -182,20 +183,16 @@ pub fn raccoon_mate_matching_system(
             &WellFedStreak,
             Option<&Pregnancy>,
             Option<&Sex>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             &ReproductionConfig,
         ),
         (With<Raccoon>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
-    grid: Res<SpatialCellGrid>,
-    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system_with_children::<Raccoon, '🦝'>(
+    mate_matching_system_with_relationships::<Raccoon, '🦝'>(
         &mut commands,
         &animals,
-        &grid,
-        &cells,
         tick.0,
     );
 }

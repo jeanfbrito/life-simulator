@@ -8,9 +8,10 @@ use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types::{Deer, Wolf};
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    birth_common, mate_matching_system, mate_matching_system_with_relationships, Age,
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::ActiveMate;
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
@@ -90,6 +91,7 @@ impl WolfBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
+        world: &World,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_wolf_actions(
             entity,
@@ -103,6 +105,7 @@ impl WolfBehavior {
             carcasses,
             deer,
             vegetation,
+            world,
         )
     }
 }
@@ -120,7 +123,7 @@ pub fn plan_wolf_actions(
             &BehaviorConfig,
             Option<&Age>,
             Option<&Mother>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -132,6 +135,7 @@ pub fn plan_wolf_actions(
     carcasses: Query<(Entity, &TilePosition, &Carcass)>,
     deer_query: Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
+    world: &World,
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
@@ -155,6 +159,7 @@ pub fn plan_wolf_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
+                world,
             )
         },
         None,
@@ -178,20 +183,16 @@ pub fn wolf_mate_matching_system(
             &WellFedStreak,
             Option<&Pregnancy>,
             Option<&Sex>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             &ReproductionConfig,
         ),
         (With<Wolf>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
-    grid: Res<SpatialCellGrid>,
-    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system_with_children::<Wolf, '🐺'>(
+    mate_matching_system_with_relationships::<Wolf, '🐺'>(
         &mut commands,
         &animals,
-        &grid,
-        &cells,
         tick.0,
     );
 }

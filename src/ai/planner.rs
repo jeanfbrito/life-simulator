@@ -3,9 +3,9 @@ use super::queue::ActionQueue;
 use crate::ai::herbivore_toolkit::{
     maybe_add_follow_mother, maybe_add_mate_action, FollowConfig, MateActionParams,
 };
-use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
+use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{BehaviorConfig, TilePosition};
+use crate::entities::{ActiveMate, BehaviorConfig, TilePosition};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -103,7 +103,7 @@ pub fn plan_species_actions<M: Component>(
             &BehaviorConfig,
             Option<&Age>,
             Option<&Mother>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             Option<&ReproductionConfig>,
             Option<&crate::entities::FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -176,6 +176,7 @@ pub fn plan_species_actions<M: Component>(
                 hunger,
                 energy,
                 params,
+                tick,
             );
             if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
                 debug!(

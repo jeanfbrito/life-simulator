@@ -7,9 +7,9 @@ use crate::ai::behaviors::{
     evaluate_wandering_behavior, eating::HerbivoreDiet,
 };
 use crate::ai::planner::UtilityScore;
-use crate::entities::reproduction::{Age, MatingIntent, Mother, ReproductionConfig};
+use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{BehaviorConfig, FearState, TilePosition};
+use crate::entities::{ActiveMate, BehaviorConfig, FearState, TilePosition};
 use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;
 
@@ -184,12 +184,13 @@ pub struct MateActionParams {
 /// the reproduction requirements. Returns true if an action was added.
 pub fn maybe_add_mate_action(
     actions: &mut Vec<UtilityScore>,
-    mating_intent: Option<&MatingIntent>,
+    mating_intent: Option<&ActiveMate>,
     repro_cfg: Option<&ReproductionConfig>,
     thirst: &Thirst,
     hunger: &Hunger,
     energy: &Energy,
     params: MateActionParams,
+    current_tick: u64,
 ) -> bool {
     let Some(intent) = mating_intent else {
         return false;
@@ -234,11 +235,13 @@ pub fn maybe_add_mate_action(
     let energy_safe = energy_level >= (cfg.min_energy_norm + params.energy_margin).min(1.0);
 
     if thirst_safe && hunger_safe && energy_safe {
+        // Calculate duration_ticks as the time spent so far (current_tick - started_tick)
+        let elapsed = current_tick.saturating_sub(intent.started_tick) as u32;
         actions.push(UtilityScore {
             action_type: ActionType::Mate {
                 partner: intent.partner,
                 meeting_tile: intent.meeting_tile,
-                duration_ticks: intent.duration_ticks,
+                duration_ticks: elapsed,
             },
             utility: params.utility,
             priority: params.priority,
@@ -343,11 +346,11 @@ mod emergency_mating_tests {
     }
 
     /// Helper to create test mating intent
-    fn test_mating_intent() -> MatingIntent {
-        MatingIntent {
+    fn test_mating_intent() -> crate::entities::ActiveMate {
+        crate::entities::ActiveMate {
             partner: Entity::from_raw(999),
             meeting_tile: IVec2::new(10, 10),
-            duration_ticks: 100,
+            started_tick: 0, // Started at tick 0
         }
     }
 
@@ -394,6 +397,7 @@ mod emergency_mating_tests {
             &hunger,
             &energy,
             params,
+            100, // current_tick
         );
 
         assert!(!result, "Mating should be blocked when critically hungry (95%)");
@@ -432,6 +436,7 @@ mod emergency_mating_tests {
             &hunger,
             &energy,
             params,
+            100, // current_tick
         );
 
         assert!(!result, "Mating should be blocked when critically thirsty (95%)");
@@ -469,6 +474,7 @@ mod emergency_mating_tests {
             &hunger,
             &energy,
             params,
+            100, // current_tick
         );
 
         assert!(!result, "Mating should be blocked at exactly 90% hunger threshold");
@@ -498,6 +504,7 @@ mod emergency_mating_tests {
             &hunger,
             &energy,
             test_mate_params(),
+            100, // current_tick
         );
 
         assert!(result, "Mating should be allowed when stats are safe (30% hunger, 20% thirst)");
@@ -538,6 +545,7 @@ mod emergency_mating_tests {
             &hunger,
             &energy,
             test_mate_params(),
+            100, // current_tick
         );
 
         assert!(!result, "Mating should be blocked when both hunger and thirst are critical");

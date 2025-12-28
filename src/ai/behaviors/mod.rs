@@ -43,6 +43,9 @@ pub mod follow;
 pub mod grazing;
 pub mod resting;
 pub mod wandering;
+pub mod pack_hunting;
+pub mod herd_grazing;
+pub mod warren_defense;
 
 pub use drinking::evaluate_drinking_behavior;
 pub use eating::evaluate_eating_behavior;
@@ -51,3 +54,6 @@ pub use follow::evaluate_follow_behavior;
 pub use grazing::evaluate_grazing_behavior;
 pub use resting::evaluate_resting_behavior;
 pub use wandering::evaluate_wandering_behavior;
+pub use pack_hunting::apply_pack_hunting_bonus;
+pub use herd_grazing::apply_herd_safety_bonus;
+pub use warren_defense::apply_warren_defense_bonus;

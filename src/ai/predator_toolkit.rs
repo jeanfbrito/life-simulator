@@ -274,7 +274,7 @@ pub fn evaluate_fox_actions(
 
 #[allow(clippy::too_many_arguments)]
 pub fn evaluate_wolf_actions(
-    _entity: Entity,
+    entity: Entity,
     position: &TilePosition,
     thirst: &Thirst,
     hunger: &Hunger,
@@ -285,6 +285,7 @@ pub fn evaluate_wolf_actions(
     carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
     deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
     vegetation: &ResourceGrid,
+    world: &World,
 ) -> Vec<UtilityScore> {
     // Wolves are obligate carnivores - use very minimal plant diet
     let diet = HerbivoreDiet::new(0.1, 0.05, 3.0);
@@ -339,6 +340,10 @@ pub fn evaluate_wolf_actions(
             }
         }
     }
+
+    // PACK TACTICS: Apply generic group-aware coordination bonuses
+    use crate::ai::apply_group_behavior_bonuses;
+    apply_group_behavior_bonuses(entity, &mut actions, world);
 
     actions
 }

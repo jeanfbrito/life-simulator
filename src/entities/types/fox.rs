@@ -8,9 +8,10 @@ use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types::{Fox, Rabbit};
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, mate_matching_system_with_children, Age, MatingIntent,
+    birth_common, mate_matching_system, mate_matching_system_with_relationships, Age,
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
+use crate::entities::ActiveMate;
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
@@ -120,7 +121,7 @@ pub fn plan_fox_actions(
             &BehaviorConfig,
             Option<&Age>,
             Option<&Mother>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -169,20 +170,16 @@ pub fn fox_mate_matching_system(
             &WellFedStreak,
             Option<&Pregnancy>,
             Option<&Sex>,
-            Option<&MatingIntent>,
+            Option<&ActiveMate>,
             &ReproductionConfig,
         ),
         (With<Fox>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
-    grid: Res<SpatialCellGrid>,
-    cells: Query<&Children, With<SpatialCell>>,
     tick: Res<SimulationTick>,
 ) {
-    mate_matching_system_with_children::<Fox, '🦊'>(
+    mate_matching_system_with_relationships::<Fox, '🦊'>(
         &mut commands,
         &animals,
-        &grid,
-        &cells,
         tick.0,
     );
 }

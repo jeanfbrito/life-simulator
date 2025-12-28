@@ -11,8 +11,14 @@ pub mod collectables;
 pub mod consideration;
 pub mod debug_collectables;
 pub mod event_driven_planner;
+pub mod group_cohesion;
+pub mod group_coordination;
+pub mod group_formation;
 pub mod herbivore_toolkit;
 pub mod hunting_relationship_system;
+pub mod mating_relationship_system;
+pub mod pack_relationship_system;
+pub mod parent_child_relationship_system;
 pub mod planner;
 pub mod predator_toolkit;
 pub mod queue;
@@ -34,6 +40,21 @@ pub use hunting_relationship_system::{
     establish_hunting_relationship, clear_hunting_relationship, cleanup_stale_hunting_relationships,
     has_hunting_relationship, is_being_hunted,
 };
+pub use mating_relationship_system::{
+    establish_mating_relationship, clear_mating_relationship, cleanup_stale_mating_relationships,
+    has_mating_relationship, is_being_courted, get_mating_partner,
+};
+pub use pack_relationship_system::{
+    establish_pack_leadership, add_to_pack, remove_from_pack, dissolve_pack,
+    cleanup_stale_pack_relationships, get_pack_members, get_pack_leader, is_pack_leader,
+    is_pack_member, is_in_pack, get_pack_size, are_in_same_pack,
+};
+pub use parent_child_relationship_system::{
+    establish_parent_child_relationship, establish_parent_child_immediate,
+    remove_parent_child_relationship, remove_parent_child_immediate,
+    cleanup_orphaned_children, get_parent, get_children, has_child, has_parent,
+    child_count, child_birth_tick,
+};
 
 // Re-export web API functions for easier access
 pub use collectables::web_api::{
@@ -48,6 +69,9 @@ pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
 pub use system_params::PlanningResources;
 pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
 pub use ultrathink::{ThinkQueue, ThinkRequest, ThinkReason, ThinkPriority, UltraThinkPlugin};
+pub use group_formation::generic_group_formation_system;
+pub use group_cohesion::{generic_group_cohesion_system, process_member_removals};
+pub use group_coordination::apply_group_behavior_bonuses;
 
 use bevy::prelude::*;
 
@@ -84,9 +108,14 @@ impl Plugin for TQUAIPlugin {
             )
             // === CLEANUP PHASE ===
             // Clean up stale hunting relationships (prey despawned while being hunted)
+            // Clean up stale pack relationships (members despawned while in pack)
             .add_systems(
                 Update,
-                cleanup_stale_hunting_relationships
+                (
+                    cleanup_stale_hunting_relationships,
+                    cleanup_stale_pack_relationships,
+                    cleanup_stale_mating_relationships,
+                )
                     .in_set(SimulationSet::Cleanup)
                     .run_if(should_tick),
             );

@@ -1,5 +1,6 @@
 pub mod active_action;
 pub mod auto_eat;
+pub mod birth_relationships;
 pub mod cached_state;
 pub mod carcass;
 pub mod current_action;
@@ -7,9 +8,13 @@ pub mod entity_tracker;
 pub mod entity_types;
 /// Entities module - manages creatures and their behaviors
 pub mod fear;
+pub mod group_config;
 pub mod hunting_relationships;
+pub mod mating_relationships;
 pub mod movement;
 pub mod movement_component;
+pub mod pack_relationships;
+pub mod parent_child_relationships;
 pub mod registry;
 pub mod reproduction;
 pub mod spatial_cell;
@@ -53,6 +58,21 @@ pub use carcass::{tick_carcasses, Carcass};
 pub use fear::{fear_speed_system, predator_proximity_system, FearPlugin, FearState};
 
 pub use hunting_relationships::{ActiveHunter, HuntingTarget};
+
+pub use mating_relationships::{ActiveMate, MatingTarget};
+
+pub use pack_relationships::{PackLeader, PackMember, GroupType};
+
+pub use group_config::GroupFormationConfig;
+
+pub use parent_child_relationships::{BirthInfo, LegacyChildOf, LegacyParentOf};
+
+// Backward compatibility type aliases (deprecated)
+#[deprecated(since = "0.1.0", note = "Use LegacyChildOf instead")]
+pub type ChildOf = LegacyChildOf;
+
+#[deprecated(since = "0.1.0", note = "Use LegacyParentOf instead")]
+pub type ParentOf = LegacyParentOf;
 
 pub use entity_types::{
     count_entities_by_type, spawn_bear, spawn_deer, spawn_fox, spawn_human, spawn_humans,
@@ -209,6 +229,10 @@ impl Plugin for EntitiesPlugin {
                     plan_bear_actions,
                     plan_fox_actions,
                     plan_wolf_actions,
+                    // Generic group formation systems (work for all species with GroupFormationConfig)
+                    crate::ai::generic_group_formation_system,
+                    crate::ai::generic_group_cohesion_system,
+                    crate::ai::process_member_removals,
                 )
                     .in_set(SimulationSet::Planning)
                     .run_if(should_run_tick_systems),
@@ -259,6 +283,8 @@ impl Plugin for EntitiesPlugin {
                     bear_birth_system,
                     fox_birth_system,
                     wolf_birth_system,
+                    // Establish parent-child relationships using Bevy hierarchy
+                    birth_relationships::establish_birth_relationships,
                 )
                     .in_set(SimulationSet::Reproduction)
                     .after(SimulationSet::Movement)

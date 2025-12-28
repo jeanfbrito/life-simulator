@@ -466,6 +466,126 @@ mod systems {
         }
     }
 
+    /// Mate matching system using type-safe relationship components
+    ///
+    /// Phase 11: Replaces MatingIntent with MatingTarget/ActiveMate relationship components
+    /// for type-safe, bidirectional mating pair tracking with automatic cleanup.
+    ///
+    /// Establishes relationships via the relationship system functions rather than
+    /// directly inserting MatingIntent components.
+    pub fn mate_matching_system_with_relationships<M: Component, const EMOJI: char>(
+        commands: &mut Commands,
+        animals: &Query<
+            (
+                Entity,
+                &TilePosition,
+                &Age,
+                &ReproductionCooldown,
+                &Energy,
+                &Health,
+                &WellFedStreak,
+                Option<&Pregnancy>,
+                Option<&Sex>,
+                Option<&crate::entities::ActiveMate>,
+                &ReproductionConfig,
+            ),
+            (With<M>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        >,
+        current_tick: u64,
+    ) {
+        use std::collections::HashSet;
+        use crate::ai::establish_mating_relationship;
+
+        let mut sampled_interval: Option<u64> = None;
+        let mut males: Vec<(
+            Entity,
+            IVec2,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            &ReproductionConfig,
+        )> = Vec::new();
+        let mut females: Vec<(
+            Entity,
+            IVec2,
+            &Age,
+            &ReproductionCooldown,
+            &Energy,
+            &Health,
+            &WellFedStreak,
+            &ReproductionConfig,
+        )> = Vec::new();
+
+        for (entity, pos, age, cd, en, hp, wf, preg_opt, sex_opt, mate_opt, cfg) in animals.iter()
+        {
+            if sampled_interval.is_none() {
+                sampled_interval = Some(cfg.matching_interval_ticks as u64);
+                if current_tick % cfg.matching_interval_ticks as u64 != 0 {
+                    return;
+                }
+            }
+
+            let Some(sex) = sex_opt.copied() else {
+                continue;
+            };
+            // Skip if pregnant or already has an active mating relationship
+            if preg_opt.is_some() || mate_opt.is_some() {
+                continue;
+            }
+            if !is_eligible(age, cd, en, hp, wf, cfg) {
+                continue;
+            }
+
+            match sex {
+                Sex::Male => males.push((entity, pos.tile, age, cd, en, hp, wf, cfg)),
+                Sex::Female => females.push((entity, pos.tile, age, cd, en, hp, wf, cfg)),
+            }
+        }
+
+        if males.is_empty() || females.is_empty() {
+            return;
+        }
+
+        let mut used_males: HashSet<Entity> = HashSet::new();
+
+        for (female_e, fpos, _fa, _fcd, _fen, _fhp, _fwf, fcfg) in females.into_iter() {
+            let radius2 = (fcfg.mating_search_radius * fcfg.mating_search_radius) as i32;
+            let mut best: Option<(usize, i32)> = None;
+
+            for (idx, (male_e, mpos, .., _mcfg)) in males.iter().enumerate() {
+                if used_males.contains(male_e) {
+                    continue;
+                }
+                let d = fpos - *mpos;
+                let d2 = d.x * d.x + d.y * d.y;
+                if d2 <= radius2 && best.map(|(_, bd2)| d2 < bd2).unwrap_or(true) {
+                    best = Some((idx, d2));
+                }
+            }
+
+            let Some((mi, _)) = best else {
+                continue;
+            };
+
+            let (male_e, _, .., _mcfg) = males[mi];
+            used_males.insert(male_e);
+
+            let meet = fpos;
+            // Use relationship system to establish bidirectional mating pair
+            establish_mating_relationship(male_e, female_e, meet, current_tick, commands);
+
+            info!(
+                "{emoji}💞 Pair formed: female {:?} with male {:?} -> rendezvous at {:?}",
+                female_e,
+                male_e,
+                meet,
+                emoji = EMOJI,
+            );
+        }
+    }
+
     // Shared birth helper used by species modules
     pub fn birth_common<E: Component>(
         commands: &mut Commands,
@@ -497,6 +617,9 @@ mod systems {
                         .insert(WellFedStreak::default())
                         .insert(ReproductionCooldown::default())
                         .insert(Mother(mother));
+                    // Note: Parent-child relationship is established automatically by
+                    // birth_relationships::establish_birth_relationships system which runs
+                    // after birth systems and creates Bevy Parent/Children + BirthInfo components.
                 }
                 info!(
                     "{} Birth: mother {:?} gave birth to {} offspring at {:?}",
@@ -522,6 +645,7 @@ pub use components::{
 pub use config::ReproductionConfig;
 pub use systems::{
     birth_common, mate_matching_system, mate_matching_system_with_children,
+    mate_matching_system_with_relationships,
     tick_reproduction_timers_system, update_age_and_wellfed_system,
 };
 
