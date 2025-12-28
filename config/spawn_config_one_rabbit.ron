@@ -1,0 +1,28 @@
+(
+    settings: (
+        enable_spawning: true,
+        verbose_logging: true,
+        completion_message: "✅ Spawned 1 rabbit for debugging",
+        post_spawn_messages: [],
+    ),
+    spawn_groups: [
+        (
+            species: "Rabbit",
+            count: 1,
+            spawn_area: (
+                center_x: 0,
+                center_y: 0,
+                search_radius: 50,
+                max_attempts: 50,
+                allowed_terrains: ["Grass", "Forest"],
+            ),
+            sex_sequence: Some([Male]),
+            names: ["TestRabbit"],
+            messages: Some((
+                start_message: "🐇 Spawning 1 test rabbit...",
+                success_template: "   ✅ {name} at {pos}",
+                completion_message: "✅ Spawned 1 rabbit",
+            )),
+        ),
+    ],
+)

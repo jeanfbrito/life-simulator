@@ -1,0 +1,31 @@
+════════════════════════════════════════════════════════════════
+ECOSYSTEM BALANCE TEST SUMMARY
+════════════════════════════════════════════════════════════════
+Test Date: dom 28 dez 2025 01:36:18 -03
+
+POPULATION STATISTICS
+────────────────────────────────────────────────────────────────
+
+Population Data (every 500 ticks):
+
+tick  wolves  foxes  deer  rabbits  total_prey  total_predators  total  prey_predator_ratio  timestamp
+
+
+FINAL POPULATIONS:
+  Wolves:    0
+  Foxes:     0
+  Deer:      0
+  Rabbits:   0
+  Total:     0
+
+KEY EVENTS SUMMARY
+────────────────────────────────────────────────────────────────
+Birth events: 19
+Death events: 0
+0
+Hunting events: 20
+Pack events: 41
+Mating events: 29
+Flee events: 1
+
+════════════════════════════════════════════════════════════════
