@@ -1108,12 +1108,10 @@ impl Action for MateAction {
     }
 
     fn execute(&mut self, world: &World, entity: Entity) -> ActionResult {
-        use crate::entities::reproduction::{
-            MatingIntent, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex,
-        };
+        use crate::entities::reproduction::{Pregnancy, ReproductionConfig, ReproductionCooldown, Sex};
 
         // NOTE: This action has been simplified to read-only World access.
-        // All component mutations (removing MatingIntent, PathfindingFailed, inserting Pregnancy, etc.)
+        // All component mutations (removing ActiveMate/MatingTarget, PathfindingFailed, inserting Pregnancy, etc.)
         // will be handled by the system layer based on the returned ActionResult.
 
         // Abort if either entity failed to find a path
@@ -1200,7 +1198,7 @@ impl Action for MateAction {
         // Duration complete: mating successful!
         // NOTE: System layer will handle:
         // - Pregnancy/ReproductionCooldown insertion based on Sex
-        // - MatingIntent cleanup
+        // - ActiveMate/MatingTarget relationship cleanup
         // - Navigation state clearing
         let me_female = world
             .get::<Sex>(entity)
@@ -1222,9 +1220,9 @@ impl Action for MateAction {
     }
 
     fn cancel(&mut self, world: &World, entity: Entity) {
-        // NOTE: System layer will handle MatingIntent cleanup
+        // NOTE: System layer will handle ActiveMate/MatingTarget cleanup
         debug!(
-            "🚫 Entity {:?} mating interrupted, system will clean up mating intent",
+            "🚫 Entity {:?} mating interrupted, system will clean up mating relationship",
             entity
         );
 

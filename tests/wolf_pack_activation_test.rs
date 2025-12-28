@@ -8,26 +8,21 @@
 use bevy::prelude::*;
 use life_simulator::ai::{
     generic_group_formation_system, generic_group_cohesion_system, process_member_removals,
-    ActionQueue, TQUAIPlugin,
 };
 use life_simulator::entities::{
-    spawn_wolf, GroupFormationConfig, PackLeader, PackMember, TilePosition, Wolf,
+    GroupFormationConfig, PackLeader, PackMember, TilePosition, Wolf,
 };
-use life_simulator::simulation::{SimulationPlugin, SimulationTick};
+use life_simulator::simulation::SimulationTick;
 
 /// RED TEST: Wolves should form packs when spawned near each other
 #[test]
 fn test_wolves_form_pack_when_proximate() {
     let mut app = App::new();
 
-    // Add required plugins and resources
-    app.add_plugins((
-        MinimalPlugins,
-        SimulationPlugin,
-        TQUAIPlugin,
-    ));
+    // Add minimal required resources
+    app.add_plugins(MinimalPlugins);
 
-    // Add group formation systems
+    // Add group formation systems ONLY (don't use TQUAIPlugin to avoid conflicts)
     app.add_systems(Update, (
         generic_group_formation_system,
         generic_group_cohesion_system,
@@ -95,12 +90,7 @@ fn test_wolves_form_pack_when_proximate() {
 fn test_wolves_dont_form_pack_when_distant() {
     let mut app = App::new();
 
-    app.add_plugins((
-        MinimalPlugins,
-        SimulationPlugin,
-        TQUAIPlugin,
-    ));
-
+    app.add_plugins(MinimalPlugins);
     app.add_systems(Update, generic_group_formation_system);
     app.insert_resource(SimulationTick(300));
 
@@ -141,14 +131,8 @@ fn test_wolves_dont_form_pack_when_distant() {
 fn test_pack_dissolves_when_members_drift() {
     let mut app = App::new();
 
-    app.add_plugins((
-        MinimalPlugins,
-        SimulationPlugin,
-        TQUAIPlugin,
-    ));
-
+    app.add_plugins(MinimalPlugins);
     app.add_systems(Update, (
-        generic_group_formation_system,
         generic_group_cohesion_system,
         process_member_removals,
     ));
@@ -229,14 +213,8 @@ fn test_pack_hunting_bonus_applied() {
 fn test_pack_cohesion_maintained() {
     let mut app = App::new();
 
-    app.add_plugins((
-        MinimalPlugins,
-        SimulationPlugin,
-        TQUAIPlugin,
-    ));
-
+    app.add_plugins(MinimalPlugins);
     app.add_systems(Update, (
-        generic_group_formation_system,
         generic_group_cohesion_system,
         process_member_removals,
     ));

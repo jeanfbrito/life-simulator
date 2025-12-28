@@ -12,7 +12,7 @@ use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types;
 use crate::entities::entity_types::{Bear, Fox, Wolf};
 use crate::entities::reproduction::{
-    birth_common, mate_matching_system, mate_matching_system_with_relationships, Age,
+    birth_common, mate_matching_system_with_relationships, Age,
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::ActiveMate;

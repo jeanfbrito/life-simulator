@@ -101,6 +101,18 @@ mod components {
         }
     }
 
+    /// DEPRECATED: Use ActiveMate/MatingTarget relationship components instead.
+    /// This component is kept for backward compatibility during migration.
+    ///
+    /// The new relationship system uses:
+    /// - `ActiveMate` component on the pursuing entity (typically male)
+    /// - `MatingTarget` component on the pursued entity (typically female)
+    ///
+    /// This provides type-safe bidirectional relationships with automatic cleanup.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use ActiveMate/MatingTarget relationship components from mating_relationships module instead"
+    )]
     #[derive(Component, Debug, Clone, Copy)]
     pub struct MatingIntent {
         pub partner: Entity,
@@ -175,6 +187,14 @@ mod systems {
         }
     }
 
+    /// DEPRECATED: Use mate_matching_system_with_relationships instead.
+    /// This function uses the old MatingIntent component which is being phased out
+    /// in favor of the ActiveMate/MatingTarget relationship system.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use mate_matching_system_with_relationships for type-safe relationship tracking"
+    )]
+    #[allow(deprecated)]
     pub fn mate_matching_system<M: Component, const EMOJI: char>(
         commands: &mut Commands,
         animals: &Query<
@@ -293,15 +313,22 @@ mod systems {
         }
     }
 
+    /// DEPRECATED: Use mate_matching_system_with_relationships instead.
+    /// This function uses the old MatingIntent component which is being phased out
+    /// in favor of the ActiveMate/MatingTarget relationship system.
+    ///
     /// Optimized mate matching system using Bevy Children component queries
     ///
     /// Phase 4.3: Replaces HashMap-based spatial queries with hierarchical Parent/Child queries.
     /// Maintains O(M*k) performance where k = entities in nearby chunks.
     ///
-    /// This is the preferred implementation for Phase 4.3+.
-    ///
     /// Change Detection: Only processes entities that have moved (Changed<TilePosition>)
     /// or changed reproductive state (Changed<ReproductiveState> via Age, ReproductionCooldown, etc.)
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use mate_matching_system_with_relationships for type-safe relationship tracking"
+    )]
+    #[allow(deprecated)]
     pub fn mate_matching_system_with_children<M: Component, const EMOJI: char>(
         commands: &mut Commands,
         animals: &Query<

@@ -90,6 +90,18 @@ impl Plugin for TQUAIPlugin {
             .add_plugins(TriggerEmittersPlugin)
             .add_plugins(EventDrivenPlannerPlugin)
             .add_plugins(UltraThinkPlugin::default())
+            // === GROUP DYNAMICS PHASE ===
+            // Generic group formation and cohesion for all species
+            .add_systems(
+                Update,
+                (
+                    generic_group_formation_system,
+                    generic_group_cohesion_system,
+                    process_member_removals,
+                )
+                    .in_set(SimulationSet::Planning) // Before action planning
+                    .run_if(should_tick),
+            )
             // === ACTION EXECUTION PHASE ===
             // Tick-synced action execution (must run after Planning, before Movement)
             .add_systems(
