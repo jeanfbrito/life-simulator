@@ -1,0 +1,62 @@
+(
+    spawn_groups: [
+        // 210 Rabbits
+        SpawnGroup(
+            species: "Rabbit",
+            count: 210,
+            names: ["Rabbit"],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 60,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: None,
+        ),
+        // 60 Deer
+        SpawnGroup(
+            species: "Deer",
+            count: 60,
+            names: ["Deer"],
+            spawn_area: (
+                center: (20, 20),
+                search_radius: 50,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: None,
+        ),
+        // 24 Wolves
+        SpawnGroup(
+            species: "Wolf",
+            count: 24,
+            names: ["Wolf"],
+            spawn_area: (
+                center: (-40, -40),
+                search_radius: 40,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: None,
+        ),
+        // 6 Foxes
+        SpawnGroup(
+            species: "Fox",
+            count: 6,
+            names: ["Fox"],
+            spawn_area: (
+                center: (40, -40),
+                search_radius: 30,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: None,
+        ),
+    ],
+    settings: (
+        verbose_logging: false,
+        enable_spawning: true,
+        completion_message: "✓ 300 entities spawned",
+        post_spawn_messages: [],
+    ),
+)

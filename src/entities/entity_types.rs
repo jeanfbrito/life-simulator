@@ -157,6 +157,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
 
     {
         use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        use crate::entities::GroupFormationConfig;
         let cfg = RabbitBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
         let sex = if rng.gen_bool(0.5) {
@@ -189,6 +190,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
                 FearState::new(), // Initialize fear state for predator detection
                                   // NO Wanderer component - movement driven by utility AI!
             ))
+            .insert(GroupFormationConfig::rabbit_warren()) // Enable warren formation
             .id();
         entity
     }
@@ -200,6 +202,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
 
     {
         use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
+        use crate::entities::GroupFormationConfig;
         // Use deer reproduction config for maturity
         let cfg = DeerBehavior::reproduction_config();
         let mut rng = rand::thread_rng();
@@ -232,6 +235,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
             ))
+            .insert(GroupFormationConfig::deer_herd()) // Enable herd formation
             .id();
         entity
     }

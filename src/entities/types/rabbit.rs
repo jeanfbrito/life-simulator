@@ -149,6 +149,7 @@ pub fn plan_rabbit_actions(
     predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
     resources: PlanningResources,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
+    world: &World,
 ) {
     let loader = resources.world_loader.as_ref();
 
@@ -163,7 +164,7 @@ pub fn plan_rabbit_actions(
         queue.as_mut(),
         &rabbits,
         &rabbit_positions,
-        |_, position, thirst, hunger, energy, behavior, fear_state| {
+        |entity, position, thirst, hunger, energy, behavior, fear_state| {
             let mut actions = RabbitBehavior::evaluate_actions(
                 position,
                 thirst,
@@ -183,6 +184,10 @@ pub fn plan_rabbit_actions(
                 &predator_pos_list,
                 loader,
             );
+
+            // WARREN DEFENSE: Apply generic group-aware coordination bonuses
+            use crate::ai::apply_group_behavior_bonuses;
+            apply_group_behavior_bonuses(entity, &mut actions, world);
 
             actions
         },

@@ -1,110 +1,108 @@
+// Ecosystem Balance Testing Configuration
+// Testing predator-prey dynamics with all relationship systems active
 (
     spawn_groups: [
+        // Prey - Rabbits (Primary prey for foxes)
         (
             species: "Rabbit",
-            count: 190,
-            names: [],
-            spawn_area: (
-                center: (0, 0),
-                search_radius: 45,
-                max_attempts: 100,
-            ),
-            sex_sequence: None,
-            messages: Some((
-                start_message: "🐇 Spawning 190 rabbits for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 190 rabbits",
-            )),
-        ),
-        (
-            species: "Deer",
-            count: 120,
-            names: [],
-            spawn_area: (
-                center: (0, 0),
-                search_radius: 45,
-                max_attempts: 100,
-            ),
-            sex_sequence: None,
-            messages: Some((
-                start_message: "🦌 Spawning 120 deer for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 120 deer",
-            )),
-        ),
-        (
-            species: "Raccoon",
-            count: 100,
-            names: [],
+            count: 25,
+            names: [],  // Will use default naming
             spawn_area: (
                 center: (10, 10),
-                search_radius: 45,
+                search_radius: 30,
+                max_attempts: 100,
+            ),
+            sex_sequence: None,  // Random distribution
+            messages: Some((
+                start_message: "🐇 Spawning 25 rabbits (prey population)...",
+                success_template: "   ✅ Rabbit {name} at {pos}",
+                completion_message: "✅ Spawned {count} rabbits",
+            )),
+        ),
+        
+        // Prey - Deer (Primary prey for wolves)
+        (
+            species: "Deer",
+            count: 20,
+            names: [],
+            spawn_area: (
+                center: (-15, -15),
+                search_radius: 35,
                 max_attempts: 100,
             ),
             sex_sequence: None,
             messages: Some((
-                start_message: "🦝 Spawning 100 raccoons for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 100 raccoons",
+                start_message: "🦌 Spawning 20 deer (prey population)...",
+                success_template: "   ✅ Deer {name} at {pos}",
+                completion_message: "✅ Spawned {count} deer",
             )),
         ),
+        
+        // Predator - Foxes (Hunt rabbits)
         (
             species: "Fox",
-            count: 50,
+            count: 8,
             names: [],
             spawn_area: (
-                center: (-10, -10),
-                search_radius: 45,
+                center: (15, -10),
+                search_radius: 25,
                 max_attempts: 100,
             ),
             sex_sequence: None,
             messages: Some((
-                start_message: "🦊 Spawning 50 foxes for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 50 foxes",
+                start_message: "🦊 Spawning 8 foxes (predator population)...",
+                success_template: "   ✅ Fox {name} at {pos}",
+                completion_message: "✅ Spawned {count} foxes",
             )),
         ),
+        
+        // Predator - Wolves (Hunt deer, form packs)
         (
             species: "Wolf",
-            count: 25,
+            count: 10,
             names: [],
             spawn_area: (
-                center: (20, -20),
-                search_radius: 45,
+                center: (-20, 15),
+                search_radius: 40,
                 max_attempts: 100,
             ),
             sex_sequence: None,
             messages: Some((
-                start_message: "🐺 Spawning 25 wolves for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 25 wolves",
-            )),
-        ),
-        (
-            species: "Bear",
-            count: 15,
-            names: [],
-            spawn_area: (
-                center: (-20, 20),
-                search_radius: 45,
-                max_attempts: 100,
-            ),
-            sex_sequence: None,
-            messages: Some((
-                start_message: "🐻 Spawning 15 bears for 500-entity load test...",
-                success_template: "",
-                completion_message: "✅ Spawned 15 bears",
+                start_message: "🐺 Spawning 10 wolves (pack predator population)...",
+                success_template: "   ✅ Wolf {name} at {pos}",
+                completion_message: "✅ Spawned {count} wolves",
             )),
         ),
     ],
     settings: (
-        verbose_logging: false,
+        verbose_logging: true,
         enable_spawning: true,
-        completion_message: "🎯 500-Entity Load Test: All entities spawned\n📊 Mix: 190 rabbits, 120 deer, 100 raccoons, 50 foxes, 25 wolves, 15 bears",
+        completion_message: "
+═══════════════════════════════════════════════════════════════
+🧪 ECOSYSTEM BALANCE TEST - Initial Population
+═══════════════════════════════════════════════════════════════
+📊 Prey:      25 Rabbits + 20 Deer = 45 total
+🦊 Predators: 8 Foxes + 10 Wolves = 18 total
+📈 Ratio:     2.5:1 (Prey:Predator)
+
+🧬 Active Systems:
+  ✓ Wolf pack dynamics with coordination bonuses
+  ✓ Mating relationships and reproduction
+  ✓ Parent-child relationships and care
+  ✓ Flee behavior with fear mechanics
+  ✓ Predator hunting with pack coordination
+
+🎯 Test Duration: 10,000 ticks (~16 minutes @ 10 TPS)
+📊 Population logged every 500 ticks
+═══════════════════════════════════════════════════════════════
+🌐 View at: http://127.0.0.1:54321/viewer.html
+📡 API at:  http://127.0.0.1:54321/api/entities
+═══════════════════════════════════════════════════════════════
+",
         post_spawn_messages: [
-            "🔥 Running maximum load test with 500 entities",
-            "⏱️  Measuring TPS at target entity count",
-            "🎯 Target: 10 TPS (likely will be lower based on 400-entity results)",
+            "⏱️  Starting 10,000 tick ecosystem balance test...",
+            "📈 Monitoring population stability and predator-prey dynamics",
+            "🔬 Testing: pack hunting, flee behavior, reproduction, parent-child care",
         ],
     ),
 )

@@ -104,13 +104,13 @@ impl Plugin for TQUAIPlugin {
             )
             // === ACTION EXECUTION PHASE ===
             // Tick-synced action execution (must run after Planning, before Movement)
-            //             .add_systems(
-            //                 Update,
-            //             // TEMP FIX:                 execute_active_actions_system
-            //                     .in_set(SimulationSet::ActionExecution)
-            //                     .before(execute_queued_actions)
-            //                     .run_if(should_tick),
-            //             )
+            .add_systems(
+                Update,
+                execute_active_actions_system
+                    .in_set(SimulationSet::ActionExecution)
+                    .before(execute_queued_actions)
+                    .run_if(should_tick),
+            )
             .add_systems(
                 Update,
                 execute_queued_actions

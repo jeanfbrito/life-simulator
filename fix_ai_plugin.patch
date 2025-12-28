@@ -1,0 +1,25 @@
+--- a/src/ai/mod.rs
++++ b/src/ai/mod.rs
+@@ -104,13 +104,14 @@ impl Plugin for TQUAIPlugin {
+             )
+             // === ACTION EXECUTION PHASE ===
+             // Tick-synced action execution (must run after Planning, before Movement)
+-            .add_systems(
+-                Update,
+-                execute_active_actions_system
+-                    .in_set(SimulationSet::ActionExecution)
+-                    .before(execute_queued_actions)
+-                    .run_if(should_tick),
+-            )
++            // TEMPORARY FIX: Commented out due to &World + Commands conflict in Bevy 0.16
++            // execute_queued_actions (exclusive system) handles all action execution
++            // .add_systems(
++            //     Update,
++            //     execute_active_actions_system
++            //         .in_set(SimulationSet::ActionExecution)
++            //         .before(execute_queued_actions)
++            //         .run_if(should_tick),
++            // )
+             .add_systems(
+                 Update,
+                 execute_queued_actions

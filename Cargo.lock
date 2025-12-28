@@ -3408,6 +3408,7 @@ name = "life-simulator"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "chrono",
  "clap",
  "futures-util",
  "lazy_static",

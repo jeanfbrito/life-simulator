@@ -1,0 +1,86 @@
+(
+    spawn_groups: [
+        // 300 Rabbits (primary herbivore load)
+        SpawnGroup(
+            species: "Rabbit",
+            count: 300,
+            names: [
+                "Rabbit",
+            ],
+            spawn_area: (
+                center: (0, 0),
+                search_radius: 80,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: Some((
+                start_message: "🐇 Spawning 300 rabbits for stress test...",
+                success_template: "✓",
+                completion_message: "✅ Spawned 300 rabbits",
+            )),
+        ),
+        // 100 Deer (secondary herbivore)
+        SpawnGroup(
+            species: "Deer",
+            count: 100,
+            names: [
+                "Deer",
+            ],
+            spawn_area: (
+                center: (20, 20),
+                search_radius: 60,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: Some((
+                start_message: "🦌 Spawning 100 deer for stress test...",
+                success_template: "✓",
+                completion_message: "✅ Spawned 100 deer",
+            )),
+        ),
+        // 80 Wolves (primary predator)
+        SpawnGroup(
+            species: "Wolf",
+            count: 80,
+            names: [
+                "Wolf",
+            ],
+            spawn_area: (
+                center: (-40, -40),
+                search_radius: 50,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: Some((
+                start_message: "🐺 Spawning 80 wolves for stress test...",
+                success_template: "✓",
+                completion_message: "✅ Spawned 80 wolves",
+            )),
+        ),
+        // 20 Foxes (secondary predator)
+        SpawnGroup(
+            species: "Fox",
+            count: 20,
+            names: [
+                "Fox",
+            ],
+            spawn_area: (
+                center: (40, -40),
+                search_radius: 40,
+                max_attempts: 10,
+            ),
+            sex_sequence: Some([Male, Female]),
+            messages: Some((
+                start_message: "🦊 Spawning 20 foxes for stress test...",
+                success_template: "✓",
+                completion_message: "✅ Spawned 20 foxes",
+            )),
+        ),
+    ],
+    settings: (
+        verbose_logging: false,
+        enable_spawning: true,
+        completion_message: "🌐 Stress test setup complete - 500 entities spawned",
+        post_spawn_messages: [],
+    ),
+)
