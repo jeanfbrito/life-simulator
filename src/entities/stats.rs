@@ -290,7 +290,7 @@ pub fn tick_stats_system(
         Option<&mut Thirst>,
         Option<&mut Energy>,
         Option<&mut Health>,
-    ), Or<(Changed<Hunger>, Changed<Thirst>, Changed<Energy>, Changed<Health>)>>,
+    )>,
     tick: Res<crate::simulation::SimulationTick>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
 ) {

@@ -35,7 +35,7 @@ impl Plugin for SimulationPlugin {
             // Resources
             .insert_resource(SimulationTick::default())
             .insert_resource(SimulationSpeed::default())
-            .insert_resource(SimulationState { should_tick: false })
+            .insert_resource(SimulationState { should_tick: true })
             .insert_resource(TickMetrics::default())
             .insert_resource(TickAccumulator::default())
             .insert_resource(RealtimePerformanceTimer::default())
