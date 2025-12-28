@@ -29,6 +29,9 @@ pub enum ActionResult {
     /// Action completed but should trigger a follow-up action
     /// Used for giving-up behavior when patch quality is too low
     TriggerFollowUp,
+    /// Action needs pathfinding to target position
+    /// System layer will queue pathfinding request and transition action to WaitingForPath
+    NeedsPathfinding { target: IVec2 },
 }
 
 /// Request to queue an action
@@ -501,10 +504,8 @@ impl Action for GrazeAction {
         // State machine for async pathfinding
         match &self.state {
             GrazeState::NeedPath => {
-                // NOTE: Cannot queue pathfinding with read-only World
-                // System layer will handle this
-                warn!("Graze: NeedPath state requires system layer to queue pathfinding");
-                ActionResult::InProgress
+                // Signal system layer to queue pathfinding
+                ActionResult::NeedsPathfinding { target: self.target_tile }
             }
 
             GrazeState::WaitingForPath { request_id: _ } => {
