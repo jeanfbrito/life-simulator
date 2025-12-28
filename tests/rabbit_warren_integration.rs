@@ -101,7 +101,7 @@ fn test_warren_cohesion_maintained() {
 
     let config = GroupFormationConfig::rabbit_warren();
 
-    // Create a warren with leader and members
+    // Create a warren with leader and enough members (min_group_size = 4)
     let leader = app.world_mut().spawn((
         Rabbit,
         TilePosition { tile: IVec2::new(0, 0) },
@@ -113,7 +113,7 @@ fn test_warren_cohesion_maintained() {
         },
     )).id();
 
-    // Add members close to leader (within 100 tiles)
+    // Add 4 members close to leader (within 100 tiles) to meet min_group_size
     let member1 = app.world_mut().spawn((
         Rabbit,
         TilePosition { tile: IVec2::new(50, 0) }, // 50 tiles away
@@ -136,9 +136,31 @@ fn test_warren_cohesion_maintained() {
         },
     )).id();
 
+    let member3 = app.world_mut().spawn((
+        Rabbit,
+        TilePosition { tile: IVec2::new(30, 30) }, // ~42 tiles away
+        config.clone(),
+        PackMember {
+            leader,
+            joined_tick: 100,
+            group_type: GroupType::Warren,
+        },
+    )).id();
+
+    let member4 = app.world_mut().spawn((
+        Rabbit,
+        TilePosition { tile: IVec2::new(-20, 20) }, // ~28 tiles away
+        config.clone(),
+        PackMember {
+            leader,
+            joined_tick: 100,
+            group_type: GroupType::Warren,
+        },
+    )).id();
+
     // Update leader's member list
     if let Some(mut leader_comp) = app.world_mut().get_mut::<PackLeader>(leader) {
-        leader_comp.members = vec![member1, member2];
+        leader_comp.members = vec![member1, member2, member3, member4];
     }
 
     app.world_mut().flush();
@@ -146,7 +168,7 @@ fn test_warren_cohesion_maintained() {
     // Run cohesion system
     {
         let mut tick = app.world_mut().resource_mut::<SimulationTick>();
-        tick.0 = 500; // Advance tick to trigger cohesion check
+        tick.0 = 600; // Divisible by check_interval_ticks (200)
     }
 
     app.update();
@@ -155,8 +177,8 @@ fn test_warren_cohesion_maintained() {
 
     // Verify warren is still intact (members within cohesion radius)
     let leader_comp = app.world().get::<PackLeader>(leader);
-    assert!(leader_comp.is_some(), "Leader should still exist");
-    assert_eq!(leader_comp.unwrap().members.len(), 2, "Members should still be in warren");
+    assert!(leader_comp.is_some(), "Leader should still exist with members within cohesion radius");
+    assert_eq!(leader_comp.unwrap().members.len(), 4, "All 4 members should still be in warren");
 }
 
 /// RED TEST: Verify warren dissolves when members drift beyond 100 tiles
@@ -203,16 +225,14 @@ fn test_warren_dissolution_on_distance() {
 
     app.world_mut().flush();
 
-    // Run cohesion system multiple times to ensure processing
+    // Run cohesion system at the right tick interval
     {
         let mut tick = app.world_mut().resource_mut::<SimulationTick>();
-        tick.0 = 500; // Past check_interval_ticks for warren (200)
+        tick.0 = 600; // Divisible by check_interval_ticks for warren (200)
     }
 
-    // Run multiple updates to allow cohesion system to process
-    for _ in 0..5 {
-        app.update();
-    }
+    // Run update to trigger cohesion check
+    app.update();
 
     app.world_mut().flush();
 

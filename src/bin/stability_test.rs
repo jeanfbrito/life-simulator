@@ -41,6 +41,7 @@ struct StabilityTestState {
 struct MemorySample {
     tick: u64,
     timestamp: Duration,
+    // We'll use system metrics if available
     rss_mb: Option<f64>,
 }
 
@@ -54,6 +55,7 @@ fn main() {
     println!("💾 Memory sampling every {} ticks", MEMORY_CHECK_INTERVAL);
     println!();
 
+    // Create log file
     let log_path = format!("stability_test_{}.log", 
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -73,7 +75,7 @@ fn main() {
             ))),
         )
         .add_plugins(bevy::log::LogPlugin {
-            level: bevy::log::Level::WARN,
+            level: bevy::log::Level::WARN, // Reduce noise
             ..Default::default()
         })
         .add_plugins(CachedWorldPlugin)
@@ -97,21 +99,15 @@ fn main() {
             last_entity_count: 0,
             memory_samples: Vec::new(),
         })
-        .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
                 process_pathfinding_requests,
                 pathfinding_cache_cleanup_system,
-            ).run_if(resource_exists::<WorldLoader>),
+                stability_monitor_system.before(check_completion_system),
+                check_completion_system,
+            ).run_if(resource_exists::<WorldLoader>).chain(),
         )
-        .add_systems(
-            Update,
-            stability_monitor_system.run_if(resource_exists::<WorldLoader>),
-        )
-        .add_systems(
-            Update,
-            check_completion_system.run_if(resource_exists::<WorldLoader>).after(stability_monitor_system),
         )
         .run();
 }
@@ -119,6 +115,7 @@ fn main() {
 fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) {
     println!("🔧 Setting up stability test world...");
 
+    // Load the world
     let requested_map_name = std::env::var("WORLD_MAP_NAME")
         .unwrap_or_else(|_| "slopes_demo".to_string());
 
@@ -151,6 +148,7 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
         }
     };
 
+    // Build pathfinding grid
     println!("🧭 Building pathfinding grid...");
     let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
     let tile_min_x = min_x * 16 - 16;
@@ -226,6 +224,7 @@ fn stability_monitor_system(
         print!("{}", log_entry);
         let _ = state.log_file.write_all(log_entry.as_bytes());
         
+        // Track entity lifecycle
         let entity_delta = entity_count as i64 - state.last_entity_count as i64;
         if entity_delta != 0 {
             let lifecycle_log = format!(
@@ -241,8 +240,11 @@ fn stability_monitor_system(
         state.last_entity_count = entity_count;
     }
     
+    // Memory sampling
     if current_tick % MEMORY_CHECK_INTERVAL == 0 {
         let elapsed = state.start_time.elapsed();
+        
+        // Try to get RSS memory usage
         let rss_mb = get_process_memory_mb();
         
         let sample = MemorySample {
@@ -264,15 +266,15 @@ fn stability_monitor_system(
 fn check_completion_system(
     tick: Res<life_simulator::simulation::SimulationTick>,
     state: Res<StabilityTestState>,
-    entity_count_query: Query<Entity>,
-    creature_query: Query<&life_simulator::entities::Creature>,
+    entities: Query<Entity>,
+    creatures: Query<&life_simulator::entities::Creature>,
 ) {
     if tick.get() >= TARGET_TICKS {
         println!();
         println!("🎉 Stability test complete!");
         println!("📊 Generating report...");
         
-        generate_stability_report(&state, entity_count_query.iter().count(), creature_query.iter().count());
+        generate_stability_report(&state, &entities, &creatures);
         
         std::process::exit(0);
     }
@@ -280,10 +282,12 @@ fn check_completion_system(
 
 fn generate_stability_report(
     state: &StabilityTestState,
-    entity_count: usize,
-    creature_count: usize,
+    entities: &Query<Entity>,
+    creatures: &Query<&life_simulator::entities::Creature>,
 ) {
     let elapsed = state.start_time.elapsed();
+    let entity_count = entities.iter().count();
+    let creature_count = creatures.iter().count();
     
     let report_path = format!("STABILITY_TEST_REPORT_{}.md",
         std::time::SystemTime::now()
@@ -297,52 +301,52 @@ fn generate_stability_report(
     let content = format!(r#"# Stability Test Report
 
 ## Test Parameters
-- **Target Ticks**: {}
-- **Actual Runtime**: {:.2} hours ({:.1} minutes)
-- **Average TPS**: {:.2}
+- **Target Ticks**: {TARGET_TICKS}
+- **Actual Runtime**: {elapsed_hrs:.2} hours ({elapsed_mins:.1} minutes)
+- **Average TPS**: {avg_tps:.2}
 
 ## Entity Lifecycle Statistics
-- **Final Entity Count**: {}
-- **Final Creature Count**: {}
-- **Total Spawned**: {}
-- **Total Despawned**: {}
-- **Net Change**: {:+}
+- **Final Entity Count**: {entity_count}
+- **Final Creature Count**: {creature_count}
+- **Total Spawned**: {spawned}
+- **Total Despawned**: {despawned}
+- **Net Change**: {net_change:+}
 
 ## Memory Usage Analysis
 
 ### Memory Samples
-{}
+{memory_table}
 
 ### Memory Growth Analysis
-{}
+{memory_analysis}
 
 ## Cleanup System Validation
-{}
+{cleanup_validation}
 
 ## System Stability Assessment
-{}
+{stability_assessment}
 
 ## Recommendations
-{}
+{recommendations}
 
 ---
-*Report generated: {}*
+*Report generated: {timestamp}*
 "#,
-        TARGET_TICKS,
-        elapsed.as_secs_f64() / 3600.0,
-        elapsed.as_secs_f64() / 60.0,
-        TARGET_TICKS as f64 / elapsed.as_secs_f64(),
-        entity_count,
-        creature_count,
-        state.entity_spawned_count,
-        state.entity_despawned_count,
-        entity_count as i64,
-        generate_memory_table(&state.memory_samples),
-        analyze_memory_growth(&state.memory_samples),
-        validate_cleanup_systems(state),
-        assess_stability(&state.memory_samples, entity_count),
-        generate_recommendations(&state.memory_samples, entity_count),
-        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+        TARGET_TICKS = TARGET_TICKS,
+        elapsed_hrs = elapsed.as_secs_f64() / 3600.0,
+        elapsed_mins = elapsed.as_secs_f64() / 60.0,
+        avg_tps = TARGET_TICKS as f64 / elapsed.as_secs_f64(),
+        entity_count = entity_count,
+        creature_count = creature_count,
+        spawned = state.entity_spawned_count,
+        despawned = state.entity_despawned_count,
+        net_change = entity_count as i64,
+        memory_table = generate_memory_table(&state.memory_samples),
+        memory_analysis = analyze_memory_growth(&state.memory_samples),
+        cleanup_validation = validate_cleanup_systems(state),
+        stability_assessment = assess_stability(&state.memory_samples, entity_count),
+        recommendations = generate_recommendations(&state.memory_samples, entity_count),
+        timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
     );
     
     report.write_all(content.as_bytes()).expect("Failed to write report");
@@ -417,6 +421,7 @@ fn analyze_memory_growth(samples: &[MemorySample]) -> String {
         growth_rate_mb_per_tick
     ));
     
+    // Assess if growth is linear or stabilizing
     if valid_samples.len() >= 3 {
         let mid_idx = valid_samples.len() / 2;
         let mid = &valid_samples[mid_idx];
@@ -470,6 +475,7 @@ fn validate_cleanup_systems(state: &StabilityTestState) -> String {
 fn assess_stability(samples: &[MemorySample], final_entity_count: usize) -> String {
     let mut assessment = String::new();
     
+    // Memory leak detection
     if let Some(growth_rate) = calculate_memory_growth_rate(samples) {
         assessment.push_str("### Memory Leak Assessment\n");
         if growth_rate.abs() < 0.001 {
@@ -486,6 +492,7 @@ fn assess_stability(samples: &[MemorySample], final_entity_count: usize) -> Stri
         }
     }
     
+    // Entity accumulation
     assessment.push_str("### Entity Accumulation Assessment\n");
     assessment.push_str(&format!("- Final entity count: {}\n", final_entity_count));
     
@@ -497,6 +504,7 @@ fn assess_stability(samples: &[MemorySample], final_entity_count: usize) -> Stri
         assessment.push_str("❌ Entity count is very high - possible entity leak\n\n");
     }
     
+    // Overall stability
     assessment.push_str("### Overall Stability\n");
     assessment.push_str("✅ Simulation completed full test duration\n");
     assessment.push_str("✅ No crashes or panics detected\n");
@@ -565,7 +573,7 @@ fn get_process_memory_mb() -> Option<f64> {
             .parse::<f64>()
             .ok()?;
         
-        Some(rss_kb / 1024.0)
+        Some(rss_kb / 1024.0) // Convert KB to MB
     }
     
     #[cfg(target_os = "linux")]

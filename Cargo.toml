@@ -44,14 +44,13 @@ path = "src/main.rs"
 name = "map_generator"
 path = "src/map_generator.rs"
 
-# Temporarily disabled - has compilation errors
-# [[bin]]
-# name = "stress_test"
-# path = "src/bin/stress_test.rs"
+[[bin]]
+name = "stress_test"
+path = "src/bin/stress_test.rs"
 
-# [[bin]]
-# name = "stability_test"
-# path = "src/bin/stability_test.rs"
+[[bin]]
+name = "stability_test"
+path = "src/bin/stability_test.rs"
 
 [dev-dependencies]
 bevy = { version = "0.16", features = ["dynamic_linking"] }
