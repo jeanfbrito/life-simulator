@@ -1,0 +1,14 @@
+name: Bevy System Parameter Lint
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  check-conflicts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check for Bevy ECS conflicts
+        run: ./scripts/check_bevy_conflicts.sh

@@ -22,6 +22,7 @@
 - **Architecture Overview**: `docs/TECH_OVERVIEW.md` - System architecture and technical details
 - **Movement System**: `docs/ENTITY_MOVEMENT_EXPLAINED.md` - Entity movement and pathfinding
 - **Tick System**: `docs/TICK_SYSTEM_QUICKSTART.md` - Simulation timing and update cycles
+- **Bevy System Params**: `docs/BEVY_SYSTEM_PARAMS_GUIDE.md` - Critical ECS rules and conflict resolution ⚠️
 
 ### For Viewer & Visualization
 - **Godot Viewer**: `godot-viewer/CLAUDE.md` - Godot engine specific guidance
@@ -68,6 +69,70 @@ RUST_LOG=info cargo run --bin life-simulator
 cargo build --release
 cargo flamegraph --bin life-simulator
 ```
+
+## ⚠️ Bevy ECS - Critical Rules (MUST FOLLOW)
+
+### System Parameter Conflicts
+
+**NEVER mix these parameters in the same system:**
+```rust
+// ❌ INVALID - Runtime panic!
+fn my_system(
+    mut commands: Commands,  // Needs mutable access
+    world: &World,           // Needs read access to EVERYTHING
+) {
+    // This will panic: "&World conflicts with a previous mutable system parameter"
+}
+```
+
+**Why?** `&World` requires immutable borrow of the **entire** ECS world, conflicting with any mutable parameter (`Commands`, `ResMut`, `Query<&mut T>`).
+
+### ✅ Solutions
+
+**Solution 1: Use Specific Queries** (PREFERRED)
+```rust
+fn my_system(
+    mut commands: Commands,
+    leader_query: Query<&PackLeader>,    // ✅ Specific component access
+    member_query: Query<&PackMember>,
+) {
+    // No conflict! Only accessing specific components
+}
+```
+
+**Solution 2: ParamSet** (for unavoidable conflicts)
+```rust
+fn my_system(mut params: ParamSet<(&World, Commands)>) {
+    let world = params.p0();    // Use &World first
+    // ... later ...
+    let commands = params.p1(); // Then use Commands
+}
+```
+
+**Solution 3: Exclusive System** (blocks parallelism!)
+```rust
+fn my_system(world: &mut World) {
+    // Full access, but BLOCKS all other systems
+    // Only use for bulk operations
+}
+```
+
+### 🛡️ Automated Safety
+
+Run before committing:
+```bash
+./scripts/check_bevy_conflicts.sh
+```
+
+This linter catches `&World` + `Commands` conflicts automatically and runs in CI.
+
+### 📚 Official Documentation
+
+- [Bevy Cheat Book - ParamSet](https://bevy-cheatbook.github.io/programming/paramset.html)
+- [Bevy Cheat Book - Exclusive Systems](https://bevy-cheatbook.github.io/programming/exclusive.html)
+- [ParamSet API Docs](https://docs.rs/bevy/latest/bevy/ecs/system/struct.ParamSet.html)
+
+---
 
 ## 📋 Project Status
 - **Core Systems**: ✅ ECS-based simulation with AI, vegetation, and predator-prey dynamics
