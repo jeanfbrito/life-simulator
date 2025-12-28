@@ -1,21 +1,32 @@
 /// Entity Count Stress Test
 ///
-/// This binary runs performance benchmarks with high entity counts (500+) to identify
-/// bottlenecks in the simulation. It measures TPS, memory usage, and per-system timings.
+/// This binary runs performance benchmarks with high entity counts (100-700+) to identify
+/// bottlenecks in the simulation. It measures TPS, memory usage, and per-tick timings.
 ///
 /// Usage:
 ///   cargo run --release --bin stress_test
 ///   DISABLE_WEB_SERVER=1 cargo run --release --bin stress_test
-///   STRESS_TEST_DURATION=60 STRESS_TEST_CONFIG=custom_config.ron cargo run --release --bin stress_test
+///   STRESS_TEST_DURATION=60 STRESS_TEST_CONFIG=config/spawn_config_stress_100.ron cargo run --release --bin stress_test
 
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use std::time::{Duration, Instant};
 
+// Import life simulator components
+use life_simulator::ai::TQUAIPlugin;
+use life_simulator::cached_world::CachedWorldPlugin;
+use life_simulator::debug::{HealthCheckPlugin, HealthCheckApiPlugin};
+use life_simulator::entities::EntitiesPlugin;
+use life_simulator::pathfinding::{pathfinding_cache_cleanup_system, process_pathfinding_requests, PathCache, PathfindingGrid};
+use life_simulator::simulation::SimulationPlugin;
+use life_simulator::tilemap::{TilemapPlugin, WorldConfig, TerrainType};
+use life_simulator::vegetation::VegetationPlugin;
+use life_simulator::world_loader::WorldLoader;
+
 fn main() {
     println!("\n╔════════════════════════════════════════════════════════════════╗");
     println!("║        LIFE SIMULATOR - ENTITY STRESS TEST                     ║");
-    println!("║        Testing performance with 500+ entities                  ║");
+    println!("║        Testing performance with configurable entity counts     ║");
     println!("╚════════════════════════════════════════════════════════════════╝\n");
 
     let stress_config = StressTestConfig::from_env();
@@ -24,26 +35,54 @@ fn main() {
     println!("   Target Ticks: {}", stress_config.target_ticks);
     println!("   Config File: {}\n", stress_config.config_file);
 
+    // Set environment variable for spawn config
+    std::env::set_var("SPAWN_CONFIG", &stress_config.config_file);
+    std::env::set_var("DISABLE_WEB_SERVER", "1"); // Always disable web server for stress tests
+
     App::new()
         .add_plugins(
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-                1.0 / 60.0,
+                1.0 / 60.0, // 60 FPS target
             ))),
         )
-        .add_plugins(bevy::log::LogPlugin::default())
+        .add_plugins(bevy::log::LogPlugin {
+            level: bevy::log::Level::WARN, // Reduce log noise during stress test
+            filter: "life_simulator=warn,bevy=warn".to_string(),
+            ..default()
+        })
+        .add_plugins(CachedWorldPlugin)
+        .add_plugins((
+            SimulationPlugin,
+            EntitiesPlugin,
+            TQUAIPlugin,
+            VegetationPlugin,
+            // Skip health check plugins to avoid system conflicts during stress testing
+        ))
+        .insert_resource(WorldConfig::default())
+        .init_resource::<ButtonInput<KeyCode>>()
+        .init_resource::<PathfindingGrid>()
+        .init_resource::<PathCache>()
         .insert_resource(stress_config)
         .insert_resource(StressTestMetrics::default())
-        .add_systems(Startup, startup_system)
-        .add_systems(Update, (
-            simulation_tick_system,
-            measure_performance_system,
-            check_completion_system,
-        ))
+        .add_systems(
+            Startup,
+            (setup_stress_test, life_simulator::entities::spawn_entities_from_config.after(setup_stress_test)),
+        )
+        .add_systems(
+            Update,
+            (
+                process_pathfinding_requests,
+                pathfinding_cache_cleanup_system,
+                measure_tick_performance_system,
+                check_completion_system,
+            )
+                .run_if(resource_exists::<WorldLoader>),
+        )
         .run();
 }
 
 /// Stress test configuration
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 struct StressTestConfig {
     duration_secs: u64,
     target_ticks: u64,
@@ -54,7 +93,7 @@ impl Default for StressTestConfig {
     fn default() -> Self {
         Self {
             duration_secs: 60,
-            target_ticks: 1000,
+            target_ticks: 600, // 10 TPS * 60 seconds
             config_file: "config/spawn_config_stress_test.ron".to_string(),
         }
     }
@@ -67,6 +106,7 @@ impl StressTestConfig {
         if let Ok(duration) = std::env::var("STRESS_TEST_DURATION") {
             if let Ok(d) = duration.parse::<u64>() {
                 config.duration_secs = d;
+                config.target_ticks = d * 10; // Assume 10 TPS target
             }
         }
 
@@ -88,9 +128,10 @@ impl StressTestConfig {
 #[derive(Resource, Default)]
 struct StressTestMetrics {
     start_time: Option<Instant>,
-    tick_times: Vec<u64>,
+    tick_times: Vec<u64>, // Microseconds
     entity_count: usize,
     tick_count: u64,
+    last_tick_time: Option<Instant>,
 }
 
 impl StressTestMetrics {
@@ -133,51 +174,121 @@ impl StressTestMetrics {
         if elapsed_secs <= 0.0 {
             return 0.0;
         }
-        self.tick_times.len() as f32 / elapsed_secs as f32
+        self.tick_count as f32 / elapsed_secs as f32
     }
 }
 
-fn startup_system(mut commands: Commands) {
+fn setup_stress_test(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) {
     println!("🔧 Setting up stress test environment...");
+
+    // Load the world
+    let requested_map_name =
+        std::env::var("WORLD_MAP_NAME").unwrap_or_else(|_| "slopes_demo".to_string());
+
+    let world_loader = match WorldLoader::load_by_name(&requested_map_name) {
+        Ok(loader) => {
+            println!("✅ World loaded: {} (seed: {})", loader.get_name(), loader.get_seed());
+            loader
+        }
+        Err(_) => {
+            match WorldLoader::load_default() {
+                Ok(loader) => {
+                    println!("✅ World loaded: {} (seed: {})", loader.get_name(), loader.get_seed());
+                    loader
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to load world: {}", e);
+                    eprintln!("💡 Please generate a world first: cargo run --bin map_generator");
+                    std::process::exit(1);
+                }
+            }
+        }
+    };
+
+    // Build pathfinding grid
+    println!("🧭 Building pathfinding grid...");
+    let ((min_x, min_y), (max_x, max_y)) = world_loader.get_world_bounds();
+    let tile_min_x = min_x * 16 - 16;
+    let tile_min_y = min_y * 16 - 16;
+    let tile_max_x = (max_x + 1) * 16 + 16;
+    let tile_max_y = (max_y + 1) * 16 + 16;
+
+    for y in tile_min_y..=tile_max_y {
+        for x in tile_min_x..=tile_max_x {
+            let pos = bevy::math::IVec2::new(x, y);
+            let terrain_str = world_loader.get_terrain_at(x, y);
+            let terrain_cost = if let Some(terrain_str) = terrain_str {
+                if let Some(terrain) = TerrainType::from_str(&terrain_str) {
+                    let cost = terrain.movement_cost();
+                    if cost >= 1000.0 { u32::MAX } else { cost as u32 }
+                } else {
+                    u32::MAX
+                }
+            } else {
+                u32::MAX
+            };
+
+            let has_resource = world_loader
+                .get_resource_at(x, y)
+                .map(|r| !r.is_empty())
+                .unwrap_or(false);
+
+            let final_cost = if has_resource && terrain_cost != u32::MAX {
+                u32::MAX
+            } else {
+                terrain_cost
+            };
+
+            pathfinding_grid.set_cost(pos, final_cost);
+        }
+    }
+
+    println!("✅ Pathfinding grid ready");
     println!("📊 Starting performance measurement...\n");
-    println!("╭─ TICK MEASUREMENTS ──────────────────────────────────────╮");
 
     // Initialize metrics
     let mut metrics = StressTestMetrics::default();
     metrics.start_time = Some(Instant::now());
+    metrics.last_tick_time = Some(Instant::now());
+
+    commands.insert_resource(world_loader);
     commands.insert_resource(metrics);
-
-    println!("   (Measuring tick performance)");
 }
 
-fn simulation_tick_system(
+fn measure_tick_performance_system(
     mut metrics: ResMut<StressTestMetrics>,
-    mut tick_counter: Local<u64>,
+    query: Query<Entity, With<life_simulator::entities::Creature>>,
 ) {
-    *tick_counter += 1;
+    let now = Instant::now();
 
-    // Simulate work for stress testing
-    // In real scenario, this would be the actual simulation
-    if *tick_counter % 100 == 0 {
-        // Record simulated tick time (in a real test, this would be measured)
-        let simulated_tick_us = 50_000 + (*tick_counter % 30000); // Simulate varying load
-        metrics.record_tick_time(simulated_tick_us as u64);
-        metrics.tick_count = *tick_counter;
+    if let Some(last_tick) = metrics.last_tick_time {
+        let tick_duration = now.duration_since(last_tick);
+        let tick_us = tick_duration.as_micros() as u64;
 
-        println!("   Tick {} - {:.0} µs", *tick_counter, simulated_tick_us);
+        metrics.record_tick_time(tick_us);
+        metrics.tick_count += 1;
+        metrics.entity_count = query.iter().count();
+
+        // Log every 60 ticks (roughly every second at 60 FPS)
+        if metrics.tick_count % 60 == 0 {
+            let avg = metrics.average_tick_time();
+            println!(
+                "Tick {} - {} entities - {:.2}ms avg ({:.2} TPS)",
+                metrics.tick_count,
+                metrics.entity_count,
+                avg / 1000.0,
+                60.0 / (avg / 1_000_000.0)
+            );
+        }
     }
-}
 
-fn measure_performance_system(
-    _metrics: ResMut<StressTestMetrics>,
-) {
-    // In a real scenario with actual simulation, we'd measure frame times here
-    // For this simplified version, measurements are done in simulation_tick_system
+    metrics.last_tick_time = Some(now);
 }
 
 fn check_completion_system(
     metrics: Res<StressTestMetrics>,
     stress_config: Res<StressTestConfig>,
+    mut app_exit_events: EventWriter<bevy::app::AppExit>,
 ) {
     if let Some(start) = metrics.start_time {
         let elapsed = start.elapsed();
@@ -185,21 +296,22 @@ fn check_completion_system(
 
         // Check if we've reached target ticks or duration
         let completed = elapsed.as_secs() >= stress_config.duration_secs
-            || metrics.tick_count >= stress_config.target_ticks as u64;
+            || metrics.tick_count >= stress_config.target_ticks;
 
         if completed && !metrics.tick_times.is_empty() {
-            println!("\n╰──────────────────────────────────────────────────────────╯\n");
-            print_stress_test_results(&metrics, elapsed_secs);
-            std::process::exit(0);
+            println!("\n");
+            print_stress_test_results(&metrics, elapsed_secs, &stress_config);
+            app_exit_events.send(bevy::app::AppExit::Success);
         }
     }
 }
 
-fn print_stress_test_results(metrics: &StressTestMetrics, elapsed_secs: f64) {
+fn print_stress_test_results(metrics: &StressTestMetrics, elapsed_secs: f64, config: &StressTestConfig) {
     println!("╔════════════════════════════════════════════════════════════════╗");
     println!("║                    STRESS TEST RESULTS                         ║");
     println!("╠════════════════════════════════════════════════════════════════╣");
 
+    println!("│ Test Configuration: {}", config.config_file);
     println!("│ Entities Spawned: {}", metrics.entity_count);
     println!("│ Total Ticks: {}", metrics.tick_count);
     println!("│ Elapsed Time: {:.2} seconds", elapsed_secs);
@@ -224,61 +336,75 @@ fn print_stress_test_results(metrics: &StressTestMetrics, elapsed_secs: f64) {
     println!("│   Actual TPS: {:.2} ticks/sec", tps);
     println!("│   Target TPS: 10.0 ticks/sec");
 
-    let target_tick_time = 100_000.0; // 100ms per tick at 10 TPS = 100,000 µs
-    let budget_percent = (avg_tick_time / target_tick_time * 100.0).min(999.9);
-    println!("│   Budget Used: {:.1}% (10ms budget per tick)", budget_percent);
+    // Determine target based on entity count
+    let (target_ms, target_tps) = match metrics.entity_count {
+        0..=150 => (50.0, 10.0),   // 100 entities: 50ms per tick
+        151..=350 => (75.0, 10.0),  // 300 entities: 75ms per tick
+        351..=600 => (100.0, 10.0), // 500 entities: 100ms per tick
+        _ => (150.0, 8.0),          // 700 entities: 150ms per tick (8 TPS)
+    };
 
-    if budget_percent > 100.0 {
-        println!("│   Status: EXCEEDING TARGET (too slow)");
+    let target_tick_us = target_ms * 1000.0;
+    let budget_percent = (avg_tick_time / target_tick_us * 100.0).min(999.9);
+    println!("│   Budget Target: {:.0}ms per tick ({:.1} TPS)", target_ms, target_tps);
+    println!("│   Budget Used: {:.1}%", budget_percent);
+
+    let status = if budget_percent > 100.0 {
+        "⚠️ EXCEEDING TARGET (too slow)"
     } else if budget_percent > 80.0 {
-        println!("│   Status: HIGH (approaching limit)");
+        "⚡ HIGH (approaching limit)"
     } else {
-        println!("│   Status: GOOD (within budget)");
-    }
+        "✅ GOOD (within budget)"
+    };
+    println!("│   Status: {}", status);
 
     println!("│");
     println!("│ TICK TIME DISTRIBUTION:");
     if !metrics.tick_times.is_empty() {
-        println!("│   Min:  {:.2} µs", metrics.tick_times.iter().copied().min().unwrap_or(0) as f64);
-        println!("│   Max:  {:.2} µs", metrics.tick_times.iter().copied().max().unwrap_or(0) as f64);
-        println!("│   Range: {:.2} µs",
-            (metrics.tick_times.iter().copied().max().unwrap_or(0) -
-             metrics.tick_times.iter().copied().min().unwrap_or(0)) as f64);
+        let min_tick = metrics.tick_times.iter().copied().min().unwrap_or(0);
+        let max_tick = metrics.tick_times.iter().copied().max().unwrap_or(0);
+        println!("│   Min:  {:.2} µs ({:.3} ms)", min_tick, min_tick as f64 / 1000.0);
+        println!("│   Max:  {:.2} µs ({:.3} ms)", max_tick, max_tick as f64 / 1000.0);
+        println!("│   Range: {:.2} µs ({:.3} ms)", max_tick - min_tick, (max_tick - min_tick) as f64 / 1000.0);
     }
 
     // Analysis
     println!("│");
     println!("│ ANALYSIS:");
 
-    if tps < 8.0 {
-        println!("│   ⚠️ BOTTLENECK DETECTED: TPS is below target ({:.1})", tps);
+    if tps < target_tps * 0.8 {
+        println!("│   ⚠️ BOTTLENECK DETECTED: TPS is significantly below target ({:.1} vs {:.1})", tps, target_tps);
         println!("│   Recommendation: Run with flamegraph to identify hot paths");
-    } else if tps < 10.0 {
-        println!("│   ⚠️ MARGINAL: TPS slightly below target");
+    } else if tps < target_tps {
+        println!("│   ⚡ MARGINAL: TPS slightly below target ({:.1} vs {:.1})", tps, target_tps);
         println!("│   Recommendation: Monitor hottest systems");
     } else {
-        println!("│   ✅ PASS: Meets target throughput");
+        println!("│   ✅ PASS: Meets target throughput ({:.1} vs {:.1} TPS)", tps, target_tps);
     }
 
     if stddev > avg_tick_time * 0.5 {
-        println!("│   ⚠️ HIGH VARIANCE: Tick times are inconsistent");
-        println!("│   Recommendation: Check for GC pauses or frame drops");
+        println!("│   ⚠️ HIGH VARIANCE: Tick times are inconsistent (σ={:.1}%)",
+                 (stddev / avg_tick_time * 100.0));
+        println!("│   Recommendation: Check for frame drops or scheduling issues");
     } else {
-        println!("│   ✅ STABLE: Consistent tick performance");
+        println!("│   ✅ STABLE: Consistent tick performance (σ={:.1}%)",
+                 (stddev / avg_tick_time * 100.0));
     }
 
-    if p99_tick_time as f64 > target_tick_time * 2.0 {
-        println!("│   ⚠️ OUTLIERS: P99 significantly exceeds average");
+    if p99_tick_time as f64 > target_tick_us * 2.0 {
+        println!("│   ⚠️ OUTLIERS: P99 significantly exceeds target ({:.1}ms vs {:.1}ms)",
+                 p99_tick_time as f64 / 1000.0, target_ms);
         println!("│   Recommendation: Investigate spike causes");
     }
 
     println!("╠════════════════════════════════════════════════════════════════╣");
     println!("│ NEXT STEPS:                                                    │");
-    println!("│ 1. Run with actual simulation: STRESS_TEST_DURATION=120 \\     │");
+    println!("│ 1. Test other entity counts:                                   │");
+    println!("│    STRESS_TEST_CONFIG=config/spawn_config_stress_100.ron \\    │");
     println!("│    cargo run --release --bin stress_test                       │");
-    println!("│ 2. Create stress configs for 100, 200, 300, 400, 500 entities  │");
-    println!("│ 3. Profile with flamegraph (if available):                     │");
-    println!("│    cargo flamegraph --bin stress_test -- 2>/dev/null          │");
-    println!("│ 4. Analyze results in ENTITY_STRESS_TEST_REPORT.md             │");
+    println!("│ 2. Run extended tests: STRESS_TEST_DURATION=120                │");
+    println!("│ 3. Profile with flamegraph:                                    │");
+    println!("│    cargo flamegraph --bin stress_test                          │");
+    println!("│ 4. Compare results across entity counts                        │");
     println!("╚════════════════════════════════════════════════════════════════╝\n");
 }
