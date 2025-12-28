@@ -23,13 +23,11 @@ const HERD_SAFETY_BONUS: f32 = 0.10;
 /// * `actions` - Mutable vector of available actions with utilities
 /// * `leader` - The herd leader entity
 /// * `members` - List of all herd member entities
-/// * `world` - The Bevy World for accessing components
 pub fn apply_herd_safety_bonus(
     _entity: Entity,
     actions: &mut Vec<UtilityScore>,
     _leader: Entity,
     _members: Vec<Entity>,
-    _world: &World,
 ) {
     // Boost graze/rest actions for herbivores in herds
     for action in actions.iter_mut() {

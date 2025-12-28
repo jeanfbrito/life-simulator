@@ -14,33 +14,38 @@ use crate::ai::behaviors::{
 pub fn apply_group_behavior_bonuses(
     entity: Entity,
     actions: &mut Vec<UtilityScore>,
-    world: &World,
+    leader_query: &Query<&PackLeader>,
+    member_query: &Query<&PackMember>,
 ) {
     // Check if entity is in a group
-    let group_info = get_group_info(entity, world);
+    let group_info = get_group_info(entity, leader_query, member_query);
 
     if let Some((group_type, leader, members)) = group_info {
         // Apply species-specific bonuses based on group type
         match group_type {
-            GroupType::Pack => apply_pack_hunting_bonus(entity, actions, leader, members, world),
-            GroupType::Herd => apply_herd_safety_bonus(entity, actions, leader, members, world),
-            GroupType::Warren => apply_warren_defense_bonus(entity, actions, leader, members, world),
-            GroupType::Flock => apply_flock_coordination_bonus(entity, actions, leader, members, world),
+            GroupType::Pack => apply_pack_hunting_bonus(entity, actions, leader, members),
+            GroupType::Herd => apply_herd_safety_bonus(entity, actions, leader, members),
+            GroupType::Warren => apply_warren_defense_bonus(entity, actions, leader, members),
+            GroupType::Flock => apply_flock_coordination_bonus(entity, actions, leader, members),
             _ => {} // Other types not yet implemented
         }
     }
 }
 
 /// Get group info for an entity (if in a group)
-fn get_group_info(entity: Entity, world: &World) -> Option<(GroupType, Entity, Vec<Entity>)> {
+fn get_group_info(
+    entity: Entity,
+    leader_query: &Query<&PackLeader>,
+    member_query: &Query<&PackMember>,
+) -> Option<(GroupType, Entity, Vec<Entity>)> {
     // Check if leader
-    if let Some(leader) = world.get::<PackLeader>(entity) {
+    if let Ok(leader) = leader_query.get(entity) {
         return Some((leader.group_type, entity, leader.members.clone()));
     }
 
     // Check if member
-    if let Some(member) = world.get::<PackMember>(entity) {
-        if let Some(leader_comp) = world.get::<PackLeader>(member.leader) {
+    if let Ok(member) = member_query.get(entity) {
+        if let Ok(leader_comp) = leader_query.get(member.leader) {
             return Some((member.group_type, member.leader, leader_comp.members.clone()));
         }
     }
@@ -55,7 +60,6 @@ fn apply_flock_coordination_bonus(
     _actions: &mut Vec<UtilityScore>,
     _leader: Entity,
     _members: Vec<Entity>,
-    _world: &World,
 ) {
     // TODO: Implement in behaviors/flock_coordination.rs
 }
@@ -72,7 +76,9 @@ mod tests {
 
         let entity = app.world_mut().spawn_empty().id();
 
-        let info = get_group_info(entity, app.world());
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+        let info = get_group_info(entity, &leader_query, &member_query);
         assert!(info.is_none(), "Entity not in group should return None");
     }
 
@@ -90,7 +96,9 @@ mod tests {
             group_type: GroupType::Pack,
         }).id();
 
-        let info = get_group_info(leader, app.world());
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+        let info = get_group_info(leader, &leader_query, &member_query);
         assert!(info.is_some(), "Leader should return group info");
 
         let (group_type, leader_entity, members) = info.unwrap();
@@ -118,7 +126,9 @@ mod tests {
             group_type: GroupType::Pack,
         }).id();
 
-        let info = get_group_info(member, app.world());
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+        let info = get_group_info(member, &leader_query, &member_query);
         assert!(info.is_some(), "Member should return group info");
 
         let (group_type, leader_entity, _members) = info.unwrap();
@@ -137,7 +147,9 @@ mod tests {
             group_type: GroupType::Pack,
         }).id();
 
-        let info = get_group_info(member, app.world());
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+        let info = get_group_info(member, &leader_query, &member_query);
         assert!(info.is_none(), "Orphaned member should return None");
     }
 
@@ -149,8 +161,11 @@ mod tests {
         let entity = app.world_mut().spawn_empty().id();
         let mut actions = vec![];
 
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+
         // Should not crash
-        apply_group_behavior_bonuses(entity, &mut actions, app.world());
+        apply_group_behavior_bonuses(entity, &mut actions, &leader_query, &member_query);
     }
 
     /// RED: Test apply_group_behavior_bonuses calls correct handler
@@ -166,8 +181,11 @@ mod tests {
 
         let mut actions = vec![];
 
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+
         // Should call pack hunting bonus (currently stubbed)
-        apply_group_behavior_bonuses(leader, &mut actions, app.world());
+        apply_group_behavior_bonuses(leader, &mut actions, &leader_query, &member_query);
         // No assertion yet - just testing it doesn't crash
     }
 
@@ -199,9 +217,12 @@ mod tests {
 
         let mut actions = vec![];
 
+        let leader_query = app.world().query::<&PackLeader>();
+        let member_query = app.world().query::<&PackMember>();
+
         // All should run without crashing
-        apply_group_behavior_bonuses(pack_leader, &mut actions, app.world());
-        apply_group_behavior_bonuses(herd_leader, &mut actions, app.world());
-        apply_group_behavior_bonuses(warren_leader, &mut actions, app.world());
+        apply_group_behavior_bonuses(pack_leader, &mut actions, &leader_query, &member_query);
+        apply_group_behavior_bonuses(herd_leader, &mut actions, &leader_query, &member_query);
+        apply_group_behavior_bonuses(warren_leader, &mut actions, &leader_query, &member_query);
     }
 }

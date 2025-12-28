@@ -23,13 +23,11 @@ const WARREN_FLEE_BONUS: f32 = 0.20;
 /// * `actions` - Mutable vector of available actions with utilities
 /// * `leader` - The warren leader entity
 /// * `members` - List of all warren member entities
-/// * `world` - The Bevy World for accessing components
 pub fn apply_warren_defense_bonus(
     _entity: Entity,
     actions: &mut Vec<UtilityScore>,
     _leader: Entity,
     _members: Vec<Entity>,
-    _world: &World,
 ) {
     // Boost movement actions for rabbits in warrens (group alert)
     // This primarily affects Graze actions used for escape/relocation

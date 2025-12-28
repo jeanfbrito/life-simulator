@@ -91,7 +91,6 @@ impl WolfBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
-        world: &World,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_wolf_actions(
             entity,
@@ -105,7 +104,6 @@ impl WolfBehavior {
             carcasses,
             deer,
             vegetation,
-            world,
         )
     }
 }
@@ -135,7 +133,8 @@ pub fn plan_wolf_actions(
     carcasses: Query<(Entity, &TilePosition, &Carcass)>,
     deer_query: Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
-    world: &World,
+    leader_query: Query<&crate::entities::PackLeader>,
+    member_query: Query<&crate::entities::PackMember>,
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
@@ -147,7 +146,7 @@ pub fn plan_wolf_actions(
         &wolves,
         &wolf_positions,
         |entity, position, thirst, hunger, energy, behavior, fear_state| {
-            WolfBehavior::evaluate_actions(
+            let mut actions = WolfBehavior::evaluate_actions(
                 entity,
                 position,
                 thirst,
@@ -159,8 +158,13 @@ pub fn plan_wolf_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
-                world,
-            )
+            );
+
+            // PACK TACTICS: Apply generic group-aware coordination bonuses
+            use crate::ai::apply_group_behavior_bonuses;
+            apply_group_behavior_bonuses(entity, &mut actions, &leader_query, &member_query);
+
+            actions
         },
         None,
         None,

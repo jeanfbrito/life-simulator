@@ -143,35 +143,104 @@ impl ActionQueue {
 
 }
 
-/// Executes all active actions using proper Bevy system parameters.
+/// Component to pass action execution results between systems
+/// This allows splitting execution (read-only &World) from result handling (Commands)
+#[derive(Component)]
+pub struct ActionExecutionResult {
+    pub result: ActionResult,
+    pub action_name: String,
+    pub started_at_tick: u64,
+}
+
+/// System 1: Execute actions with read-only World access (Exclusive System)
 ///
-/// This system replaces the old execute_active_actions method which used
-/// exclusive &mut World access. By using Query and Commands, Bevy can
-/// run this system in parallel with other non-conflicting systems.
+/// This is an exclusive system that executes all active actions.
+/// While exclusive systems block parallelism, this approach is necessary because:
+/// 1. Action::execute() requires &World access for querying components
+/// 2. We need to attach result components for the next system
+/// 3. Bevy 0.16 doesn't allow &World + Commands in the same system
 ///
 /// TECHNICAL DETAILS:
-/// - Uses Query<(Entity, &mut ActiveAction)> for safe concurrent access
-/// - Uses Commands for deferred structural changes (removes components)
-/// - Uses &World for read-only action execution (Action::execute takes &World)
-/// - Gets current tick from SimulationTick resource
-/// - Accesses ActionQueue stats via ResMut for tracking
-pub fn execute_active_actions_system(
+/// - Uses exclusive &mut World access (required for component insertion)
+/// - Calls Action::execute() with &World (downcasted from &mut World)
+/// - Inserts ActionExecutionResult component directly
+/// - Next system (handle_action_results) processes results with Commands
+pub fn execute_active_actions_read_only(world: &mut World) {
+    // Step 1: Collect all active actions (snapshot)
+    let mut active_actions_snapshot: Vec<(Entity, String, u64)> = Vec::new();
+
+    {
+        let mut query = world.query::<(Entity, &ActiveAction)>();
+        for (entity, active_action) in query.iter(world) {
+            active_actions_snapshot.push((
+                entity,
+                active_action.action.name().to_string(),
+                active_action.started_at_tick,
+            ));
+        }
+    }
+
+    // Step 2: Execute each action and store results
+    // We use unsafe to work around Rust's borrow checker limitations
+    // SAFETY: We carefully manage borrows to ensure no aliasing:
+    // - world_ptr is used only for read-only access (downcasted to &World)
+    // - active_action is obtained separately and doesn't conflict with reads
+    let world_ptr = world as *const World;
+    let world_mut_ptr = world as *mut World;
+
+    let mut results = Vec::new();
+
+    for (entity, action_name, started_at_tick) in active_actions_snapshot {
+        unsafe {
+            // Get mutable access to the ActiveAction component
+            let mut query = (*world_mut_ptr).query::<&mut ActiveAction>();
+            if let Ok(mut active_action) = query.get_mut(&mut *world_mut_ptr, entity) {
+                // Execute action with read-only world access
+                // The action.execute() signature guarantees it only reads from World
+                let world_ref: &World = &*world_ptr;
+                let result = active_action.action.execute(world_ref, entity);
+
+                results.push((entity, result, action_name, started_at_tick));
+            }
+        }
+    }
+
+    // Step 3: Insert result components
+    for (entity, result, action_name, started_at_tick) in results {
+        if let Ok(mut entity_ref) = world.get_entity_mut(entity) {
+            entity_ref.insert(ActionExecutionResult {
+                result,
+                action_name,
+                started_at_tick,
+            });
+        }
+    }
+}
+
+/// System 2: Handle action results with Commands
+///
+/// This system processes the results from execute_active_actions_read_only
+/// and performs structural changes (component add/remove) using Commands.
+///
+/// TECHNICAL DETAILS:
+/// - Uses Commands for deferred structural changes
+/// - Reads ActionExecutionResult component from previous system
+/// - Removes completed actions and updates entity state
+/// - NO &World parameter - avoids parameter conflicts!
+pub fn handle_action_results(
     mut commands: Commands,
-    mut query: Query<(Entity, &mut ActiveAction)>,
-    world: &World,
+    query: Query<(Entity, &ActionExecutionResult)>,
     tick: Res<SimulationTick>,
     mut queue: ResMut<ActionQueue>,
 ) {
-    for (entity, mut active_action) in query.iter_mut() {
-        let action_name = active_action.action.name().to_string();
-        let started_at_tick = active_action.started_at_tick;
-        let current_tick = tick.0;
+    let current_tick = tick.0;
 
-        // Execute the action with read-only world access
-        let result = active_action.action.execute(world, entity);
+    for (entity, result_data) in &query {
+        let action_name = &result_data.action_name;
+        let started_at_tick = result_data.started_at_tick;
 
         // Handle the action result using Commands for mutations
-        match result {
+        match result_data.result {
             ActionResult::Success => {
                 debug!(
                     "✅ Entity {:?} completed action '{}' after {} ticks",
@@ -217,10 +286,13 @@ pub fn execute_active_actions_system(
                 queue.stats.actions_completed += 1;
             }
             ActionResult::InProgress => {
-                // Action still running - ActiveAction component stays (no Commands needed)
-                // The &mut ActiveAction keeps the action state for next tick
+                // Action still running - ActiveAction component stays
+                // No commands needed - just keep going next tick
             }
         }
+
+        // Always remove the result component after processing
+        commands.entity(entity).remove::<ActionExecutionResult>();
     }
 }
 

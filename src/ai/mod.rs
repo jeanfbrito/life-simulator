@@ -64,7 +64,7 @@ pub use debug_collectables::CollectableDebugPlugin;
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
-pub use queue::{ActionQueue, QueuedAction, execute_active_actions_system};
+pub use queue::{ActionQueue, QueuedAction, execute_active_actions_read_only, handle_action_results, ActionExecutionResult};
 pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
 pub use system_params::PlanningResources;
 pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
@@ -104,13 +104,22 @@ impl Plugin for TQUAIPlugin {
             )
             // === ACTION EXECUTION PHASE ===
             // Tick-synced action execution (must run after Planning, before Movement)
-            //             .add_systems(
-            //                 Update,
-            //             // TEMP FIX:                 execute_active_actions_system
-            //                     .in_set(SimulationSet::ActionExecution)
-            //                     .before(execute_queued_actions)
-            //                     .run_if(should_tick),
-            //             )
+            // Split into two systems to avoid &World + Commands parameter conflict:
+            // 1. execute_active_actions_read_only: Execute actions with &World (parallelizable)
+            // 2. handle_action_results: Handle results with Commands (mutations)
+            // 3. execute_queued_actions: Process pending action queue
+            .add_systems(
+                Update,
+                (
+                    execute_active_actions_read_only,
+                    apply_deferred, // CRITICAL: flush commands between systems
+                    handle_action_results,
+                )
+                    .chain()
+                    .in_set(SimulationSet::ActionExecution)
+                    .before(execute_queued_actions)
+                    .run_if(should_tick),
+            )
             .add_systems(
                 Update,
                 execute_queued_actions

@@ -149,7 +149,8 @@ pub fn plan_rabbit_actions(
     predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
     resources: PlanningResources,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
-    world: &World,
+    leader_query: Query<&crate::entities::PackLeader>,
+    member_query: Query<&crate::entities::PackMember>,
 ) {
     let loader = resources.world_loader.as_ref();
 
@@ -187,7 +188,7 @@ pub fn plan_rabbit_actions(
 
             // WARREN DEFENSE: Apply generic group-aware coordination bonuses
             use crate::ai::apply_group_behavior_bonuses;
-            apply_group_behavior_bonuses(entity, &mut actions, world);
+            apply_group_behavior_bonuses(entity, &mut actions, &leader_query, &member_query);
 
             actions
         },
