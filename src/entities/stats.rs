@@ -7,7 +7,7 @@
 /// - Thresholds (critical/low/normal) trigger AI decisions
 use bevy::prelude::*;
 
-use crate::entities::{Carcass, Creature, SpeciesNeeds, TilePosition};
+use crate::entities::{Carcass, Creature, CurrentAction, MovementComponent, SpeciesNeeds, TilePosition};
 
 // ============================================================================
 // STAT COMPONENTS
@@ -156,7 +156,19 @@ impl Thirst {
     }
 }
 
-/// Energy stat - depletes during activity, regenerates during rest
+/// Energy stat - depletes during movement, regenerates when stationary
+///
+/// Movement-based energy model:
+/// - Moving (has MoveOrder): -0.05/tick (walking cost)
+/// - Stationary (no MoveOrder): +0.05/tick (passive recovery)
+/// - Resting: +0.35/tick (fast regeneration)
+/// - Fleeing: -0.15/tick (sprinting cost)
+///
+/// This model means:
+/// - Walking to a destination drains energy (regardless of action type)
+/// - Standing still during any action recovers energy slowly
+/// - Rest action gives fast regeneration
+/// - Energy cost is tied to MOVEMENT, not action
 ///
 /// Phase 4: Required Components
 /// Energy automatically requires Creature - compile-time guarantee.
@@ -164,11 +176,22 @@ impl Thirst {
 #[require(crate::entities::Creature)]
 pub struct Energy(pub Stat);
 
+/// Energy drain rates for movement states
+pub const ENERGY_RATE_STATIONARY: f32 = 0.05;  // Passive regen when not moving
+pub const ENERGY_RATE_MOVING: f32 = -0.05;     // Walking cost
+pub const ENERGY_RATE_FLEEING: f32 = -0.15;    // Sprinting cost (3x)
+pub const ENERGY_RATE_REST: f32 = 0.35;        // Rest action regeneration
+
+// Legacy aliases for backwards compatibility
+pub const ENERGY_RATE_IDLE: f32 = ENERGY_RATE_STATIONARY;
+pub const ENERGY_RATE_LIGHT: f32 = ENERGY_RATE_MOVING;
+pub const ENERGY_RATE_MEDIUM: f32 = -0.10;     // Hunt/follow (2x)
+pub const ENERGY_RATE_HIGH: f32 = ENERGY_RATE_FLEEING;
+
 impl Energy {
     pub fn new() -> Self {
-        // Starts at 100 (full energy), min 0, decreases by 0.05 per tick
-        // At 10 TPS, fully depleted in ~33 minutes
-        Self(Stat::new(100.0, 0.0, 100.0, -0.05))
+        // Starts at 100 (full energy), min 0, stationary regeneration by default
+        Self(Stat::new(100.0, 0.0, 100.0, ENERGY_RATE_STATIONARY))
     }
 
     /// Get tiredness urgency for utility AI (0.0 = full energy, 1.0 = exhausted)
@@ -177,14 +200,87 @@ impl Energy {
         self.0.normalized_inverted()
     }
 
-    /// Set to resting rate (faster regen)
-    pub fn set_resting(&mut self) {
-        self.0.rate_per_tick = 0.35; // Faster regen while resting (sleep-like)
+    // ========================================================================
+    // MOVEMENT-BASED ENERGY RATE METHODS
+    // ========================================================================
+
+    /// Set rate for stationary state (passive regeneration)
+    /// Called when entity is NOT moving (no MoveOrder component)
+    pub fn set_stationary(&mut self) {
+        self.0.rate_per_tick = ENERGY_RATE_STATIONARY;
     }
 
-    /// Set to active rate (slower decay)
+    /// Set rate for moving state (walking energy cost)
+    /// Called when entity IS moving (has MoveOrder component)
+    pub fn set_moving(&mut self) {
+        self.0.rate_per_tick = ENERGY_RATE_MOVING;
+    }
+
+    /// Set rate for fleeing state (sprinting energy cost)
+    /// Called when entity is fleeing (Flee action + moving)
+    pub fn set_fleeing(&mut self) {
+        self.0.rate_per_tick = ENERGY_RATE_FLEEING;
+    }
+
+    /// Set rate for resting state (fast regeneration)
+    /// Called when entity is doing Rest action
+    pub fn set_resting(&mut self) {
+        self.0.rate_per_tick = ENERGY_RATE_REST;
+    }
+
+    /// Set energy rate based on movement state and current action
+    /// This is the main method called by the movement-energy system each tick
+    pub fn set_rate_for_movement_state(&mut self, is_moving: bool, action_name: Option<&str>) {
+        self.0.rate_per_tick = match (is_moving, action_name) {
+            // Resting always gives regeneration (even if somehow moving)
+            (_, Some("Rest")) => ENERGY_RATE_REST,
+            // Fleeing while moving = sprinting cost
+            (true, Some("Flee")) => ENERGY_RATE_FLEEING,
+            // Any other movement = walking cost
+            (true, _) => ENERGY_RATE_MOVING,
+            // Stationary = passive recovery
+            (false, _) => ENERGY_RATE_STATIONARY,
+        };
+    }
+
+    // ========================================================================
+    // LEGACY METHODS (backwards compatibility)
+    // ========================================================================
+
+    /// Set to idle rate (alias for stationary)
+    pub fn set_idle(&mut self) {
+        self.set_stationary();
+    }
+
+    /// Set to active rate (alias for moving)
     pub fn set_active(&mut self) {
-        self.0.rate_per_tick = -0.05; // Decay while active
+        self.set_moving();
+    }
+
+    /// Set to light activity rate (alias for moving)
+    pub fn set_light_activity(&mut self) {
+        self.set_moving();
+    }
+
+    /// Set to medium activity rate (hunt, follow)
+    pub fn set_medium_activity(&mut self) {
+        self.0.rate_per_tick = ENERGY_RATE_MEDIUM;
+    }
+
+    /// Set to high activity rate (alias for fleeing)
+    pub fn set_high_activity(&mut self) {
+        self.set_fleeing();
+    }
+
+    /// Set energy rate based on action name (legacy - use set_rate_for_movement_state)
+    #[deprecated(note = "Use set_rate_for_movement_state instead")]
+    pub fn set_rate_for_action(&mut self, action_name: &str) {
+        self.0.rate_per_tick = match action_name {
+            "Rest" => ENERGY_RATE_REST,
+            "Flee" => ENERGY_RATE_HIGH,
+            "Hunt" | "Follow" | "Chase" => ENERGY_RATE_MEDIUM,
+            _ => ENERGY_RATE_LIGHT,
+        };
     }
 }
 
@@ -279,6 +375,34 @@ impl Default for EntityStatsBundle {
 // ============================================================================
 // SYSTEMS (TICK-SYNCED)
 // ============================================================================
+
+/// Update energy rate based on movement state
+/// MUST run BEFORE tick_stats_system so the rate is set before being applied
+///
+/// Movement-based energy model:
+/// - Moving (MovementComponent::FollowingPath): drains energy at walking rate
+/// - Stationary (Idle/PathRequested/Stuck/None): regenerates energy slowly
+/// - Resting: regenerates energy fast
+/// - Fleeing while moving: drains energy at sprinting rate
+pub fn movement_energy_system(
+    mut query: Query<(
+        Entity,
+        &mut Energy,
+        Option<&MovementComponent>,
+        Option<&CurrentAction>,
+    )>,
+) {
+    for (_entity, mut energy, movement_component, current_action) in query.iter_mut() {
+        // Check if entity is actively moving (FollowingPath state)
+        // MovementState::Idle or MovementState::PathRequested = not actually moving yet
+        let is_moving = movement_component
+            .map(|mc| mc.is_following_path())
+            .unwrap_or(false);
+        let action_name = current_action.map(|ca| ca.action_name.as_str());
+
+        energy.set_rate_for_movement_state(is_moving, action_name);
+    }
+}
 
 /// Update all stats by their tick rates
 /// MUST run in Update schedule with `run_if(should_run_tick_systems)` guard (tick-synced at 10 TPS)

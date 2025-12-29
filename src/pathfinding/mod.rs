@@ -88,7 +88,7 @@ pub fn process_pathfinding_queue(
             request.to,
             &grid,
             false, // No diagonal movement
-            Some(1000), // Max steps to prevent infinite loops
+            Some(5000), // Max steps for long paths (wander_radius up to 50 tiles)
         );
 
         // Insert appropriate component based on result

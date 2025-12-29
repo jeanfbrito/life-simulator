@@ -1,10 +1,11 @@
+use super::ai_bundle::AIEntityBundle;
 use super::types::bear::BearBehavior;
 use super::types::deer::DeerBehavior;
 use super::types::fox::FoxBehavior;
 use super::types::rabbit::RabbitBehavior;
 use super::types::raccoon::RaccoonBehavior;
 use super::types::wolf::WolfBehavior;
-use super::{Creature, CurrentAction, EntityStatsBundle, FearState, MovementSpeed, TilePosition};
+use super::{Creature, EntityStatsBundle, FearState, MovementSpeed, TilePosition};
 use crate::pathfinding::PathfindingGrid;
 /// Modular entity types system
 ///
@@ -68,7 +69,7 @@ impl EntityTemplate {
     pub const HUMAN: EntityTemplate = EntityTemplate {
         name_prefix: "Person",
         species: "Human",
-        movement_speed: 30, // 3 seconds per tile at 10 TPS (comfortable walking)
+        movement_speed: 60, // 6 seconds per tile at 10 TPS (comfortable walking)
         wander_radius: 30,
         emoji: "🧍‍♂️",
     };
@@ -77,7 +78,7 @@ impl EntityTemplate {
     pub const RABBIT: EntityTemplate = EntityTemplate {
         name_prefix: "Rabbit",
         species: "Rabbit",
-        movement_speed: 20, // 2 seconds per tile at 10 TPS (faster than humans)
+        movement_speed: 40, // 4 seconds per tile at 10 TPS
         wander_radius: 15,  // Smaller territory
         emoji: "🐇",
     };
@@ -86,7 +87,7 @@ impl EntityTemplate {
     pub const DEER: EntityTemplate = EntityTemplate {
         name_prefix: "Deer",
         species: "Deer",
-        movement_speed: 10, // 1.0 tiles/sec at 10 TPS
+        movement_speed: 20, // 2 seconds per tile at 10 TPS
         wander_radius: 40,  // Large territory
         emoji: "🦌",
     };
@@ -95,7 +96,7 @@ impl EntityTemplate {
     pub const RACCOON: EntityTemplate = EntityTemplate {
         name_prefix: "Raccoon",
         species: "Raccoon",
-        movement_speed: 16,
+        movement_speed: 32, // 3.2 seconds per tile
         wander_radius: 25,
         emoji: "🦝",
     };
@@ -104,7 +105,7 @@ impl EntityTemplate {
     pub const BEAR: EntityTemplate = EntityTemplate {
         name_prefix: "Bear",
         species: "Bear",
-        movement_speed: 12,
+        movement_speed: 24, // 2.4 seconds per tile
         wander_radius: 80,
         emoji: "🐻",
     };
@@ -113,7 +114,7 @@ impl EntityTemplate {
     pub const FOX: EntityTemplate = EntityTemplate {
         name_prefix: "Fox",
         species: "Fox",
-        movement_speed: 12,
+        movement_speed: 24, // 2.4 seconds per tile
         wander_radius: 40,
         emoji: "🦊",
     };
@@ -122,7 +123,7 @@ impl EntityTemplate {
     pub const WOLF: EntityTemplate = EntityTemplate {
         name_prefix: "Wolf",
         species: "Wolf",
-        movement_speed: 12,
+        movement_speed: 24, // 2.4 seconds per tile
         wander_radius: 200,
         emoji: "🐺",
     };
@@ -146,6 +147,7 @@ pub fn spawn_human(commands: &mut Commands, name: impl Into<String>, position: I
             TilePosition::from_tile(position),
             MovementSpeed::custom(template.movement_speed),
             EntityStatsBundle::default(),
+            AIEntityBundle::default(), // AI tracker components for trigger systems
             // NO Wanderer component - movement driven by utility AI!
         ))
         .id()
@@ -185,7 +187,7 @@ pub fn spawn_rabbit(commands: &mut Commands, name: impl Into<String>, position: 
                 }, // spawn as adult
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(), // Track current action for viewer
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
                                   // NO Wanderer component - movement driven by utility AI!
@@ -231,7 +233,7 @@ pub fn spawn_deer(commands: &mut Commands, name: impl Into<String>, position: IV
                 }, // spawn as adult
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(), // Track current action for viewer
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
             ))
@@ -274,7 +276,7 @@ pub fn spawn_raccoon(commands: &mut Commands, name: impl Into<String>, position:
                 },
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(),
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
                 FearState::new(), // Initialize fear state for predator detection
             ))
@@ -316,7 +318,7 @@ pub fn spawn_bear(commands: &mut Commands, name: impl Into<String>, position: IV
                 },
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(),
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
             ))
             .id();
@@ -357,7 +359,7 @@ pub fn spawn_fox(commands: &mut Commands, name: impl Into<String>, position: IVe
                 },
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(),
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
             ))
             .id();
@@ -399,7 +401,7 @@ pub fn spawn_wolf(commands: &mut Commands, name: impl Into<String>, position: IV
                 },
                 ReproductionCooldown::default(),
                 WellFedStreak::default(),
-                CurrentAction::none(),
+                AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
                 cfg,
                 GroupFormationConfig::wolf_pack(), // Enable generic group formation
             ))

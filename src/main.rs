@@ -158,16 +158,21 @@ fn setup(mut commands: Commands, mut pathfinding_grid: ResMut<PathfindingGrid>) 
                 u32::MAX
             };
 
-            // Check if there's a resource blocking this tile
-            let has_resource = world_loader
+            // Check if there's a BLOCKING resource on this tile (Trees and Rocks only)
+            // Bushes, Flowers, and Shrubs do NOT block movement
+            let has_blocking_resource = world_loader
                 .get_resource_at(x, y)
-                .map(|r| !r.is_empty())
+                .and_then(|r| {
+                    use crate::resources::{ResourceType, ResourceCategory};
+                    ResourceType::from_str(&r).and_then(|rt| rt.get_category())
+                })
+                .map(|cat| matches!(cat, crate::resources::ResourceCategory::Tree | crate::resources::ResourceCategory::Rock))
                 .unwrap_or(false);
 
-            // If terrain is passable but has resource, make it impassable
-            let final_cost = if has_resource && terrain_cost != u32::MAX {
+            // If terrain is passable but has blocking resource, make it impassable
+            let final_cost = if has_blocking_resource && terrain_cost != u32::MAX {
                 tiles_blocked += 1;
-                u32::MAX // Resources block movement
+                u32::MAX // Trees and Rocks block movement
             } else {
                 terrain_cost
             };

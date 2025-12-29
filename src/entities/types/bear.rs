@@ -131,6 +131,7 @@ pub fn plan_bear_actions(
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
+            Option<&crate::ai::failure_memory::ActionFailureMemory>,
         ),
         With<Bear>,
     >,

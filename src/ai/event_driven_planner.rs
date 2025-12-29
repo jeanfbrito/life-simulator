@@ -196,6 +196,9 @@ impl Plugin for EventDrivenPlannerPlugin {
         // All event-driven planner systems now run on Update schedule with tick guards
         // to ensure they only execute during simulation ticks (10 TPS)
         // Previously used FixedUpdate which runs at ~64Hz independently
+        // FIX: Removed resource_exists conditions that were blocking the entire chain
+        // The ultrathink_system and planners need to run to process ThinkQueue
+        // Resource availability is handled by the individual systems via Option<Res<...>>
         app.add_systems(
             Update,
             (
@@ -213,9 +216,7 @@ impl Plugin for EventDrivenPlannerPlugin {
                 cleanup_replanning_markers,
             )
                 .chain()
-                .run_if(crate::ai::should_tick)
-                .run_if(resource_exists::<crate::world_loader::WorldLoader>)
-                .run_if(resource_exists::<crate::vegetation::ResourceGrid>),
+                .run_if(crate::ai::should_tick),
         );
     }
 }

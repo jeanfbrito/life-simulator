@@ -11,7 +11,9 @@ pub mod behaviors;
 pub mod collectables;
 pub mod consideration;
 pub mod debug_collectables;
+pub mod entity_validator;
 pub mod event_driven_planner;
+pub mod failure_memory;
 pub mod group_cohesion;
 pub mod group_coordination;
 pub mod group_formation;
@@ -28,6 +30,10 @@ pub mod system_params;
 pub mod test_collectable_pipeline;
 pub mod trigger_emitters;
 pub mod ultrathink;
+pub mod watchdog;
+
+#[cfg(test)]
+pub mod lifecycle_tests;
 
 pub use action::{
     create_action, Action, ActionRequest, ActionResult, ActionType, DrinkWaterAction, GrazeAction,
@@ -65,11 +71,18 @@ pub use debug_collectables::CollectableDebugPlugin;
 pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
-pub use queue::{ActionQueue, QueuedAction, execute_active_actions_read_only, handle_action_results, ActionExecutionResult};
+pub use queue::{
+    ActionQueue, QueuedAction, execute_active_actions_read_only, handle_action_results,
+    ActionExecutionResult, handle_action_failure_with_replan, handle_action_failure_exclusive,
+    handle_precondition_failure_exclusive,
+};
+pub use failure_memory::{ActionFailureMemory, apply_failure_penalties, action_type_to_string, action_type_to_base_name};
 pub use replan_queue::{ReplanPriority, ReplanQueue, ReplanRequest};
 pub use system_params::PlanningResources;
 pub use trigger_emitters::{IdleTracker, StatThresholdTracker, TriggerEmittersPlugin};
 pub use ultrathink::{ThinkQueue, ThinkRequest, ThinkReason, ThinkPriority, UltraThinkPlugin};
+pub use entity_validator::{EntityValidatorPlugin, EntityValidationMetrics};
+pub use watchdog::{WatchdogPlugin, WatchdogConfig, WatchdogMetrics, WatchdogHistory, InterventionLevel};
 pub use group_formation::generic_group_formation_system;
 pub use group_cohesion::{generic_group_cohesion_system, process_member_removals};
 pub use group_coordination::apply_group_behavior_bonuses;
@@ -88,21 +101,16 @@ impl Plugin for TQUAIPlugin {
             .init_resource::<ActionQueue>()
             .init_resource::<ReplanQueue>()
             // Plugins
+            // IMPORTANT: UltraThinkPlugin MUST come before EventDrivenPlannerPlugin
+            // because ultrathink_system (registered in EventDrivenPlannerPlugin)
+            // requires ThinkQueue resource (created by UltraThinkPlugin)
+            .add_plugins(UltraThinkPlugin::default())
             .add_plugins(TriggerEmittersPlugin)
             .add_plugins(EventDrivenPlannerPlugin)
-            .add_plugins(UltraThinkPlugin::default())
-            // === GROUP DYNAMICS PHASE ===
-            // Generic group formation and cohesion for all species
-            .add_systems(
-                Update,
-                (
-                    generic_group_formation_system,
-                    generic_group_cohesion_system,
-                    process_member_removals,
-                )
-                    .in_set(SimulationSet::Planning) // Before action planning
-                    .run_if(should_tick),
-            )
+            .add_plugins(EntityValidatorPlugin)
+            .add_plugins(WatchdogPlugin)
+            // NOTE: Group dynamics systems (generic_group_formation_system, etc.) are
+            // registered in EntitiesPlugin to avoid duplicate execution.
             // === ACTION EXECUTION PHASE ===
             // Tick-synced action execution (must run after Planning, before Movement)
             // Split into multiple systems to avoid &World + Commands parameter conflict:

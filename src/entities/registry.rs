@@ -6,9 +6,10 @@
 use bevy::prelude::*;
 use rand::Rng;
 
+use super::ai_bundle::AIEntityBundle;
 use super::{Bear, Deer, Fox, Herbivore, Human, Rabbit, Raccoon, Wolf};
 use crate::entities::reproduction::{Age, ReproductionCooldown, Sex, WellFedStreak};
-use crate::entities::{Creature, CurrentAction, EntityStatsBundle, MovementSpeed, TilePosition};
+use crate::entities::{Creature, EntityStatsBundle, MovementSpeed, TilePosition};
 use crate::pathfinding::PathfindingGrid;
 
 // ============================================================================
@@ -224,7 +225,7 @@ fn spawn_human_registry(commands: &mut Commands, name: String, position: IVec2) 
             TilePosition::from_tile(position),
             MovementSpeed::custom(descriptor.movement_speed),
             EntityStatsBundle::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
         ))
         .id()
 }
@@ -263,7 +264,7 @@ fn spawn_rabbit_registry(commands: &mut Commands, name: String, position: IVec2)
             }, // spawn as adult
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()
@@ -303,7 +304,7 @@ fn spawn_deer_registry(commands: &mut Commands, name: String, position: IVec2) -
             }, // spawn as adult
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()
@@ -343,7 +344,7 @@ fn spawn_raccoon_registry(commands: &mut Commands, name: String, position: IVec2
             },
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()
@@ -384,7 +385,7 @@ fn spawn_bear_registry(commands: &mut Commands, name: String, position: IVec2) -
             },
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()
@@ -425,7 +426,7 @@ fn spawn_fox_registry(commands: &mut Commands, name: String, position: IVec2) ->
             },
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()
@@ -464,7 +465,7 @@ fn spawn_wolf_registry(commands: &mut Commands, name: String, position: IVec2) -
             },
             ReproductionCooldown::default(),
             WellFedStreak::default(),
-            CurrentAction::none(),
+            AIEntityBundle::default(), // AI tracker components (CurrentAction, IdleTracker, StatThresholdTracker)
             cfg,
         ))
         .id()

@@ -34,7 +34,6 @@ pub enum SimulationSet {
 
     /// Stats phase: Update entity statistics
     /// - tick_stats_system (hunger, thirst, energy decay)
-    /// - auto_eat_system (consume vegetation)
     /// - Can run in parallel
     Stats,
 

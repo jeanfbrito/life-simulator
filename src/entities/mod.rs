@@ -1,5 +1,5 @@
 pub mod active_action;
-pub mod auto_eat;
+pub mod ai_bundle;
 pub mod birth_relationships;
 pub mod cached_state;
 pub mod carcass;
@@ -47,8 +47,9 @@ pub use spatial_cell::{
 pub use entity_tracker::{get_entities_json, init_entity_tracker, sync_entities_to_tracker};
 
 pub use stats::{
-    death_system, get_most_urgent_need, tick_stats_system, utility_drink, utility_eat,
-    utility_heal, utility_rest, Energy, EntityStatsBundle, Health, Hunger, Stat, Thirst,
+    death_system, get_most_urgent_need, movement_energy_system, tick_stats_system,
+    utility_drink, utility_eat, utility_heal, utility_rest, Energy, EntityStatsBundle, Health,
+    Hunger, Stat, Thirst,
 };
 
 pub use cached_state::{CachedEntityState, update_cached_entity_state_system};
@@ -155,6 +156,7 @@ pub use types::wolf::{plan_wolf_actions, wolf_birth_system, wolf_mate_matching_s
 pub use types::{BehaviorConfig, SpeciesNeeds};
 
 pub use active_action::ActiveAction;
+pub use ai_bundle::AIEntityBundle;
 pub use current_action::CurrentAction;
 
 pub use spawn_config::{
@@ -219,16 +221,14 @@ impl Plugin for EntitiesPlugin {
                 ),
             )
             // === PLANNING PHASE ===
-            // All species planning systems run in parallel
+            // NOTE: Species planners (plan_rabbit_actions, plan_deer_actions, etc.) are
+            // registered in EventDrivenPlannerPlugin where they run AFTER ultrathink_system
+            // in a proper chain. Do NOT register them here to avoid duplicate execution.
+            //
+            // The group formation/cohesion systems still run here in SimulationSet::Planning
             .add_systems(
                 Update,
                 (
-                    plan_rabbit_actions,
-                    plan_deer_actions,
-                    plan_raccoon_actions,
-                    plan_bear_actions,
-                    plan_fox_actions,
-                    plan_wolf_actions,
                     // Generic group formation systems (work for all species with GroupFormationConfig)
                     crate::ai::generic_group_formation_system,
                     crate::ai::generic_group_cohesion_system,
@@ -250,13 +250,14 @@ impl Plugin for EntitiesPlugin {
                     .run_if(should_run_tick_systems),
             )
             // === STATS PHASE ===
-            // Stats systems run in parallel
+            // Movement energy must run first to set rate before tick applies it
             .add_systems(
                 Update,
                 (
-                    stats::tick_stats_system, // Hunger, thirst, energy decay
-                    auto_eat::auto_eat_system, // Auto-eat when on grass
+                    stats::movement_energy_system, // Set energy rate based on movement
+                    stats::tick_stats_system,      // Apply hunger, thirst, energy decay
                 )
+                    .chain() // movement_energy_system MUST run before tick_stats_system
                     .in_set(SimulationSet::Stats)
                     .after(SimulationSet::Movement)
                     .run_if(should_run_tick_systems),

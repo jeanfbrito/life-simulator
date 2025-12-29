@@ -21,6 +21,7 @@ pub enum ThinkReason {
     HungerCritical,
     ThirstCritical,
     Threatened,
+    WatchdogIntervention,
 
     // Normal - can wait a few ticks
     HungerModerate,
@@ -43,7 +44,8 @@ impl ThinkReason {
             ThinkReason::FearTriggered
             | ThinkReason::HungerCritical
             | ThinkReason::ThirstCritical
-            | ThinkReason::Threatened => ThinkPriority::Urgent,
+            | ThinkReason::Threatened
+            | ThinkReason::WatchdogIntervention => ThinkPriority::Urgent,
 
             ThinkReason::HungerModerate
             | ThinkReason::ThirstModerate
@@ -66,6 +68,7 @@ impl fmt::Display for ThinkReason {
             ThinkReason::HungerCritical => write!(f, "HungerCritical"),
             ThinkReason::ThirstCritical => write!(f, "ThirstCritical"),
             ThinkReason::Threatened => write!(f, "Threatened"),
+            ThinkReason::WatchdogIntervention => write!(f, "WatchdogIntervention"),
             ThinkReason::HungerModerate => write!(f, "HungerModerate"),
             ThinkReason::ThirstModerate => write!(f, "ThirstModerate"),
             ThinkReason::ActionCompleted => write!(f, "ActionCompleted"),

@@ -134,6 +134,70 @@ This linter catches `&World` + `Commands` conflicts automatically and runs in CI
 
 ---
 
+## 🔴 Entity Component Dependencies (CRITICAL)
+
+### Required Components for AI Entities
+
+Every entity that participates in AI must have ALL of these components:
+
+| Component | Purpose | Added By |
+|-----------|---------|----------|
+| `BehaviorConfig` | Thresholds for hunger/thirst/energy | Species spawn function |
+| `IdleTracker` | Tracks idle time for replanning | `AIEntityBundle` or `initialize_new_entity_trackers` |
+| `StatThresholdTracker` | Edge detection for stat triggers | `AIEntityBundle` or `stat_threshold_system` |
+| `CurrentAction` | Current action state | `AIEntityBundle` or spawn function |
+| `Hunger`, `Thirst`, `Energy` | Core stats | `EntityStatsBundle` |
+
+### Use AIEntityBundle for Spawning
+
+```rust
+// ✅ CORRECT - Use AIEntityBundle
+fn spawn_creature(commands: &mut Commands, config: BehaviorConfig) {
+    commands.spawn((
+        CreatureBundle::new(...),
+        AIEntityBundle::new(config, tick, hunger, thirst, energy),
+    ));
+}
+
+// ❌ WRONG - Manual components (easy to forget one!)
+fn spawn_creature(commands: &mut Commands) {
+    commands.spawn((
+        Creature { ... },
+        BehaviorConfig::default(),
+        // MISSING: IdleTracker, StatThresholdTracker - entity will be broken!
+    ));
+}
+```
+
+### Never Silently Skip Entities
+
+```rust
+// ❌ WRONG - Silent failure
+if let Ok(tracker) = query.get(entity) {
+    // Process...
+}
+// Entity without tracker silently skipped!
+
+// ✅ CORRECT - Loud failure
+match query.get(entity) {
+    Ok(tracker) => { /* process */ }
+    Err(_) => {
+        error!("🚨 Entity {:?} missing required component!", entity);
+    }
+}
+```
+
+### Entity Validator System
+
+The `EntityValidatorPlugin` runs every 50 ticks and:
+1. Auto-fixes entities missing `IdleTracker` or `StatThresholdTracker`
+2. Logs warnings for broken entities
+3. Detects stuck entities (high hunger but idle)
+
+This is a **safety net** - entities should be spawned correctly, but validator catches mistakes.
+
+---
+
 ## 📋 Project Status
 - **Core Systems**: ✅ ECS-based simulation with AI, vegetation, and predator-prey dynamics
 - **Web Viewer**: ✅ Interactive HTML/JS viewer with real-time entity tracking

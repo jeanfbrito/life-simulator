@@ -18,6 +18,152 @@ use crate::entities::{ActiveAction, CurrentAction};
 use crate::simulation::SimulationTick;
 use crate::types::newtypes::Utility;
 
+// ============================================================================
+// DWARF FORTRESS STYLE: "Failed = Replan" System Invariant
+// ============================================================================
+//
+// This is a SYSTEM-LEVEL INVARIANT: Any action that returns Failed MUST trigger
+// a replan. This prevents entities from getting stuck when actions fail.
+//
+// The helper functions below enforce this invariant. ALL failure handling code
+// MUST use these helpers instead of manually inserting NeedsReplanning.
+// ============================================================================
+
+/// Handle action failure with automatic replan (Dwarf Fortress style)
+///
+/// INVARIANT: Failed actions ALWAYS trigger replan. No exceptions.
+///
+/// This is the ONLY function that should handle ActionResult::Failed.
+/// Using this ensures consistent behavior across all code paths.
+///
+/// Note: This version uses Commands and requires the current tick to record failure memory.
+/// The failure memory prevents immediate retries of the same failed action.
+pub fn handle_action_failure_with_replan(
+    commands: &mut Commands,
+    entity: Entity,
+    action_name: &str,
+    current_tick: u64,
+) {
+    warn!(
+        "❌ Entity {:?} failed action '{}', forcing replan",
+        entity, action_name
+    );
+
+    // Clear current action state
+    commands.entity(entity).remove::<ActiveAction>();
+    commands.entity(entity).insert(CurrentAction::none());
+
+    // INVARIANT: Failed = Replan (Dwarf Fortress style)
+    commands.entity(entity).insert(crate::ai::event_driven_planner::NeedsReplanning {
+        reason: format!("Action '{}' failed - automatic replan", action_name),
+    });
+
+    // Record failure in memory (prevents immediate retry - Dwarf Fortress style cooldown)
+    // Note: We create a fresh ActionFailureMemory since we can't query existing one with Commands.
+    // The planner will merge with existing memory if present.
+    let mut memory = crate::ai::failure_memory::ActionFailureMemory::default();
+    memory.record_failure(action_name, current_tick);
+    commands.entity(entity).insert(memory);
+}
+
+/// Handle precondition failure (action can't even start)
+///
+/// Same invariant: Failed = Replan
+pub fn handle_precondition_failure_exclusive(
+    world: &mut World,
+    entity: Entity,
+    action_name: &str,
+) {
+    // Get current tick for failure memory
+    let current_tick = world
+        .get_resource::<SimulationTick>()
+        .map(|t| t.0)
+        .unwrap_or(0);
+
+    warn!(
+        "⚠️ Entity {:?} cannot execute '{}' - preconditions failed, forcing replan",
+        entity, action_name
+    );
+
+    if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+        entity_mut.insert(CurrentAction::none());
+
+        // INVARIANT: Failed = Replan (Dwarf Fortress style)
+        entity_mut.insert(crate::ai::event_driven_planner::NeedsReplanning {
+            reason: format!("Action '{}' failed preconditions - automatic replan", action_name),
+        });
+
+        // Record failure in memory (prevents immediate retry)
+        if let Some(mut memory) = entity_mut.get_mut::<crate::ai::failure_memory::ActionFailureMemory>() {
+            memory.record_failure(action_name, current_tick);
+        } else {
+            // Add ActionFailureMemory if missing
+            let mut memory = crate::ai::failure_memory::ActionFailureMemory::default();
+            memory.record_failure(action_name, current_tick);
+            entity_mut.insert(memory);
+        }
+
+        // Reset trigger flags so they can fire again
+        if let Some(mut tracker) = entity_mut.get_mut::<crate::ai::trigger_emitters::StatThresholdTracker>() {
+            tracker.hunger_triggered = false;
+            tracker.thirst_triggered = false;
+            tracker.energy_triggered = false;
+        }
+    }
+}
+
+/// Handle action failure in exclusive world access context
+///
+/// Same invariant as handle_action_failure_with_replan but for &mut World access
+pub fn handle_action_failure_exclusive(
+    world: &mut World,
+    entity: Entity,
+    action_name: &str,
+) {
+    // Get current tick for failure memory
+    let current_tick = world
+        .get_resource::<SimulationTick>()
+        .map(|t| t.0)
+        .unwrap_or(0);
+
+    warn!(
+        "❌ Entity {:?} failed action '{}', forcing replan",
+        entity, action_name
+    );
+
+    if let Ok(mut entity_mut) = world.get_entity_mut(entity) {
+        entity_mut.remove::<ActiveAction>();
+        entity_mut.insert(CurrentAction::none());
+
+        // INVARIANT: Failed = Replan (Dwarf Fortress style)
+        entity_mut.insert(crate::ai::event_driven_planner::NeedsReplanning {
+            reason: format!("Action '{}' failed - automatic replan", action_name),
+        });
+
+        // Record failure in memory (prevents immediate retry)
+        if let Some(mut memory) = entity_mut.get_mut::<crate::ai::failure_memory::ActionFailureMemory>() {
+            memory.record_failure(action_name, current_tick);
+        } else {
+            // Add ActionFailureMemory if missing
+            let mut memory = crate::ai::failure_memory::ActionFailureMemory::default();
+            memory.record_failure(action_name, current_tick);
+            entity_mut.insert(memory);
+        }
+
+        // Reset trigger flags so they can fire again
+        if let Some(mut tracker) = entity_mut.get_mut::<crate::ai::trigger_emitters::StatThresholdTracker>() {
+            tracker.hunger_triggered = false;
+            tracker.thirst_triggered = false;
+            tracker.energy_triggered = false;
+        }
+    } else {
+        warn!(
+            "Entity {:?} disappeared after failing action '{}'",
+            entity, action_name
+        );
+    }
+}
+
 /// A queued action waiting to be executed
 pub struct QueuedAction {
     pub entity: Entity,
@@ -145,7 +291,7 @@ impl ActionQueue {
 
 /// Component to pass action execution results between systems
 /// This allows splitting execution (read-only &World) from result handling (Commands)
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct ActionExecutionResult {
     pub result: ActionResult,
     pub action_name: String,
@@ -201,6 +347,11 @@ pub fn execute_active_actions_read_only(world: &mut World) {
                 let result = active_action.action.execute(world_ref, entity);
 
                 results.push((entity, result, action_name, started_at_tick));
+            } else {
+                warn!(
+                    "Entity {:?} was in active_actions_snapshot but ActiveAction component no longer exists (action: '{}')",
+                    entity, action_name
+                );
             }
         }
     }
@@ -210,9 +361,14 @@ pub fn execute_active_actions_read_only(world: &mut World) {
         if let Ok(mut entity_ref) = world.get_entity_mut(entity) {
             entity_ref.insert(ActionExecutionResult {
                 result,
-                action_name,
+                action_name: action_name.clone(),
                 started_at_tick,
             });
+        } else {
+            warn!(
+                "Entity {:?} no longer exists when inserting ActionExecutionResult (action: '{}', result: {:?})",
+                entity, action_name, result
+            );
         }
     }
 }
@@ -226,29 +382,122 @@ pub fn execute_active_actions_read_only(world: &mut World) {
 /// - Uses Commands for deferred structural changes
 /// - Reads ActionExecutionResult component from previous system
 /// - Removes completed actions and updates entity state
+/// - Updates stats (Hunger, Thirst) when actions complete successfully
 /// - NO &World parameter - avoids parameter conflicts!
 pub fn handle_action_results(
     mut commands: Commands,
-    query: Query<(Entity, &ActionExecutionResult)>,
+    mut query: Query<(
+        Entity,
+        &ActionExecutionResult,
+        Option<&mut crate::entities::Hunger>,
+        Option<&mut crate::entities::Thirst>,
+        Option<&mut crate::entities::Energy>,
+        Option<&crate::entities::TilePosition>,
+    )>,
     tick: Res<SimulationTick>,
     mut queue: ResMut<ActionQueue>,
+    mut resource_grid: ResMut<crate::vegetation::resource_grid::ResourceGrid>,
 ) {
     let current_tick = tick.0;
 
-    for (entity, result_data) in &query {
+    for (entity, result_data, hunger_opt, thirst_opt, energy_opt, position_opt) in &mut query {
         let action_name = &result_data.action_name;
         let started_at_tick = result_data.started_at_tick;
 
         // Handle the action result using Commands for mutations
         match result_data.result {
             ActionResult::Success => {
-                debug!(
-                    "✅ Entity {:?} completed action '{}' after {} ticks",
-                    entity,
-                    action_name,
-                    current_tick - started_at_tick
-                );
-                // Clear current action and remove ActiveAction component
+                // BEFORE removing action, apply stat updates based on action type
+                match action_name.as_str() {
+                    "Graze" => {
+                        if let Some(mut hunger) = hunger_opt {
+                            // Reduce hunger when grazing completes
+                            let amount = 25.0; // Standard herbivore eating amount
+                            hunger.0.change(-amount);
+
+                            info!(
+                                "🌾 Entity {:?} completed grazing! Hunger reduced by {:.1} (now: {:.1}%)",
+                                entity, amount, hunger.0.percentage()
+                            );
+
+                            // Consume biomass from ResourceGrid
+                            if let Some(pos) = position_opt {
+                                if let Some(cell) = resource_grid.get_cell_mut(pos.tile) {
+                                    let consumed = 10.0f32.min(cell.total_biomass);
+                                    cell.total_biomass -= consumed;
+                                    debug!(
+                                        "🌱 Consumed {:.1} biomass from tile {:?} (remaining: {:.1})",
+                                        consumed, pos.tile, cell.total_biomass
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    "DrinkWater" => {
+                        if let Some(mut thirst) = thirst_opt {
+                            // Reduce thirst when drinking completes
+                            let amount = 30.0; // Standard drink amount
+                            thirst.0.change(-amount);
+
+                            info!(
+                                "💧 Entity {:?} completed drinking! Thirst reduced by {:.1} (now: {:.1}%)",
+                                entity, amount, thirst.0.percentage()
+                            );
+                        }
+                    }
+
+                    "Scavenge" => {
+                        if let Some(mut hunger) = hunger_opt {
+                            // Reduce hunger when scavenging completes
+                            let amount = 20.0;
+                            hunger.0.change(-amount);
+
+                            info!(
+                                "🦝 Entity {:?} completed scavenging! Hunger reduced by {:.1} (now: {:.1}%)",
+                                entity, amount, hunger.0.percentage()
+                            );
+                        }
+                    }
+
+                    "Hunt" => {
+                        if let Some(mut hunger) = hunger_opt {
+                            // Reduce hunger when hunt completes (killed prey)
+                            let amount = 40.0; // Larger meal from hunting
+                            hunger.0.change(-amount);
+
+                            info!(
+                                "🦊 Entity {:?} completed hunt! Hunger reduced by {:.1} (now: {:.1}%)",
+                                entity, amount, hunger.0.percentage()
+                            );
+                        }
+                    }
+
+                    "Rest" => {
+                        // Small completion bonus (main energy came from regeneration during rest)
+                        // NOTE: Energy rate is handled by movement_energy_system
+                        if let Some(mut energy) = energy_opt {
+                            let bonus = 10.0;
+                            energy.0.change(bonus);
+                            info!(
+                                "😴 Entity {:?} completed resting! Completion bonus +{:.1} (now: {:.1}%)",
+                                entity, bonus, energy.0.percentage()
+                            );
+                        }
+                    }
+
+                    _ => {
+                        // NOTE: Energy rate is handled by movement_energy_system
+                        debug!(
+                            "✅ Entity {:?} completed action '{}' after {} ticks",
+                            entity,
+                            action_name,
+                            current_tick - started_at_tick
+                        );
+                    }
+                }
+
+                // Now remove action and mark as completed (existing code)
                 commands.entity(entity).remove::<ActiveAction>();
                 commands.entity(entity).insert(CurrentAction::none());
 
@@ -257,20 +506,18 @@ pub fn handle_action_results(
                 queue.stats.actions_completed += 1;
             }
             ActionResult::Failed => {
-                warn!(
-                    "❌ Entity {:?} failed action '{}'",
-                    entity,
-                    action_name
-                );
-                // Clear current action and remove ActiveAction component
-                commands.entity(entity).remove::<ActiveAction>();
-                commands.entity(entity).insert(CurrentAction::none());
+                // NOTE: Energy rate is handled by movement_energy_system
+
+                // Use centralized failure handler (Dwarf Fortress invariant: Failed = Replan)
+                handle_action_failure_with_replan(&mut commands, entity, action_name, current_tick);
 
                 // Track failed action for trigger system
                 queue.recently_completed.push((entity, current_tick));
                 queue.stats.actions_failed += 1;
             }
             ActionResult::TriggerFollowUp => {
+                // NOTE: Energy rate is handled by movement_energy_system
+
                 debug!(
                     "🔄 Entity {:?} completed action '{}' with follow-up needed after {} ticks",
                     entity,
@@ -310,26 +557,38 @@ impl ActionQueue {
         while let Some(mut queued) = self.pending.pop() {
             // Skip if entity already executed an action this tick
             if executed_this_tick.contains(&queued.entity) {
+                debug!(
+                    "Entity {:?} already executed action this tick, skipping pending action '{}'",
+                    queued.entity,
+                    queued.action.name()
+                );
                 continue;
             }
 
             // Skip if entity already has an active action (check component)
             if let Ok(entity_ref) = world.get_entity(queued.entity) {
                 if entity_ref.contains::<ActiveAction>() {
+                    debug!(
+                        "Entity {:?} already has ActiveAction component, skipping pending action '{}'",
+                        queued.entity,
+                        queued.action.name()
+                    );
                     continue;
                 }
             } else {
                 // Entity doesn't exist
+                warn!(
+                    "Entity {:?} no longer exists, skipping pending action '{}'",
+                    queued.entity,
+                    queued.action.name()
+                );
                 continue;
             }
 
             // Verify action can still be executed
             if !queued.action.can_execute(world, queued.entity) {
-                debug!(
-                    "⚠️ Entity {:?} cannot execute '{}' - preconditions failed",
-                    queued.entity,
-                    queued.action.name()
-                );
+                // Use centralized handler (Dwarf Fortress invariant: Failed = Replan)
+                handle_precondition_failure_exclusive(world, queued.entity, queued.action.name());
                 self.stats.actions_failed += 1;
                 continue;
             }
@@ -342,6 +601,12 @@ impl ActionQueue {
             let action_name = queued.action.name().to_string();
             if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                 entity_mut.insert(CurrentAction::new(action_name.clone()));
+            } else {
+                warn!(
+                    "Entity {:?} disappeared before setting CurrentAction for '{}'",
+                    queued.entity, action_name
+                );
+                continue;
             }
 
             match result {
@@ -354,21 +619,20 @@ impl ActionQueue {
                     // Clear current action
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(CurrentAction::none());
+                    } else {
+                        warn!(
+                            "Entity {:?} disappeared after completing action '{}'",
+                            queued.entity, action_name
+                        );
                     }
                     // Track instant completion for trigger system
                     self.recently_completed.push((queued.entity, tick));
                     self.stats.actions_completed += 1;
                 }
                 ActionResult::Failed => {
-                    warn!(
-                        "❌ Entity {:?} failed action '{}'",
-                        queued.entity,
-                        queued.action.name()
-                    );
-                    // Clear current action
-                    if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
-                        entity_mut.insert(CurrentAction::none());
-                    }
+                    // Use centralized failure handler (Dwarf Fortress invariant: Failed = Replan)
+                    handle_action_failure_exclusive(world, queued.entity, &action_name);
+
                     // Track failed action for trigger system
                     self.recently_completed.push((queued.entity, tick));
                     self.stats.actions_failed += 1;
@@ -382,6 +646,11 @@ impl ActionQueue {
                     // Clear current action to allow AI to plan next action
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(CurrentAction::none());
+                    } else {
+                        warn!(
+                            "Entity {:?} disappeared after action '{}' triggered follow-up",
+                            queued.entity, action_name
+                        );
                     }
                     // Track follow-up completion for trigger system
                     self.recently_completed.push((queued.entity, tick));
@@ -394,8 +663,18 @@ impl ActionQueue {
                         queued.entity,
                         queued.action.name()
                     );
+
+                    // NOTE: Energy rate is now handled by movement_energy_system based on MoveOrder presence
+                    // This ensures energy drains during movement, not based on action type
+
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(ActiveAction::new(queued.action, tick));
+                    } else {
+                        warn!(
+                            "Entity {:?} disappeared before starting multi-tick action '{}'",
+                            queued.entity, action_name
+                        );
+                        self.stats.actions_failed += 1;
                     }
                 }
                 ActionResult::NeedsPathfinding { .. } => {
@@ -408,6 +687,12 @@ impl ActionQueue {
                     );
                     if let Ok(mut entity_mut) = world.get_entity_mut(queued.entity) {
                         entity_mut.insert(ActiveAction::new(queued.action, tick));
+                    } else {
+                        warn!(
+                            "Entity {:?} disappeared before pathfinding could start for action '{}'",
+                            queued.entity, action_name
+                        );
+                        self.stats.actions_failed += 1;
                     }
                 }
             }
@@ -498,6 +783,8 @@ impl ActionQueue {
                     action_name,
                     entity
                 );
+
+                // NOTE: Energy rate is handled by movement_energy_system
 
                 // Call the action's cancel method for cleanup
                 active_action.action.cancel(world, entity);

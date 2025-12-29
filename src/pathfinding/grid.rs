@@ -664,14 +664,14 @@ pub fn build_pathfinding_grid_from_world(
         // For now, create a basic walkable grid
         let chunk_x = chunk_iter.chunk_x;
         let chunk_y = chunk_iter.chunk_y;
-        
+
         // Set basic costs for the chunk area
         for local_x in 0..16 {
             for local_y in 0..16 {
                 let world_x = chunk_x * 16 + local_x;
                 let world_y = chunk_y * 16 + local_y;
                 let pos = IVec2::new(world_x, world_y);
-                
+
                 // For now, assume all tiles are walkable with cost 1
                 // This would need terrain data for proper pathfinding
                 grid.set_cost(pos, 1);

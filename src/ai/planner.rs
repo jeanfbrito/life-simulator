@@ -90,6 +90,8 @@ fn apply_emergency_priority_override(
 ///
 /// Species modules call this to evaluate actions, add mating/follow intents, and queue
 /// the best result above the global utility threshold.
+///
+/// Includes failure memory to prevent infinite retry loops (Dwarf Fortress style).
 pub fn plan_species_actions<M: Component>(
     commands: &mut Commands,
     queue: &mut ActionQueue,
@@ -107,6 +109,7 @@ pub fn plan_species_actions<M: Component>(
             Option<&ReproductionConfig>,
             Option<&crate::entities::FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
+            Option<&crate::ai::failure_memory::ActionFailureMemory>,
         ),
         With<M>,
     >,
@@ -147,6 +150,7 @@ pub fn plan_species_actions<M: Component>(
         repro_cfg,
         fear_state,
         needs_replan,
+        failure_memory,
     ) in query.iter()
     {
         let needs_replanning = needs_replan.is_some();
@@ -154,6 +158,8 @@ pub fn plan_species_actions<M: Component>(
         // CRITICAL: Only plan if entity has been marked for replanning by UltraThink or triggers
         // This ensures UltraThink budget controls planning frequency
         if !needs_replanning {
+            // Expected behavior: entities without NeedsReplanning are intentionally skipped
+            // This is NOT a failure - it's budget-controlled planning
             continue;
         }
 
@@ -208,6 +214,10 @@ pub fn plan_species_actions<M: Component>(
             );
 
             if mother.is_some() && !followed && mother_position.is_none() {
+                warn!(
+                    "{} {} {:?} - Mother entity no longer exists in position lookup, removing Mother component",
+                    emoji, label, entity
+                );
                 commands.entity(entity).remove::<Mother>();
             }
         }
@@ -234,6 +244,11 @@ pub fn plan_species_actions<M: Component>(
 
         // Apply emergency priority overrides BEFORE selecting best action
         apply_emergency_priority_override(&mut actions, hunger, thirst, energy);
+
+        // Apply failure cooldown penalties (Dwarf Fortress style: penalize recently failed actions)
+        if let Some(memory) = failure_memory {
+            crate::ai::failure_memory::apply_failure_penalties(&mut actions, memory, tick);
+        }
 
         if let Some(best_action) = actions
             .into_iter()
