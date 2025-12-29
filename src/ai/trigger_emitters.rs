@@ -112,21 +112,36 @@ pub fn stat_threshold_system(
         &Energy,
         &BehaviorConfig,
         Option<&mut StatThresholdTracker>,
+        Option<&crate::entities::Creature>,
     )>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<TickProfiler>,
 ) {
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_stats");
 
-    for (entity, hunger, thirst, energy, behavior_config, tracker_opt) in query.iter_mut() {
+    // DEBUG: Log entity count and queue state every 100 ticks
+    if tick.0 % 100 == 0 {
+        let entity_count = query.iter().count();
+        info!(
+            "🔍 TRIGGER_DEBUG [tick {}]: {} entities in query, ThinkQueue: {} pending",
+            tick.0, entity_count, think_queue.total_queued()
+        );
+    }
+
+    for (entity, hunger, thirst, energy, behavior_config, tracker_opt, creature_opt) in query.iter_mut() {
         let current_hunger = hunger.0.normalized();
         let current_thirst = thirst.0.normalized();
         let current_energy = energy.0.normalized();
+        let name = creature_opt.map(|c| c.name.as_str()).unwrap_or("Unknown");
 
         // Initialize tracker if missing
         let mut tracker = if let Some(tracker) = tracker_opt {
             tracker
         } else {
+            info!(
+                "🔍 TRIGGER_DEBUG: {} - Creating new StatThresholdTracker (H:{:.1}% T:{:.1}% E:{:.1}%)",
+                name, current_hunger * 100.0, current_thirst * 100.0, current_energy * 100.0
+            );
             commands.entity(entity).insert(StatThresholdTracker::new(
                 current_hunger,
                 current_thirst,
@@ -134,6 +149,17 @@ pub fn stat_threshold_system(
             ));
             continue;
         };
+
+        // DEBUG: Log detailed state every 50 ticks for critical entities
+        if tick.0 % 50 == 0 && (current_hunger >= 0.80 || current_energy <= 0.10) {
+            info!(
+                "🔍 TRIGGER_DEBUG: {} @ tick {} | H:{:.1}% T:{:.1}% E:{:.1}% | flags: h={} t={} e={} | threshold: {:.1}%",
+                name, tick.0,
+                current_hunger * 100.0, current_thirst * 100.0, current_energy * 100.0,
+                tracker.hunger_triggered, tracker.thirst_triggered, tracker.energy_triggered,
+                behavior_config.hunger_threshold * 100.0
+            );
+        }
 
         let mut needs_replan = false;
         let mut reason = String::new();
@@ -148,18 +174,26 @@ pub fn stat_threshold_system(
                 current_hunger * 100.0,
                 hunger_threshold * 100.0
             );
+            info!(
+                "🚨 TRIGGER_FIRED: {} - Hunger triggered! H:{:.1}% >= threshold {:.1}%",
+                name, current_hunger * 100.0, hunger_threshold * 100.0
+            );
 
             // ThinkQueue scheduling based on severity
-            if current_hunger >= 80.0 {
+            if current_hunger >= 0.80 {
                 // Critical hunger (>= 80%)
                 debug!("🧠 ThinkQueue: Scheduling URGENT for critical hunger: {:.1}%", current_hunger * 100.0);
                 think_queue.schedule_urgent(entity, ThinkReason::HungerCritical, tick.0);
-            } else if current_hunger >= 50.0 {
+            } else if current_hunger >= 0.50 {
                 // Moderate hunger (50-79%)
                 debug!("🧠 ThinkQueue: Scheduling NORMAL for moderate hunger: {:.1}%", current_hunger * 100.0);
                 think_queue.schedule_normal(entity, ThinkReason::HungerModerate, tick.0);
             }
-        } else if current_hunger < hunger_threshold {
+        } else if current_hunger < hunger_threshold && tracker.hunger_triggered {
+            info!(
+                "🔄 TRIGGER_RESET: {} - Hunger flag reset (H:{:.1}% < threshold {:.1}%)",
+                name, current_hunger * 100.0, hunger_threshold * 100.0
+            );
             tracker.hunger_triggered = false; // Reset when below threshold
         }
 
@@ -175,11 +209,11 @@ pub fn stat_threshold_system(
             );
 
             // ThinkQueue scheduling based on severity
-            if current_thirst >= 80.0 {
+            if current_thirst >= 0.80 {
                 // Critical thirst (>= 80%)
                 debug!("🧠 ThinkQueue: Scheduling URGENT for critical thirst: {:.1}%", current_thirst * 100.0);
                 think_queue.schedule_urgent(entity, ThinkReason::ThirstCritical, tick.0);
-            } else if current_thirst >= 50.0 {
+            } else if current_thirst >= 0.50 {
                 // Moderate thirst (50-79%)
                 debug!("🧠 ThinkQueue: Scheduling NORMAL for moderate thirst: {:.1}%", current_thirst * 100.0);
                 think_queue.schedule_normal(entity, ThinkReason::ThirstModerate, tick.0);
@@ -200,14 +234,18 @@ pub fn stat_threshold_system(
             );
 
             // ThinkQueue: Low energy is moderate priority
-            if current_energy <= 20.0 {
+            if current_energy <= 0.20 {
                 debug!("🧠 ThinkQueue: Scheduling URGENT for critical energy: {:.1}%", current_energy * 100.0);
                 think_queue.schedule_urgent(entity, ThinkReason::HungerCritical, tick.0);
             } else {
                 debug!("🧠 ThinkQueue: Scheduling NORMAL for low energy: {:.1}%", current_energy * 100.0);
                 think_queue.schedule_normal(entity, ThinkReason::HungerModerate, tick.0);
             }
-        } else if current_energy > energy_threshold {
+        } else if current_energy > energy_threshold && tracker.energy_triggered {
+            info!(
+                "🔄 TRIGGER_RESET: {} - Energy flag reset (E:{:.1}% > threshold {:.1}%)",
+                name, current_energy * 100.0, energy_threshold * 100.0
+            );
             tracker.energy_triggered = false; // Reset when above threshold
         }
 
@@ -264,6 +302,11 @@ pub fn fear_trigger_system(
             // Reset idle timer when fear triggered
             if let Some(ref mut idle) = idle_tracker {
                 idle.mark_action_completed(tick.0);
+            } else {
+                warn!(
+                    "Entity {:?} has FearState but no IdleTracker - cannot reset idle timer on fear trigger",
+                    entity
+                );
             }
         }
     }
@@ -277,32 +320,47 @@ pub fn action_completion_system(
     mut replan_queue: ResMut<ReplanQueue>,
     mut think_queue: ResMut<ThinkQueue>,
     mut action_queue: ResMut<ActionQueue>,
-    mut query: Query<(Entity, &mut IdleTracker)>,
+    mut query: Query<(Entity, Option<&mut IdleTracker>)>,
     tick: Res<SimulationTick>,
     mut profiler: ResMut<TickProfiler>,
 ) {
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_actions");
-    // Get entities that just completed actions from the queue
+    // Get entities that just completed/failed actions from the queue
     let recently_completed = action_queue.get_recently_completed(tick.0 - 1);
 
     for entity in recently_completed {
-        if let Ok((_, mut idle_tracker)) = query.get_mut(entity) {
-            idle_tracker.mark_action_completed(tick.0);
+        // Always trigger replanning for completed/failed actions
+        info!(
+            "✅ Entity {:?} action completed/failed, triggering replanning",
+            entity
+        );
+        replan_queue.push(
+            entity,
+            ReplanPriority::Normal,
+            "Action completed/failed".to_string(),
+            tick.0,
+        );
 
-            debug!(
-                "✅ Entity {:?} action completed, triggering replanning",
-                entity
-            );
-            replan_queue.push(
-                entity,
-                ReplanPriority::Normal,
-                "Action completed".to_string(),
-                tick.0,
-            );
+        // ThinkQueue: Action completion is NORMAL priority
+        think_queue.schedule_normal(entity, ThinkReason::ActionCompleted, tick.0);
 
-            // ThinkQueue: Action completion is NORMAL priority
-            debug!("🧠 ThinkQueue: Scheduling NORMAL for action completion");
-            think_queue.schedule_normal(entity, ThinkReason::ActionCompleted, tick.0);
+        // Update IdleTracker if present
+        match query.get_mut(entity) {
+            Ok((_, Some(mut idle_tracker))) => {
+                idle_tracker.mark_action_completed(tick.0);
+            }
+            Ok((_, None)) => {
+                warn!(
+                    "Entity {:?} completed action but has no IdleTracker component - cannot update idle state",
+                    entity
+                );
+            }
+            Err(_) => {
+                warn!(
+                    "Entity {:?} from recently_completed no longer exists in query",
+                    entity
+                );
+            }
         }
     }
 }
@@ -413,9 +471,15 @@ pub struct TriggerEmittersPlugin;
 
 impl Plugin for TriggerEmittersPlugin {
     fn build(&self, app: &mut App) {
+        // TICK-SYNCHRONIZED SYSTEMS
+        // All trigger emitter systems now run on Update schedule with tick guards
+        // to ensure they only execute during simulation ticks (10 TPS)
+        // Previously used FixedUpdate which runs at ~64Hz independently
         app.add_systems(
-            FixedUpdate,
+            Update,
             (
+                // First: Initialize trackers for new entities
+                initialize_new_entity_trackers,
                 // High priority systems (run first)
                 fear_trigger_system,
                 // Normal priority systems
@@ -430,12 +494,12 @@ impl Plugin for TriggerEmittersPlugin {
                 .run_if(crate::ai::should_tick),
         );
 
-        // Initialize trackers for existing entities
+        // Initialize trackers for existing entities at startup
         app.add_systems(Startup, initialize_trackers);
     }
 }
 
-/// System to initialize tracking components for existing entities
+/// System to initialize tracking components for existing entities (runs at startup)
 fn initialize_trackers(
     mut commands: Commands,
     tick: Res<SimulationTick>,
@@ -453,6 +517,33 @@ fn initialize_trackers(
         commands.entity(entity).insert(IdleTracker::new(tick.0));
 
         debug!("🔧 Initialized trigger trackers for entity {:?}", entity);
+    }
+}
+
+/// System to initialize trackers for newly spawned entities (runs each tick)
+fn initialize_new_entity_trackers(
+    mut commands: Commands,
+    tick: Res<SimulationTick>,
+    new_entities: Query<
+        (Entity, &Hunger, &Thirst, &Energy),
+        (With<BehaviorConfig>, Without<IdleTracker>),
+    >,
+) {
+    for (entity, hunger, thirst, energy) in new_entities.iter() {
+        // Initialize stat threshold tracker if missing
+        commands.entity(entity).insert(StatThresholdTracker::new(
+            hunger.0.normalized(),
+            thirst.0.normalized(),
+            energy.0.normalized(),
+        ));
+
+        // Initialize idle tracker
+        commands.entity(entity).insert(IdleTracker::new(tick.0));
+
+        info!(
+            "🔧 Initialized trigger trackers for new entity {:?} at tick {}",
+            entity, tick.0
+        );
     }
 }
 

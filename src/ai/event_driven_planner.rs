@@ -109,8 +109,8 @@ pub fn event_driven_planner_system(
         let can_replan = query.get(entity).is_ok();
 
         if !can_replan {
-            debug!(
-                "🚫 Entity {:?} no longer has required components, skipping replan: {}",
+            warn!(
+                "🚫 Entity {:?} no longer has required components (BehaviorConfig, Hunger, Thirst, Energy), skipping replan: {}",
                 entity, reason
             );
             continue;
@@ -192,9 +192,17 @@ pub struct EventDrivenPlannerPlugin;
 
 impl Plugin for EventDrivenPlannerPlugin {
     fn build(&self, app: &mut App) {
+        // TICK-SYNCHRONIZED SYSTEMS
+        // All event-driven planner systems now run on Update schedule with tick guards
+        // to ensure they only execute during simulation ticks (10 TPS)
+        // Previously used FixedUpdate which runs at ~64Hz independently
         app.add_systems(
-            FixedUpdate,
+            Update,
             (
+                // FIX #2: ultrathink_system runs FIRST in chain to ensure NeedsReplanning
+                // components are added BEFORE species planners run, preventing race condition
+                // where cleanup_replanning_markers could run after ultrathink but before planners
+                crate::ai::ultrathink::ultrathink_system,
                 event_driven_planner_system,
                 crate::entities::types::rabbit::plan_rabbit_actions,
                 crate::entities::types::deer::plan_deer_actions,

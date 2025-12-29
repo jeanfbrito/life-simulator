@@ -292,8 +292,9 @@ pub fn log_tick_metrics(
 ///
 /// Usage:
 /// ```rust
-/// .add_systems(FixedUpdate, my_system.run_if(every_n_ticks(10)))
+/// .add_systems(Update, my_system.run_if(should_run_tick_systems).run_if(every_n_ticks(10)))
 /// ```
+/// Note: Should be combined with `should_run_tick_systems` to ensure it only runs during simulation ticks
 pub fn every_n_ticks(n: u64) -> impl Fn(Res<SimulationTick>) -> bool + Clone {
     move |tick: Res<SimulationTick>| tick.0 % n == 0
 }

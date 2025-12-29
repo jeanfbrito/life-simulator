@@ -1384,24 +1384,48 @@ impl Plugin for VegetationPlugin {
                 PostStartup,
                 setup_vegetation_system.run_if(resource_exists::<WorldLoader>),
             )
+            // TICK-SYNCHRONIZED SYSTEMS
+            // All vegetation systems now run on Update schedule with tick guards
+            // to ensure they only execute during simulation ticks (10 TPS)
             // Phase 3: ResourceGrid event loop with tick budget
-            .add_systems(FixedUpdate, resource_grid_update_system)
-            // Phase 4: Chunk LOD systems
-            .add_systems(FixedUpdate, chunk_lod_update_system)
             .add_systems(
-                FixedUpdate,
-                chunk_lod_aggregation_system.run_if(every_n_ticks(20)),
-            ) // Every 2 seconds
+                Update,
+                resource_grid_update_system.run_if(should_run_tick_systems),
+            )
+            // Phase 4: Chunk LOD systems
+            .add_systems(
+                Update,
+                chunk_lod_update_system.run_if(should_run_tick_systems),
+            )
+            .add_systems(
+                Update,
+                chunk_lod_aggregation_system
+                    .run_if(should_run_tick_systems)
+                    .run_if(every_n_ticks(20)),
+            ) // Every 2 seconds at 10 TPS
             // Phase 5: Heatmap refresh management
-            .add_systems(FixedUpdate, heatmap_refresh_management_system)
+            .add_systems(
+                Update,
+                heatmap_refresh_management_system.run_if(should_run_tick_systems),
+            )
             // Vegetation spatial grid maintenance
-            .add_systems(FixedUpdate, spatial_maintenance::maintain_vegetation_spatial_grid)
+            .add_systems(
+                Update,
+                spatial_maintenance::maintain_vegetation_spatial_grid.run_if(should_run_tick_systems),
+            )
             // Phase 6: Global heatmap snapshot updates for web API
             .add_systems(
-                FixedUpdate,
-                update_global_heatmap_snapshot_system.run_if(every_n_ticks(100)),
-            ); // Every 10 seconds
+                Update,
+                update_global_heatmap_snapshot_system
+                    .run_if(should_run_tick_systems)
+                    .run_if(every_n_ticks(100)),
+            ); // Every 10 seconds at 10 TPS
     }
+}
+
+/// Run condition for tick-synchronized systems
+fn should_run_tick_systems(state: Res<crate::simulation::SimulationState>) -> bool {
+    state.should_tick
 }
 
 /// System condition: run every N ticks

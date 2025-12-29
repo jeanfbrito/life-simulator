@@ -259,14 +259,25 @@ pub struct FearPlugin;
 
 impl Plugin for FearPlugin {
     fn build(&self, app: &mut App) {
+        // TICK-SYNCHRONIZED SYSTEMS
+        // Fear systems now run on Update schedule with tick guards
+        // to ensure they only execute during simulation ticks (10 TPS)
+        // Previously used FixedUpdate which runs at ~64Hz independently
         app.add_systems(
-            FixedUpdate,
-            (predator_proximity_system, fear_speed_system).chain(),
+            Update,
+            (predator_proximity_system, fear_speed_system)
+                .chain()
+                .run_if(should_run_tick_systems),
         );
 
         // Initialize fear states for all existing herbivores
         app.add_systems(Startup, initialize_fear_states);
     }
+}
+
+/// Run condition for tick-synchronized systems
+fn should_run_tick_systems(state: Res<crate::simulation::SimulationState>) -> bool {
+    state.should_tick
 }
 
 /// System to initialize fear states for existing herbivores

@@ -335,15 +335,42 @@ pub fn get_position(entity: Entity, query: &Query<&TilePosition>) -> Option<IVec
 // MOVEMENT COMPONENT SYSTEM (Phase 3 - ECS Architecture Improvement)
 // ============================================================================
 
+/// Tracks movement timing for MovementComponent-based movement
+#[derive(Component, Debug, Default)]
+pub struct MovementTick {
+    /// Ticks since last movement
+    pub ticks_since_move: u32,
+}
+
 /// System: Execute movement using MovementComponent
 /// This system processes entities with MovementComponent and moves them along their path
-/// Uses Rc::clone for cheap path reference sharing (Phase 3: Clone Reduction)
+/// Respects MovementSpeed.ticks_per_move for proper speed control
 pub fn execute_movement_component(
-    mut query: Query<(Entity, &mut TilePosition, &mut super::MovementComponent)>,
+    mut query: Query<(
+        Entity,
+        &mut TilePosition,
+        &mut super::MovementComponent,
+        &MovementSpeed,
+        Option<&mut MovementTick>,
+    )>,
     mut commands: Commands,
 ) {
-    for (entity, mut position, mut movement) in query.iter_mut() {
+    for (entity, mut position, mut movement, speed, movement_tick) in query.iter_mut() {
         if let super::MovementComponent::FollowingPath { path, index } = &*movement {
+            // Get or initialize movement tick tracker
+            let ticks_since_move = if let Some(mut tick) = movement_tick {
+                tick.ticks_since_move += 1;
+                if tick.ticks_since_move < speed.ticks_per_move {
+                    continue; // Not time to move yet
+                }
+                tick.ticks_since_move = 0;
+                0
+            } else {
+                // First tick - add MovementTick component and move
+                commands.entity(entity).insert(MovementTick::default());
+                0
+            };
+
             // Check if we have more waypoints
             if *index < path.len() {
                 // Move to next waypoint
@@ -356,6 +383,7 @@ pub fn execute_movement_component(
                 if new_index >= path.len() {
                     // Path complete, transition to Idle
                     *movement = super::MovementComponent::Idle;
+                    commands.entity(entity).remove::<MovementTick>();
                     debug!(
                         "Entity {:?} completed path, now at {:?}",
                         entity, next_pos
@@ -371,6 +399,7 @@ pub fn execute_movement_component(
             } else {
                 // Path is empty or index out of bounds, transition to Idle
                 *movement = super::MovementComponent::Idle;
+                commands.entity(entity).remove::<MovementTick>();
                 debug!("Entity {:?} path empty, transitioning to Idle", entity);
             }
         }

@@ -36,18 +36,18 @@ impl Plugin for UltraThinkPlugin {
         let queue = ThinkQueue::new(self.thinks_per_tick);
         app.insert_resource(queue);
 
-        // Add ultrathink system to FixedUpdate schedule
-        // This runs on simulation ticks alongside other AI systems
-        app.add_systems(
-            FixedUpdate,
-            ultrathink_system.run_if(|state: Res<crate::simulation::SimulationState>| state.should_tick),
-        );
+        // NOTE: ultrathink_system is now registered in EventDrivenPlannerPlugin's chain
+        // to ensure proper ordering: ultrathink -> event_driven_planner -> species_planners -> cleanup
+        // This fixes the race condition where ultrathink_system had no ordering constraint
+        // and could run AFTER cleanup_replanning_markers, causing NeedsReplanning to be
+        // removed before species planners could see them.
 
         // Add test harness if ULTRATHINK_TEST environment variable is set
+        // TICK-SYNCHRONIZED: Test harness now runs on Update schedule with tick guards
         if std::env::var("ULTRATHINK_TEST").is_ok() {
             info!("🧪 UltraThink Test Harness enabled");
             app.add_systems(
-                FixedUpdate,
+                Update,
                 test_schedule_requests.run_if(|state: Res<crate::simulation::SimulationState>| state.should_tick),
             );
         }

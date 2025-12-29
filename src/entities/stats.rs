@@ -281,7 +281,7 @@ impl Default for EntityStatsBundle {
 // ============================================================================
 
 /// Update all stats by their tick rates
-/// MUST run in FixedUpdate schedule (tick-synced)
+/// MUST run in Update schedule with `run_if(should_run_tick_systems)` guard (tick-synced at 10 TPS)
 /// Only processes entities with changed stats (using Changed<T> filters)
 pub fn tick_stats_system(
     mut query: Query<(
@@ -354,7 +354,7 @@ pub fn tick_stats_system(
 }
 
 /// Apply progressive damage from starvation and dehydration
-/// MUST run in FixedUpdate schedule (tick-synced)
+/// MUST run in Update schedule with `run_if(should_run_tick_systems)` guard (tick-synced at 10 TPS)
 /// Only processes entities with changed hunger, thirst, or health
 pub fn need_damage_system(
     mut query: Query<(Entity, &mut Health, &Hunger, &Thirst), Or<(Changed<Hunger>, Changed<Thirst>, Changed<Health>)>>,
