@@ -44,7 +44,9 @@ impl RaccoonBehavior {
     }
 
     /// Behavior configuration
+    /// Raccoons are generalists that prefer forest and wetlands
     pub fn config() -> BehaviorConfig {
+        use super::HabitatPreference;
         BehaviorConfig::new(
             0.55,    // thirst_threshold: raccoons tolerate thirst a bit longer
             0.45,    // hunger_threshold
@@ -54,6 +56,8 @@ impl RaccoonBehavior {
             120,     // food search radius (they roam)
             25,      // wander radius
         )
+        .with_satisfaction(20.0) // Raccoons are opportunistic but have some standards
+        .with_habitat(HabitatPreference::raccoon()) // Prefer forest, wetlands
     }
 
     /// Stats preset for raccoons
@@ -125,6 +129,7 @@ pub fn plan_raccoon_actions(
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
+            Option<&crate::ai::failure_memory::ActionFailureMemory>,
         ),
         With<Raccoon>,
     >,

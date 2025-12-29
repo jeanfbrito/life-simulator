@@ -10,6 +10,128 @@ pub mod raccoon;
 pub mod wolf;
 
 use bevy::prelude::*;
+use crate::tilemap::TerrainType;
+
+/// Habitat preference weights for different terrain types
+///
+/// Each weight represents how much a species prefers that terrain for wandering:
+/// - 0.0 = Avoid completely (impassable or dangerous)
+/// - 0.5 = Tolerable but not preferred
+/// - 1.0 = Neutral (baseline)
+/// - 1.5+ = Strongly preferred
+#[derive(Debug, Clone)]
+pub struct HabitatPreference {
+    /// Weight for Grass terrain
+    pub grass: f32,
+    /// Weight for Forest terrain
+    pub forest: f32,
+    /// Weight for Dirt terrain
+    pub dirt: f32,
+    /// Weight for Sand terrain
+    pub sand: f32,
+    /// Weight for Stone terrain
+    pub stone: f32,
+    /// Weight for Snow terrain
+    pub snow: f32,
+    /// Weight for Swamp terrain
+    pub swamp: f32,
+    /// Weight for Desert terrain
+    pub desert: f32,
+    /// How much to prefer tiles near food (0.0-1.0)
+    /// Higher = strongly prefer wandering toward food sources
+    pub food_proximity_weight: f32,
+    /// How much to prefer tiles near water (0.0-1.0)
+    /// Higher = strongly prefer staying near water sources
+    pub water_proximity_weight: f32,
+}
+
+impl Default for HabitatPreference {
+    fn default() -> Self {
+        // Generalist default - tolerates most terrain
+        Self {
+            grass: 1.0,
+            forest: 1.0,
+            dirt: 0.8,
+            sand: 0.6,
+            stone: 0.3,
+            snow: 0.4,
+            swamp: 0.5,
+            desert: 0.4,
+            food_proximity_weight: 0.3,
+            water_proximity_weight: 0.2,
+        }
+    }
+}
+
+impl HabitatPreference {
+    /// Get the weight for a specific terrain type
+    pub fn get_terrain_weight(&self, terrain: &TerrainType) -> f32 {
+        match terrain {
+            TerrainType::Grass => self.grass,
+            TerrainType::Forest => self.forest,
+            TerrainType::Dirt => self.dirt,
+            TerrainType::Sand => self.sand,
+            TerrainType::Stone => self.stone,
+            TerrainType::Snow => self.snow,
+            TerrainType::Swamp => self.swamp,
+            TerrainType::Desert => self.desert,
+            // Impassable terrains - always 0
+            TerrainType::Water | TerrainType::DeepWater | TerrainType::ShallowWater => 0.0,
+            TerrainType::Mountain => 0.0,
+        }
+    }
+
+    /// Rabbit habitat: Prefers open grassland, avoids dense forest
+    /// Rabbits thrive in meadows with some cover but good visibility
+    pub fn rabbit() -> Self {
+        Self {
+            grass: 1.5,      // Strongly prefer grass
+            forest: 0.6,     // Some tolerance for forest edges
+            dirt: 1.0,       // Neutral on dirt
+            sand: 0.5,       // Not great but tolerable
+            stone: 0.2,      // Avoid rocky areas
+            snow: 0.3,       // Cold, avoid
+            swamp: 0.3,      // Wet, avoid
+            desert: 0.2,     // Too harsh
+            food_proximity_weight: 0.5,  // Prefer areas with nearby food
+            water_proximity_weight: 0.3, // Moderate water preference
+        }
+    }
+
+    /// Deer habitat: Prefers forest edges with access to meadows
+    /// Deer like the boundary between forest and open areas
+    pub fn deer() -> Self {
+        Self {
+            grass: 1.3,      // Like open meadows
+            forest: 1.5,     // Love forest for cover
+            dirt: 0.9,       // Tolerate dirt paths
+            sand: 0.4,       // Not preferred
+            stone: 0.3,      // Avoid rocky terrain
+            snow: 0.5,       // Can handle some snow
+            swamp: 0.4,      // Avoid swampy areas
+            desert: 0.2,     // Too harsh
+            food_proximity_weight: 0.4,  // Value food sources
+            water_proximity_weight: 0.4, // Need water access
+        }
+    }
+
+    /// Raccoon habitat: Generalist, prefers forest and wetlands
+    /// Raccoons are opportunistic and adaptable
+    pub fn raccoon() -> Self {
+        Self {
+            grass: 1.0,      // Neutral on grass
+            forest: 1.4,     // Prefer forest for cover
+            dirt: 1.0,       // Fine with dirt
+            sand: 0.6,       // Tolerable
+            stone: 0.5,      // Some tolerance
+            snow: 0.4,       // Cold but manageable
+            swamp: 1.3,      // Like wetlands
+            desert: 0.3,     // Avoid
+            food_proximity_weight: 0.5,  // Opportunistic foragers
+            water_proximity_weight: 0.5, // Like staying near water
+        }
+    }
+}
 
 /// Foraging search strategies for herbivores
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +196,15 @@ pub struct BehaviorConfig {
     /// Foraging search strategy
     /// Determines how entities search for food: exhaustive vs. sampling
     pub foraging_strategy: ForagingStrategy,
+
+    /// Biomass level that satisfies this species (when at full energy)
+    /// Low energy reduces this threshold proportionally, making hungry/tired animals less picky.
+    /// Example: 15.0 for rabbits (not picky), 40.0 for deer (selective)
+    pub satisfaction_biomass: f32,
+
+    /// Habitat preferences for wandering behavior
+    /// Determines which terrain types and conditions the species prefers
+    pub habitat_preference: HabitatPreference,
 }
 
 impl Default for BehaviorConfig {
@@ -87,6 +218,8 @@ impl Default for BehaviorConfig {
             food_search_radius: 50,
             wander_radius: 20,
             foraging_strategy: ForagingStrategy::default(),
+            satisfaction_biomass: 20.0, // Moderate default
+            habitat_preference: HabitatPreference::default(),
         }
     }
 }
@@ -111,6 +244,8 @@ impl BehaviorConfig {
             food_search_radius,
             wander_radius,
             foraging_strategy: ForagingStrategy::default(),
+            satisfaction_biomass: 20.0, // Default moderate pickiness
+            habitat_preference: HabitatPreference::default(),
         }
     }
 
@@ -134,6 +269,46 @@ impl BehaviorConfig {
             food_search_radius,
             wander_radius,
             foraging_strategy,
+            satisfaction_biomass: 20.0, // Default moderate pickiness
+            habitat_preference: HabitatPreference::default(),
+        }
+    }
+
+    /// Set the satisfaction biomass threshold (fluent builder pattern)
+    pub fn with_satisfaction(mut self, satisfaction_biomass: f32) -> Self {
+        self.satisfaction_biomass = satisfaction_biomass;
+        self
+    }
+
+    /// Set the habitat preference (fluent builder pattern)
+    pub fn with_habitat(mut self, habitat_preference: HabitatPreference) -> Self {
+        self.habitat_preference = habitat_preference;
+        self
+    }
+
+    /// Create a custom behavior configuration with foraging strategy and satisfaction
+    pub fn new_with_satisfaction(
+        thirst_threshold: f32,
+        hunger_threshold: f32,
+        energy_threshold: f32,
+        graze_range: (i32, i32),
+        water_search_radius: i32,
+        food_search_radius: i32,
+        wander_radius: i32,
+        foraging_strategy: ForagingStrategy,
+        satisfaction_biomass: f32,
+    ) -> Self {
+        Self {
+            thirst_threshold,
+            hunger_threshold,
+            energy_threshold,
+            graze_range,
+            water_search_radius,
+            food_search_radius,
+            wander_radius,
+            foraging_strategy,
+            satisfaction_biomass,
+            habitat_preference: HabitatPreference::default(),
         }
     }
 }

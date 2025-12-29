@@ -9,8 +9,34 @@ use crate::resources::ResourceType;
 ///
 /// This behavior makes entities find and eat suitable vegetation when hungry.
 /// Herbivores can now distinguish between grass, shrubs, and other edible plants.
+/// Species-specific satisfaction thresholds determine pickiness.
 /// Suitable for: Rabbits, Deer, Sheep, Horses, etc.
 use bevy::prelude::*;
+
+/// Minimum biomass that is worth eating at all
+const MIN_EDIBLE_BIOMASS: f32 = 5.0;
+
+/// Minimum pickiness level (prevents complete desperation)
+const MIN_PICKINESS: f32 = 0.1;
+
+/// Calculate effective satisfaction threshold based on energy level
+///
+/// Animals with high energy can be picky about food quality.
+/// Animals with low energy become desperate and eat whatever is available.
+///
+/// # Examples
+/// - Deer (satisfaction=40) at 100% energy: 40.0 (picky)
+/// - Deer (satisfaction=40) at 50% energy: 22.5 (moderate)
+/// - Deer (satisfaction=40) at 20% energy: 12.0 (desperate)
+/// - Rabbit (satisfaction=15) at 100% energy: 15.0 (easy to please)
+/// - Rabbit (satisfaction=15) at 20% energy: 7.0 (will eat anything)
+pub fn effective_satisfaction(base_satisfaction: f32, energy_normalized: f32) -> f32 {
+    // Pickiness scales with energy, but never goes below MIN_PICKINESS
+    let pickiness = energy_normalized.max(MIN_PICKINESS);
+
+    // Threshold scales from MIN_EDIBLE_BIOMASS to base_satisfaction
+    MIN_EDIBLE_BIOMASS + (base_satisfaction - MIN_EDIBLE_BIOMASS) * pickiness
+}
 
 /// Herbivore diet preferences for different vegetation types
 #[derive(Debug, Clone)]
@@ -88,10 +114,13 @@ impl HerbivoreDiet {
 ///
 /// Returns an eating action if hunger is above threshold and suitable vegetation with sufficient biomass is found nearby.
 /// Herbivores now consider both grass and shrubs based on their diet preferences.
+/// Uses satisfaction model: animals stop searching when they find grass above their satisfaction threshold.
 ///
 /// # Parameters
 /// - `position`: Current position of the entity
 /// - `hunger`: Current hunger level
+/// - `energy_normalized`: Current energy level (0.0-1.0), affects pickiness
+/// - `satisfaction_biomass`: Species-specific biomass threshold for satisfaction
 /// - `world_loader`: Access to terrain data
 /// - `resource_grid`: Access to vegetation biomass data
 /// - `hunger_threshold`: Minimum hunger level to seek food (0.0-1.0)
@@ -105,6 +134,8 @@ impl HerbivoreDiet {
 pub fn evaluate_eating_behavior(
     position: &TilePosition,
     hunger: &Hunger,
+    energy_normalized: f32,
+    satisfaction_biomass: f32,
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
     hunger_threshold: f32,
@@ -118,15 +149,16 @@ pub fn evaluate_eating_behavior(
         return None; // Not hungry enough
     }
 
-    // Note: We don't check if already on suitable vegetation because eating is handled by action execution
+    // Calculate effective satisfaction threshold based on energy
+    let effective_threshold = effective_satisfaction(satisfaction_biomass, energy_normalized);
 
-    // Find nearest suitable vegetation cell with sufficient biomass using new ResourceGrid
-    let forage_tile = find_best_forage_cell_with_strategy(
+    // Find satisfying vegetation cell (stops early when good enough food is found)
+    let forage_tile = find_satisfying_forage_cell(
         position.tile,
         search_radius,
+        effective_threshold,
         world_loader,
         resource_grid,
-        foraging_strategy.into(),
         diet,
     )?;
 
@@ -156,7 +188,99 @@ pub fn evaluate_eating_behavior(
     })
 }
 
+/// Find a satisfying forage cell using the satisfaction model
+///
+/// Searches in expanding rings (nearby first) and stops as soon as a cell
+/// with biomass >= satisfaction_threshold is found. If no satisfying cell
+/// is found, returns the best available cell as a fallback.
+///
+/// This prevents animals from traveling far when good food is nearby.
+fn find_satisfying_forage_cell(
+    from: IVec2,
+    max_radius: i32,
+    satisfaction_threshold: f32,
+    world_loader: &WorldLoader,
+    resource_grid: &ResourceGrid,
+    diet: &HerbivoreDiet,
+) -> Option<IVec2> {
+    let mut best_fallback: Option<(IVec2, f32)> = None;
+
+    // Search in expanding rings (nearby first)
+    for radius in 1..=max_radius {
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                // Only check perimeter (not interior already checked)
+                if dx.abs() < radius && dy.abs() < radius {
+                    continue;
+                }
+
+                let check_pos = from + IVec2::new(dx, dy);
+
+                // Check if cell is suitable for foraging
+                if let Some(biomass) = get_cell_biomass(check_pos, world_loader, resource_grid, diet) {
+                    if biomass >= MIN_EDIBLE_BIOMASS {
+                        // Track best fallback in case nothing satisfies
+                        if best_fallback.is_none() || biomass > best_fallback.unwrap().1 {
+                            best_fallback = Some((check_pos, biomass));
+                        }
+
+                        // Found satisfying grass? Stop searching immediately!
+                        if biomass >= satisfaction_threshold {
+                            return Some(check_pos);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Nothing satisfying found - return best available (desperate eating)
+    best_fallback.map(|(pos, _)| pos)
+}
+
+/// Get the biomass of a cell if it's suitable for foraging
+fn get_cell_biomass(
+    cell: IVec2,
+    world_loader: &WorldLoader,
+    resource_grid: &ResourceGrid,
+    diet: &HerbivoreDiet,
+) -> Option<f32> {
+    // Check if this cell supports vegetation
+    if !supports_vegetation_at(cell, world_loader) {
+        return None;
+    }
+
+    // Check if cell is accessible (no blocking resources)
+    if !is_cell_accessible(cell, world_loader) {
+        return None;
+    }
+
+    // Check if cell has biomass using ResourceGrid
+    if let Some(cell_data) = resource_grid.get_cell(cell) {
+        // Check if resource is edible for this herbivore
+        if !diet.is_edible(&cell_data.resource_type) {
+            return None;
+        }
+
+        // Check if not depleted
+        if cell_data.is_depleted() {
+            return None;
+        }
+
+        Some(cell_data.total_biomass)
+    } else {
+        // No ResourceGrid data - assume basic grass with low biomass
+        if diet.grass_preference > 0.0 {
+            Some(MIN_EDIBLE_BIOMASS) // Minimum viable
+        } else {
+            None
+        }
+    }
+}
+
 /// Find the best forage cell using new ResourceGrid system with diet preferences
+/// (Legacy function - kept for compatibility but satisfaction model is preferred)
+#[allow(dead_code)]
 fn find_best_forage_cell_with_strategy(
     from: IVec2,
     max_radius: i32,

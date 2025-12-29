@@ -49,7 +49,9 @@ impl DeerBehavior {
     }
 
     /// Get the default behavior configuration for deer
+    /// Deer prefer forest edges with access to meadows
     pub fn config() -> BehaviorConfig {
+        use super::HabitatPreference;
         BehaviorConfig::new(
             0.65,    // thirst_threshold (wait longer before drinking)
             0.45,    // hunger_threshold (eat less frequently)
@@ -59,6 +61,8 @@ impl DeerBehavior {
             150,     // food_search_radius
             50,      // wander_radius (Phase 3: aligned with mating search)
         )
+        .with_satisfaction(40.0) // Deer are selective - search for quality patches
+        .with_habitat(HabitatPreference::deer()) // Prefer forest edges, meadows
     }
 
     /// Species-specific stats preset for deer (initial values and rates)
@@ -135,6 +139,7 @@ pub fn plan_deer_actions(
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
+            Option<&crate::ai::failure_memory::ActionFailureMemory>,
         ),
         With<Deer>,
     >,

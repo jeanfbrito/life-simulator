@@ -56,7 +56,9 @@ impl RabbitBehavior {
     /// - Short-range grazers: Prefer to stay close (3-8 tiles) when eating
     /// - Moderate search radius: 100 tiles for resources
     /// - Moderate territory: 25 tile wander radius (Phase 3: aligned with mating search)
+    /// - Habitat: Prefer open grassland, avoid dense forest
     pub fn config() -> BehaviorConfig {
+        use super::HabitatPreference;
         BehaviorConfig::new(
             0.75,   // thirst_threshold: Drink when >= 75% thirsty
             0.40,   // hunger_threshold: Eat when >= 40% hungry (enables 300-tick well-fed streak)
@@ -66,6 +68,8 @@ impl RabbitBehavior {
             100,    // food_search_radius: Wide food search
             25,     // wander_radius: Moderate territory (Phase 3: aligned with mating search)
         )
+        .with_satisfaction(15.0) // Rabbits are not picky - eat nearby grass quickly
+        .with_habitat(HabitatPreference::rabbit()) // Prefer grassland, avoid forest
     }
 
     /// Species-specific stats preset for rabbits (initial values and rates)
@@ -142,6 +146,7 @@ pub fn plan_rabbit_actions(
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
+            Option<&crate::ai::failure_memory::ActionFailureMemory>,
         ),
         With<Rabbit>,
     >,

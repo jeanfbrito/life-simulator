@@ -46,6 +46,8 @@ pub fn evaluate_core_actions(
     if let Some(eat) = evaluate_eating_behavior(
         position,
         hunger,
+        energy.0.normalized(),                    // NEW: energy affects pickiness
+        behavior_config.satisfaction_biomass,     // NEW: species-specific satisfaction
         world_loader,
         resource_grid,
         behavior_config.hunger_threshold,
@@ -69,10 +71,13 @@ pub fn evaluate_core_actions(
     }
 
     // Wandering - lowest priority idle behavior (always available)
+    // Now uses habitat preferences to keep animals in preferred terrain types
     if let Some(wander_score) = evaluate_wandering_behavior(
         position,
         world_loader,
         behavior_config.wander_radius,
+        &behavior_config.habitat_preference,
+        Some(resource_grid),
     ) {
         actions.push(wander_score);
     }
