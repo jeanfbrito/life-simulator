@@ -170,14 +170,6 @@ pub fn sync_entities_to_tracker(
         Option<&ReproductionConfig>,
     )>,
 ) {
-    // Verify function is called
-    static mut CALL_COUNT: u64 = 0;
-    unsafe {
-        CALL_COUNT += 1;
-        if CALL_COUNT <= 3 || CALL_COUNT % 600 == 0 {
-            eprintln!("🔍 ENTITY_TRACKER: sync_entities_to_tracker() call #{}", CALL_COUNT);
-        }
-    }
 
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {

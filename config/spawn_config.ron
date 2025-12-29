@@ -66,6 +66,46 @@
                 completion_message: "🦝 Raccoon pair active near campsite ({count} spawned)",
             )),
         ),
+        (
+            species: "Wolf",
+            count: 2,
+            names: [
+                "Shadow",
+                "Luna",
+            ],
+            spawn_area: (
+                center: (0, 10),
+                search_radius: 10,
+                max_attempts: 50,
+            ),
+            sex_sequence: Some([
+                male,
+                female,
+            ]),
+            messages: Some((
+                start_message: "🐺 Spawning wolf pack...",
+                success_template: "   🐺 Spawned wolf {name} ({sex}) at {pos}",
+                completion_message: "🐺 Wolf pack ready for hunting ({count} spawned)",
+            )),
+        ),
+        (
+            species: "Fox",
+            count: 1,
+            names: [
+                "Rusty",
+            ],
+            spawn_area: (
+                center: (-5, 5),
+                search_radius: 10,
+                max_attempts: 50,
+            ),
+            sex_sequence: None,
+            messages: Some((
+                start_message: "🦊 Spawning fox...",
+                success_template: "   🦊 Spawned fox {name} at {pos}",
+                completion_message: "🦊 Fox active near rabbits ({count} spawned)",
+            )),
+        ),
     ],
     settings: (
         verbose_logging: true,

@@ -82,7 +82,7 @@ pub fn evaluate_fleeing_behavior(
             world_loader,
         ) {
             return Some(UtilityScore {
-                action_type: ActionType::Graze {
+                action_type: ActionType::Wander {
                     target_tile: walkable_target,
                 },
                 utility: FLEE_UTILITY,
@@ -116,7 +116,7 @@ pub fn evaluate_fleeing_behavior(
     let utility = FLEE_UTILITY * fear_state.fear_level;
 
     Some(UtilityScore {
-        action_type: ActionType::Graze {
+        action_type: ActionType::Wander {
             target_tile: walkable_target,
         },
         utility,
@@ -234,6 +234,7 @@ mod tests {
             ticks_since_danger: 0,
             peak_fear: 0.2,
             last_logged_fear: 0.0,
+            nearest_predator_pos: Some(predator_pos),
         };
 
         // Note: This will return None without a real WorldLoader
@@ -252,6 +253,7 @@ mod tests {
             ticks_since_danger: 0,
             peak_fear: 0.8,
             last_logged_fear: 0.0,
+            nearest_predator_pos: Some(predator_pos),
         };
 
         assert!(
