@@ -510,14 +510,23 @@ this.setupEventListeners();
         const canvasWidth = this.canvas.width;
         const canvasHeight = this.canvas.height;
 
-        // Calculate the offset needed to center this tile on screen
-        // The tile's screen position is: tileX * TILE_SIZE + dragOffset.x
-        // We want this to equal canvasWidth / 2
-        // So: dragOffset.x = canvasWidth / 2 - tileX * TILE_SIZE
-        const targetOffsetX = (canvasWidth / 2) - (tileX * CONFIG.TILE_SIZE);
-        const targetOffsetY = (canvasHeight / 2) - (tileY * CONFIG.TILE_SIZE);
+        // The renderer uses this formula for entity screen position:
+        // screenX = (entityWorldX - cameraOffsetX + VIEW_SIZE_X/2) * TILE_SIZE + TILE_SIZE/2
+        // Where cameraOffsetX = floor(-dragOffset.x / TILE_SIZE)
+        //
+        // After simplification, the actual screen position is:
+        // actualScreenX = tileX * TILE_SIZE + dragOffset.x + (VIEW_SIZE_X/2) * TILE_SIZE + TILE_SIZE/2
+        //
+        // To center the entity (actualScreenX = canvasWidth/2):
+        // dragOffset.x = canvasWidth/2 - tileX * TILE_SIZE - (VIEW_SIZE_X/2) * TILE_SIZE - TILE_SIZE/2
+        const viewCenterOffsetX = Math.floor(CONFIG.VIEW_SIZE_X / 2) * CONFIG.TILE_SIZE;
+        const viewCenterOffsetY = Math.floor(CONFIG.VIEW_SIZE_Y / 2) * CONFIG.TILE_SIZE;
+        const tileCenterOffset = CONFIG.TILE_SIZE / 2;
 
-        // Set both current and target offset for smooth transition
+        const targetOffsetX = (canvasWidth / 2) - (tileX * CONFIG.TILE_SIZE) - viewCenterOffsetX - tileCenterOffset;
+        const targetOffsetY = (canvasHeight / 2) - (tileY * CONFIG.TILE_SIZE) - viewCenterOffsetY - tileCenterOffset;
+
+        // Set both current and target offset for immediate centering
         this.targetOffset.x = targetOffsetX;
         this.targetOffset.y = targetOffsetY;
         this.dragOffset.x = targetOffsetX;
