@@ -3,6 +3,7 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -24,30 +25,30 @@ use crate::world_loader::WorldLoader;
 pub struct BearBehavior;
 
 impl BearBehavior {
-    /// Reproduction parameters derived from black bear life history notes.
+    /// Fast reproduction parameters for bears (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 18_000,            // ~30 minutes at 10 TPS
-            gestation_ticks: 6_000,            // ~10 minutes
-            mating_cooldown_ticks: 8_000,      // males get long cooldowns
-            postpartum_cooldown_ticks: 12_000, // females rest longer
-            litter_size_range: (1, 3),
-            mating_search_radius: 90,
-            well_fed_hunger_norm: 0.55,
-            well_fed_thirst_norm: 0.55,
-            well_fed_required_ticks: 100, // Reduced from 600
-            matching_interval_ticks: 120, // Check every 12s (optimized)
-            mating_duration_ticks: 60,
-            min_energy_norm: 0.55,
-            min_health_norm: 0.55,
+            maturity_ticks: 180,             // ~18 seconds (fast for testing)
+            gestation_ticks: 100,            // ~10 seconds
+            mating_cooldown_ticks: 70,       // ~7 seconds
+            postpartum_cooldown_ticks: 120,  // ~12 seconds
+            litter_size_range: (1, 2),       // Cubs
+            mating_search_radius: 80,
+            well_fed_hunger_norm: 0.60,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 30,  // ~3 seconds
+            matching_interval_ticks: 15,  // check every 1.5s
+            mating_duration_ticks: 25,
+            min_energy_norm: 0.45,
+            min_health_norm: 0.45,
         }
     }
 
     /// Core behavioural thresholds for bears.
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.20,    // thirst_threshold: Drink when >= 20% thirsty
-            0.35,    // hunger_threshold: Forage/hunt when >= 35% hungry
+            0.15,    // thirst_threshold: Drink when >= 15% thirsty
+            0.15,    // hunger_threshold: Forage/hunt when >= 15% hungry (lower for testing)
             0.3,     // rest when energy below 30%
             (6, 18), // forage radius when sampling plants
             150,     // water search radius
@@ -74,8 +75,8 @@ impl BearBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
@@ -166,8 +167,16 @@ pub fn plan_bear_actions(
                 vegetation,
             )
         },
-        None,
-        None,
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 35,
+        }),
         "🐻",
         "Bear",
         resources.current_tick(),

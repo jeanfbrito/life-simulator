@@ -3,6 +3,7 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -24,28 +25,29 @@ use crate::world_loader::WorldLoader;
 pub struct FoxBehavior;
 
 impl FoxBehavior {
+    /// Fast reproduction parameters for foxes (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 10_500, // ~17.5 minutes
-            gestation_ticks: 4_500, // 7.5 minutes
-            mating_cooldown_ticks: 4_000,
-            postpartum_cooldown_ticks: 6_000,
-            litter_size_range: (3, 5),
-            mating_search_radius: 120,
-            well_fed_hunger_norm: 0.55,
-            well_fed_thirst_norm: 0.55,
-            well_fed_required_ticks: 100, // Reduced from 600
-            matching_interval_ticks: 120, // Check every 12s (optimized)
-            mating_duration_ticks: 50,
-            min_energy_norm: 0.5,
-            min_health_norm: 0.50,
+            maturity_ticks: 130,             // ~13 seconds (fast for testing)
+            gestation_ticks: 70,             // ~7 seconds
+            mating_cooldown_ticks: 50,       // ~5 seconds
+            postpartum_cooldown_ticks: 90,   // ~9 seconds
+            litter_size_range: (2, 4),       // Kits
+            mating_search_radius: 80,
+            well_fed_hunger_norm: 0.60,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 25,  // ~2.5 seconds
+            matching_interval_ticks: 12,  // check every 1.2s
+            mating_duration_ticks: 20,
+            min_energy_norm: 0.40,
+            min_health_norm: 0.40,
         }
     }
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.20, // thirst_threshold: Drink when >= 20% thirsty
-            0.40, // hunger_threshold: Hunt/eat when >= 40% hungry
+            0.15, // thirst_threshold: Drink when >= 15% thirsty
+            0.15, // hunger_threshold: Hunt when >= 15% hungry (lower for testing)
             0.3,
             (5, 14),
             150,
@@ -70,8 +72,8 @@ impl FoxBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.06)),
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
@@ -151,8 +153,16 @@ pub fn plan_fox_actions(
                 &rabbits, vegetation,
             )
         },
-        None,
-        None,
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 25,
+        }),
         "🦊",
         "Fox",
         resources.current_tick(),

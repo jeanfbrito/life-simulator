@@ -3,6 +3,7 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -24,28 +25,29 @@ use crate::world_loader::WorldLoader;
 pub struct WolfBehavior;
 
 impl WolfBehavior {
+    /// Fast reproduction parameters for wolves (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 14_000,
-            gestation_ticks: 4_500,
-            mating_cooldown_ticks: 7_000,
-            postpartum_cooldown_ticks: 10_000,
-            litter_size_range: (2, 4),
-            mating_search_radius: 160,
-            well_fed_hunger_norm: 0.60,
-            well_fed_thirst_norm: 0.55,
-            well_fed_required_ticks: 150, // Reduced from 900
-            matching_interval_ticks: 150, // Check every 15s (optimized)
-            mating_duration_ticks: 60,
-            min_energy_norm: 0.45,
-            min_health_norm: 0.6,
+            maturity_ticks: 160,             // ~16 seconds (fast for testing)
+            gestation_ticks: 80,             // ~8 seconds
+            mating_cooldown_ticks: 60,       // ~6 seconds
+            postpartum_cooldown_ticks: 100,  // ~10 seconds
+            litter_size_range: (2, 3),       // Pups
+            mating_search_radius: 100,
+            well_fed_hunger_norm: 0.65,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 30,  // ~3 seconds
+            matching_interval_ticks: 15,  // check every 1.5s
+            mating_duration_ticks: 25,
+            min_energy_norm: 0.40,
+            min_health_norm: 0.45,
         }
     }
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.20, // thirst_threshold: Drink when >= 20% thirsty
-            0.40, // hunger_threshold: Hunt when >= 40% hungry
+            0.15, // thirst_threshold: Drink when >= 15% thirsty
+            0.15, // hunger_threshold: Hunt when >= 15% hungry (lower for testing)
             0.25,
             (8, 22),
             180,
@@ -70,8 +72,8 @@ impl WolfBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
@@ -168,8 +170,16 @@ pub fn plan_wolf_actions(
 
             actions
         },
-        None,
-        None,
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 30,
+        }),
         "🐺",
         "Wolf",
         resources.current_tick(),
