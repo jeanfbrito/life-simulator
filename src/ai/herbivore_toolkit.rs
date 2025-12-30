@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::ai::actions::ActionType;
 use crate::ai::behaviors::{
     evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
-    evaluate_follow_behavior, evaluate_grazing_behavior, evaluate_resting_behavior,
+    evaluate_follow_behavior_with_priority, evaluate_grazing_behavior, evaluate_resting_behavior,
     evaluate_wandering_behavior, eating::HerbivoreDiet,
 };
 use crate::ai::planner::UtilityScore;
@@ -124,6 +124,10 @@ pub struct FollowConfig {
 /// Attempt to add a follow-mother action for juvenile herbivores.
 ///
 /// Returns true if an action was added.
+///
+/// IMPORTANT: Juveniles have RELAXED conditions compared to adults because staying
+/// near mother is critical for survival. They will follow even when moderately hungry/thirsty
+/// (up to 70%), only breaking off when critically starving (>=80%).
 pub fn maybe_add_follow_mother(
     actions: &mut Vec<UtilityScore>,
     entity: Entity,
@@ -131,7 +135,7 @@ pub fn maybe_add_follow_mother(
     hunger: &Hunger,
     thirst: &Thirst,
     energy: &Energy,
-    behavior_config: &BehaviorConfig,
+    _behavior_config: &BehaviorConfig,  // No longer used for juvenile thresholds
     age: Option<&Age>,
     mother: Option<&Mother>,
     mother_position: Option<IVec2>,
@@ -151,20 +155,37 @@ pub fn maybe_add_follow_mother(
         return false;
     };
 
-    let hunger_ok = hunger.0.normalized() < behavior_config.hunger_threshold;
-    let thirst_ok = thirst.0.normalized() < behavior_config.thirst_threshold;
-    let energy_ok = energy.0.normalized() > behavior_config.energy_threshold;
+    // JUVENILE RELAXED CONDITIONS:
+    // Juveniles should prioritize staying with mother for safety
+    // Only break off when CRITICALLY hungry/thirsty (>=70%) or exhausted
+    // This prevents juveniles from wandering to beaches looking for food
+    const JUVENILE_CRITICAL_THRESHOLD: f32 = 0.70;
+    const JUVENILE_ENERGY_MINIMUM: f32 = 0.15;
+
+    let hunger_ok = hunger.0.normalized() < JUVENILE_CRITICAL_THRESHOLD;
+    let thirst_ok = thirst.0.normalized() < JUVENILE_CRITICAL_THRESHOLD;
+    let energy_ok = energy.0.normalized() > JUVENILE_ENERGY_MINIMUM;
+
     if !(hunger_ok && thirst_ok && energy_ok) {
+        debug!(
+            "🍼 Juvenile {:?} breaking from mother - critical needs: H:{:.1}% T:{:.1}% E:{:.1}%",
+            entity,
+            hunger.0.percentage(),
+            thirst.0.percentage(),
+            energy.0.percentage()
+        );
         return false;
     }
 
     let slice = [(mother.0, mother_pos)];
-    if let Some(follow) = evaluate_follow_behavior(
+    // Use juvenile-aware follow behavior with high priority
+    if let Some(follow) = evaluate_follow_behavior_with_priority(
         entity,
         position,
         &slice,
         follow_cfg.stop_distance,
         follow_cfg.max_distance,
+        true,  // is_juvenile = true for high priority
     ) {
         actions.push(follow);
         true

@@ -60,6 +60,7 @@ pub fn bridge_actions_to_pathfinding(
                 "Graze" => PathReason::MovingToFood,
                 "Hunt" => PathReason::Hunting,
                 "Wander" => PathReason::Wandering,
+                "Mate" => PathReason::MovingToMate,
                 _ => PathReason::Wandering, // Default fallback
             };
 
@@ -112,7 +113,7 @@ fn transition_action_to_waiting(
     request_id: crate::pathfinding::PathRequestId,
     action_name: &str,
 ) {
-    use crate::ai::actions::{DrinkWaterAction, GrazeAction, HuntAction, WanderAction};
+    use crate::ai::actions::{DrinkWaterAction, GrazeAction, HuntAction, MateAction, WanderAction};
 
     // Match action name to determine concrete type
     match action_name {
@@ -134,6 +135,11 @@ fn transition_action_to_waiting(
         "Wander" => {
             if let Some(wander_action) = action.as_any_mut().downcast_mut::<WanderAction>() {
                 wander_action.transition_to_waiting(request_id);
+            }
+        }
+        "Mate" => {
+            if let Some(mate_action) = action.as_any_mut().downcast_mut::<MateAction>() {
+                mate_action.transition_to_waiting(request_id);
             }
         }
         _ => {

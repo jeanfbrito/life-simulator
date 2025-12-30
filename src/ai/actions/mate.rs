@@ -1,12 +1,23 @@
 use super::*;
 use crate::entities::stats::{Hunger, Thirst};
 use crate::entities::TilePosition;
-use crate::pathfinding::PathfindingFailed;
+use crate::pathfinding::{Path, PathfindingFailed, PathRequestId};
 use bevy::prelude::*;
 
 // =============================================================================
 // MATE ACTION
 // =============================================================================
+
+/// State machine for MateAction pathfinding
+#[derive(Debug, Clone)]
+pub enum MateState {
+    /// Initial state - needs to request pathfinding
+    NeedPath,
+    /// Waiting for pathfinding system to provide a path
+    WaitingForPath { request_id: PathRequestId },
+    /// At meeting tile, waiting for partner
+    AtMeetingTile,
+}
 
 /// Action: Rendezvous with partner and mate; pregnancy applied on female only
 #[derive(Debug, Clone)]
@@ -18,6 +29,7 @@ pub struct MateAction {
     pub waited: u32,
     pub total_wait: u32,
     pub max_wait_ticks: u32,
+    pub state: MateState,
 }
 
 impl MateAction {
@@ -30,7 +42,14 @@ impl MateAction {
             waited: 0,
             total_wait: 0,
             max_wait_ticks: duration_ticks.saturating_mul(5).max(duration_ticks + 25),
+            state: MateState::NeedPath,
         }
+    }
+
+    /// Transition from NeedPath to WaitingForPath state
+    /// Called by the action_pathfinding_bridge when path request is submitted
+    pub fn transition_to_waiting(&mut self, request_id: PathRequestId) {
+        self.state = MateState::WaitingForPath { request_id };
     }
 }
 
@@ -91,10 +110,35 @@ impl Action for MateAction {
             return ActionResult::Failed;
         };
 
-        // Move towards meeting tile until arrived
-        if me_pos.tile != self.meeting_tile {
-            // Request pathfinding to meeting tile
-            return ActionResult::NeedsPathfinding { target: self.meeting_tile };
+        // State machine for pathfinding
+        match &self.state {
+            MateState::NeedPath => {
+                if me_pos.tile != self.meeting_tile {
+                    // Request pathfinding to meeting tile
+                    return ActionResult::NeedsPathfinding { target: self.meeting_tile };
+                }
+                // Already at meeting tile, transition directly
+                self.state = MateState::AtMeetingTile;
+            }
+            MateState::WaitingForPath { request_id: _ } => {
+                // Check if path was delivered
+                if let Some(path) = world.get::<Path>(entity) {
+                    if !path.is_complete() {
+                        // Path received, entity will be moved by navigation system
+                        return ActionResult::InProgress;
+                    }
+                }
+                // Check if at meeting tile (path complete or already there)
+                if me_pos.tile == self.meeting_tile {
+                    self.state = MateState::AtMeetingTile;
+                } else {
+                    // Still waiting for path or entity to arrive
+                    return ActionResult::InProgress;
+                }
+            }
+            MateState::AtMeetingTile => {
+                // Continue to mating logic below
+            }
         }
 
         // We are on the meeting tile
