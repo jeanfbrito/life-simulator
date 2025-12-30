@@ -1,11 +1,11 @@
-use super::action::ActionType;
+use super::actions::ActionType;
 use super::queue::ActionQueue;
 use crate::ai::herbivore_toolkit::{
     maybe_add_follow_mother, maybe_add_mate_action, FollowConfig, MateActionParams,
 };
 use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{ActiveMate, BehaviorConfig, TilePosition};
+use crate::entities::{ActiveMate, MatingTarget, BehaviorConfig, TilePosition};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -106,6 +106,7 @@ pub fn plan_species_actions<M: Component>(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&crate::entities::FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -146,7 +147,8 @@ pub fn plan_species_actions<M: Component>(
         behavior_config,
         age,
         mother,
-        mating_intent,
+        active_mate,
+        mating_target,
         repro_cfg,
         fear_state,
         needs_replan,
@@ -176,7 +178,8 @@ pub fn plan_species_actions<M: Component>(
         if let Some(params) = mate_params {
             let mate_added = maybe_add_mate_action(
                 &mut actions,
-                mating_intent,
+                active_mate,
+                mating_target,
                 repro_cfg,
                 thirst,
                 hunger,
@@ -184,7 +187,8 @@ pub fn plan_species_actions<M: Component>(
                 params,
                 tick,
             );
-            if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
+            let has_mating_relationship = active_mate.is_some() || mating_target.is_some();
+            if has_mating_relationship && repro_cfg.is_some() && !mate_added {
                 debug!(
                     "{}⏸️ {} {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
                     emoji,

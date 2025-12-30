@@ -15,7 +15,7 @@ use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
@@ -38,9 +38,9 @@ impl RabbitBehavior {
             postpartum_cooldown_ticks: 1800, // ~3 minutes (female)
             litter_size_range: (2, 6),
             mating_search_radius: 50,
-            well_fed_hunger_norm: 0.35,
-            well_fed_thirst_norm: 0.35,
-            well_fed_required_ticks: 300, // ~30s sustained
+            well_fed_hunger_norm: 0.50,  // Relaxed from 0.35
+            well_fed_thirst_norm: 0.50,  // Relaxed from 0.35
+            well_fed_required_ticks: 50, // Reduced from 300 (~5s instead of 30s)
             matching_interval_ticks: 20,  // run matcher every 2s (optimized for breeding)
             mating_duration_ticks: 30,    // ~3s mating interaction
             min_energy_norm: 0.5,
@@ -60,7 +60,7 @@ impl RabbitBehavior {
     pub fn config() -> BehaviorConfig {
         use super::HabitatPreference;
         BehaviorConfig::new(
-            0.75,   // thirst_threshold: Drink when >= 75% thirsty
+            0.15,   // thirst_threshold: Drink when >= 15% thirsty (early hydration)
             0.40,   // hunger_threshold: Eat when >= 40% hungry (enables 300-tick well-fed streak)
             0.3,    // energy_threshold: Rest when energy drops below 30%
             (3, 8), // graze_range: Short-range grazing (3-8 tiles)
@@ -143,6 +143,7 @@ pub fn plan_rabbit_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -229,7 +230,7 @@ pub fn rabbit_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Rabbit>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Rabbit>,
     >,
     tick: Res<SimulationTick>,
 ) {
@@ -260,8 +261,8 @@ mod tests {
     #[test]
     fn test_rabbit_config() {
         let config = RabbitBehavior::config();
-        // Note: thresholds are defined as 0.75 above
-        assert_eq!(config.thirst_threshold, 0.75);
+        // Note: thresholds are defined as 0.15 (early hydration)
+        assert_eq!(config.thirst_threshold, 0.15);
         assert_eq!(config.graze_range, (3, 8));
         assert_eq!(config.water_search_radius, 100);
     }

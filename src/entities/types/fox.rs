@@ -11,7 +11,7 @@ use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
@@ -32,9 +32,9 @@ impl FoxBehavior {
             postpartum_cooldown_ticks: 6_000,
             litter_size_range: (3, 5),
             mating_search_radius: 120,
-            well_fed_hunger_norm: 0.5,
-            well_fed_thirst_norm: 0.5,
-            well_fed_required_ticks: 600,
+            well_fed_hunger_norm: 0.55,
+            well_fed_thirst_norm: 0.55,
+            well_fed_required_ticks: 100, // Reduced from 600
             matching_interval_ticks: 120, // Check every 12s (optimized)
             mating_duration_ticks: 50,
             min_energy_norm: 0.5,
@@ -44,8 +44,8 @@ impl FoxBehavior {
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.5, // prefer to hydrate more often than bears
-            0.5, // aggressive hunters when half hungry
+            0.20, // thirst_threshold: Drink when >= 20% thirsty
+            0.40, // hunger_threshold: Hunt/eat when >= 40% hungry
             0.3,
             (5, 14),
             150,
@@ -122,6 +122,7 @@ pub fn plan_fox_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -174,7 +175,7 @@ pub fn fox_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Fox>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Fox>,
     >,
     tick: Res<SimulationTick>,
 ) {

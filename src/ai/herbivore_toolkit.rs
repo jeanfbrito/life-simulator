@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::ai::behaviors::{
     evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
     evaluate_follow_behavior, evaluate_grazing_behavior, evaluate_resting_behavior,
@@ -9,7 +9,7 @@ use crate::ai::behaviors::{
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{ActiveMate, BehaviorConfig, FearState, TilePosition};
+use crate::entities::{ActiveMate, MatingTarget, BehaviorConfig, FearState, TilePosition};
 use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;
 
@@ -185,21 +185,29 @@ pub struct MateActionParams {
     pub energy_margin: f32,
 }
 
-/// Add a mate action if the entity currently has a mating intent and meets
-/// the reproduction requirements. Returns true if an action was added.
+/// Add a mate action if the entity currently has a mating relationship (ActiveMate or MatingTarget)
+/// and meets the reproduction requirements. Returns true if an action was added.
+///
+/// Both ActiveMate (pursuer) and MatingTarget (pursued) entities need to queue Mate actions
+/// so that both move to the meeting tile and complete mating together.
 pub fn maybe_add_mate_action(
     actions: &mut Vec<UtilityScore>,
-    mating_intent: Option<&ActiveMate>,
+    active_mate: Option<&ActiveMate>,
+    mating_target: Option<&MatingTarget>,
     repro_cfg: Option<&ReproductionConfig>,
     thirst: &Thirst,
     hunger: &Hunger,
     energy: &Energy,
     params: MateActionParams,
-    current_tick: u64,
+    _current_tick: u64,
 ) -> bool {
-    let Some(intent) = mating_intent else {
-        return false;
+    // Extract partner and meeting tile from whichever mating component is present
+    let (partner, meeting_tile) = match (active_mate, mating_target) {
+        (Some(am), _) => (am.partner, am.meeting_tile),
+        (_, Some(mt)) => (mt.suitor, mt.meeting_tile),
+        _ => return false,
     };
+
     let Some(cfg) = repro_cfg else {
         return false;
     };
@@ -240,13 +248,12 @@ pub fn maybe_add_mate_action(
     let energy_safe = energy_level >= (cfg.min_energy_norm + params.energy_margin).min(1.0);
 
     if thirst_safe && hunger_safe && energy_safe {
-        // Calculate duration_ticks as the time spent so far (current_tick - started_tick)
-        let elapsed = current_tick.saturating_sub(intent.started_tick) as u32;
+        // Use mating_duration_ticks from ReproductionConfig (how long mating takes)
         actions.push(UtilityScore {
             action_type: ActionType::Mate {
-                partner: intent.partner,
-                meeting_tile: intent.meeting_tile,
-                duration_ticks: elapsed,
+                partner,
+                meeting_tile,
+                duration_ticks: cfg.mating_duration_ticks,
             },
             utility: params.utility,
             priority: params.priority,
@@ -397,6 +404,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -436,6 +444,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -474,6 +483,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -504,6 +514,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -545,6 +556,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,

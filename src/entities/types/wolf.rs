@@ -11,7 +11,7 @@ use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
@@ -32,9 +32,9 @@ impl WolfBehavior {
             postpartum_cooldown_ticks: 10_000,
             litter_size_range: (2, 4),
             mating_search_radius: 160,
-            well_fed_hunger_norm: 0.55,
-            well_fed_thirst_norm: 0.5,
-            well_fed_required_ticks: 900,
+            well_fed_hunger_norm: 0.60,
+            well_fed_thirst_norm: 0.55,
+            well_fed_required_ticks: 150, // Reduced from 900
             matching_interval_ticks: 150, // Check every 15s (optimized)
             mating_duration_ticks: 60,
             min_energy_norm: 0.45,
@@ -44,8 +44,8 @@ impl WolfBehavior {
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.55,
-            0.45,
+            0.20, // thirst_threshold: Drink when >= 20% thirsty
+            0.40, // hunger_threshold: Hunt when >= 40% hungry
             0.25,
             (8, 22),
             180,
@@ -122,6 +122,7 @@ pub fn plan_wolf_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -191,7 +192,7 @@ pub fn wolf_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Wolf>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Wolf>,
     >,
     tick: Res<SimulationTick>,
 ) {

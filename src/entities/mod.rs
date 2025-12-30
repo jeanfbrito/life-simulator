@@ -47,7 +47,7 @@ pub use spatial_cell::{
 pub use entity_tracker::{get_entities_json, init_entity_tracker, sync_entities_to_tracker};
 
 pub use stats::{
-    death_system, get_most_urgent_need, movement_energy_system, tick_stats_system,
+    death_system, get_most_urgent_need, movement_energy_system, need_damage_system, tick_stats_system,
     utility_drink, utility_eat, utility_heal, utility_rest, Energy, EntityStatsBundle, Health,
     Hunger, Stat, Thirst,
 };
@@ -250,14 +250,15 @@ impl Plugin for EntitiesPlugin {
                     .run_if(should_run_tick_systems),
             )
             // === STATS PHASE ===
-            // Movement energy must run first to set rate before tick applies it
+            // Movement energy and grazing hunger must run first to set rates before tick applies them
             .add_systems(
                 Update,
                 (
                     stats::movement_energy_system, // Set energy rate based on movement
+                    stats::grazing_hunger_system,  // Reduce hunger while grazing (like rest restores energy)
                     stats::tick_stats_system,      // Apply hunger, thirst, energy decay
                 )
-                    .chain() // movement_energy_system MUST run before tick_stats_system
+                    .chain() // MUST run in order: energy rate → grazing reduction → tick update
                     .in_set(SimulationSet::Stats)
                     .after(SimulationSet::Movement)
                     .run_if(should_run_tick_systems),

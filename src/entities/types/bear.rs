@@ -11,7 +11,7 @@ use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
@@ -33,9 +33,9 @@ impl BearBehavior {
             postpartum_cooldown_ticks: 12_000, // females rest longer
             litter_size_range: (1, 3),
             mating_search_radius: 90,
-            well_fed_hunger_norm: 0.45,
-            well_fed_thirst_norm: 0.45,
-            well_fed_required_ticks: 600,
+            well_fed_hunger_norm: 0.55,
+            well_fed_thirst_norm: 0.55,
+            well_fed_required_ticks: 100, // Reduced from 600
             matching_interval_ticks: 120, // Check every 12s (optimized)
             mating_duration_ticks: 60,
             min_energy_norm: 0.55,
@@ -46,8 +46,8 @@ impl BearBehavior {
     /// Core behavioural thresholds for bears.
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.4,     // drink when 40% thirsty
-            0.4,     // seek meals when 40% hungry
+            0.20,    // thirst_threshold: Drink when >= 20% thirsty
+            0.35,    // hunger_threshold: Forage/hunt when >= 35% hungry
             0.3,     // rest when energy below 30%
             (6, 18), // forage radius when sampling plants
             150,     // water search radius
@@ -128,6 +128,7 @@ pub fn plan_bear_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -174,7 +175,7 @@ pub fn plan_bear_actions(
 }
 
 /// Bear mate-matching uses the generic reproduction helper.
-/// Change detection: Only processes bears that moved or changed reproductive state
+/// Runs at matching_interval_ticks frequency (configured in ReproductionConfig).
 pub fn bear_mate_matching_system(
     mut commands: Commands,
     animals: Query<
@@ -191,7 +192,7 @@ pub fn bear_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Bear>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Bear>,
     >,
     tick: Res<SimulationTick>,
 ) {

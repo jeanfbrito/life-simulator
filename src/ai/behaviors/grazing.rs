@@ -1,4 +1,4 @@
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::TilePosition;
 use crate::tilemap::TerrainType;

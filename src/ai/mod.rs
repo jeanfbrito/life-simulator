@@ -5,8 +5,8 @@
 /// - Actions queue with priorities
 /// - Execution happens SYNCHRONOUSLY on simulation ticks
 /// - Resource contention resolved through queue ordering
-pub mod action;
 pub mod action_pathfinding_bridge;
+pub mod actions;
 pub mod behaviors;
 pub mod collectables;
 pub mod consideration;
@@ -35,9 +35,9 @@ pub mod watchdog;
 #[cfg(test)]
 pub mod lifecycle_tests;
 
-pub use action::{
+pub use actions::{
     create_action, Action, ActionRequest, ActionResult, ActionType, DrinkWaterAction, GrazeAction,
-    HarvestAction, RestAction,
+    HarvestAction, RestAction, WanderAction, HuntAction, FollowAction, MateAction, ScavengeAction,
 };
 pub use collectables::{
     CollectableInfo, CollectableSearchConfig, CollectableStats, debug_list_collectables,
@@ -72,7 +72,7 @@ pub use consideration::{Consideration, ConsiderationSet, ResponseCurve};
 pub use event_driven_planner::{EventDrivenPlannerPlugin, NeedsReplanning};
 pub use planner::UtilityScore;
 pub use queue::{
-    ActionQueue, QueuedAction, execute_active_actions_read_only, handle_action_results,
+    ActionQueue, QueuedAction, execute_active_actions_read_only, extract_hunt_data_system, handle_action_results,
     ActionExecutionResult, handle_action_failure_with_replan, handle_action_failure_exclusive,
     handle_precondition_failure_exclusive,
 };
@@ -116,6 +116,7 @@ impl Plugin for TQUAIPlugin {
             // Split into multiple systems to avoid &World + Commands parameter conflict:
             // 1. execute_active_actions_read_only: Execute actions with &World (parallelizable)
             // 2. bridge_actions_to_pathfinding: Queue pathfinding for NeedsPathfinding results
+            // 2.5. extract_hunt_data_system: Extract prey info from Hunt actions before result handling
             // 3. handle_action_results: Handle results with Commands (mutations)
             // 4. execute_queued_actions: Process pending action queue
             .add_systems(
@@ -125,6 +126,8 @@ impl Plugin for TQUAIPlugin {
                     apply_deferred, // CRITICAL: flush commands between systems
                     action_pathfinding_bridge::bridge_actions_to_pathfinding,
                     apply_deferred, // CRITICAL: flush pathfinding queue before result handling
+                    extract_hunt_data_system, // Extract hunt data before handling results
+                    apply_deferred, // Flush hunt data extraction
                     handle_action_results,
                 )
                     .chain()

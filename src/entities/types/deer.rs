@@ -15,7 +15,7 @@ use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
@@ -38,9 +38,9 @@ impl DeerBehavior {
             postpartum_cooldown_ticks: 9_000, // ~15 minutes recovery for females
             litter_size_range: (1, 2),        // Single fawn common, twins possible
             mating_search_radius: 60,         // Seek partners within a broad clearing
-            well_fed_hunger_norm: 0.55,       // Require healthier condition than rabbits
-            well_fed_thirst_norm: 0.55,
-            well_fed_required_ticks: 600, // Must stay well fed for ~60s
+            well_fed_hunger_norm: 0.60,       // Relaxed
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 100, // Reduced from 600 (~10s instead of 60s)
             matching_interval_ticks: 100, // Check every 10s for partners (optimized)
             mating_duration_ticks: 50,    // ~5s spent together
             min_energy_norm: 0.35,        // Need reasonable energy reserves
@@ -53,7 +53,7 @@ impl DeerBehavior {
     pub fn config() -> BehaviorConfig {
         use super::HabitatPreference;
         BehaviorConfig::new(
-            0.65,    // thirst_threshold (wait longer before drinking)
+            0.20,    // thirst_threshold: Drink when >= 20% thirsty
             0.45,    // hunger_threshold (eat less frequently)
             0.30,    // energy_threshold
             (5, 15), // graze_range
@@ -136,6 +136,7 @@ pub fn plan_deer_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -221,7 +222,7 @@ pub fn deer_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Deer>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Deer>,
     >,
     tick: Res<SimulationTick>,
 ) {

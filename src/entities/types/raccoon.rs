@@ -1,17 +1,18 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
-use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams, maybe_add_flee_action};
 use crate::ai::behaviors::eating::HerbivoreDiet;
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
 use crate::entities::entity_types;
+use crate::entities::entity_types::{Bear, Fox, Wolf};
 use crate::entities::reproduction::{
     birth_common, mate_matching_system_with_relationships, Age,
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
-use crate::entities::ActiveMate;
+use crate::entities::{ActiveMate, MatingTarget};
 use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
@@ -33,9 +34,9 @@ impl RaccoonBehavior {
             postpartum_cooldown_ticks: 5_400, // ~9 minutes recovery (female)
             litter_size_range: (2, 4),        // Raccoons usually have litters of 2-4
             mating_search_radius: 50,         // Comfortable search radius
-            well_fed_hunger_norm: 0.5,
-            well_fed_thirst_norm: 0.5,
-            well_fed_required_ticks: 480, // ~48 seconds well-fed streak
+            well_fed_hunger_norm: 0.55,
+            well_fed_thirst_norm: 0.55,
+            well_fed_required_ticks: 80, // Reduced from 480 (~8s instead of 48s)
             matching_interval_ticks: 60, // Evaluate partners every ~6 seconds (optimized)
             mating_duration_ticks: 40,    // ~4 seconds together
             min_energy_norm: 0.4,
@@ -48,7 +49,7 @@ impl RaccoonBehavior {
     pub fn config() -> BehaviorConfig {
         use super::HabitatPreference;
         BehaviorConfig::new(
-            0.55,    // thirst_threshold: raccoons tolerate thirst a bit longer
+            0.20,    // thirst_threshold: Drink when >= 20% thirsty
             0.45,    // hunger_threshold
             0.30,    // energy_threshold
             (4, 12), // graze/forage range (semi-opportunistic)
@@ -126,6 +127,7 @@ pub fn plan_raccoon_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -134,10 +136,16 @@ pub fn plan_raccoon_actions(
         With<Raccoon>,
     >,
     raccoon_positions: Query<(Entity, &TilePosition), With<Raccoon>>,
+    predator_positions: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
     resources: PlanningResources,
     mut profiler: ResMut<crate::simulation::TickProfiler>,
+    leader_query: Query<&crate::entities::PackLeader>,
+    member_query: Query<&crate::entities::PackMember>,
 ) {
     let loader = resources.world_loader.as_ref();
+
+    // Collect predator positions once for all raccoons
+    let predator_pos_list: Vec<IVec2> = predator_positions.iter().map(|pos| pos.tile).collect();
 
     let _timer =
         crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_raccoon_actions");
@@ -147,8 +155,8 @@ pub fn plan_raccoon_actions(
         queue.as_mut(),
         &raccoons,
         &raccoon_positions,
-        |_, position, thirst, hunger, energy, behavior, fear_state| {
-            RaccoonBehavior::evaluate_actions(
+        |entity, position, thirst, hunger, energy, behavior, fear_state| {
+            let mut actions = RaccoonBehavior::evaluate_actions(
                 position,
                 thirst,
                 hunger,
@@ -157,7 +165,22 @@ pub fn plan_raccoon_actions(
                 loader,
                 &resources.vegetation_grid,
                 fear_state,
-            )
+            );
+
+            // Add flee action if afraid of predators
+            maybe_add_flee_action(
+                &mut actions,
+                position,
+                fear_state,
+                &predator_pos_list,
+                loader,
+            );
+
+            // Apply generic group-aware coordination bonuses
+            use crate::ai::apply_group_behavior_bonuses;
+            apply_group_behavior_bonuses(entity, &mut actions, &leader_query, &member_query);
+
+            actions
         },
         Some(MateActionParams {
             utility: 0.42,
@@ -191,7 +214,7 @@ pub fn raccoon_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Raccoon>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Raccoon>,
     >,
     tick: Res<SimulationTick>,
 ) {

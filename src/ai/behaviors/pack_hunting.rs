@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use crate::ai::{UtilityScore, is_in_pack};
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::entities::TilePosition;
 
 /// Bonus utility for pack hunting (makes pack hunts more attractive than solo)
