@@ -490,12 +490,53 @@ this.setupEventListeners();
     resetView() {
         CONFIG.renderScale = 1.0;
         this.dragOffset = { x: 0, y: 0 };
+        this.targetOffset = { x: 0, y: 0 };
+        this.inertiaVelocity = { x: 0, y: 0 };
         this.renderer.setupCanvasSize(this.dragOffset);
         this.updateZoomDisplay();
         // Trigger re-render via the main app
         if (this.onRender) {
             this.onRender();
         }
+    }
+
+    /**
+     * Center the view on a specific world tile position
+     * @param {number} tileX - X coordinate of the tile in world space
+     * @param {number} tileY - Y coordinate of the tile in world space
+     */
+    centerOnEntity(tileX, tileY) {
+        // Get canvas dimensions
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+
+        // Calculate the offset needed to center this tile on screen
+        // The tile's screen position is: tileX * TILE_SIZE + dragOffset.x
+        // We want this to equal canvasWidth / 2
+        // So: dragOffset.x = canvasWidth / 2 - tileX * TILE_SIZE
+        const targetOffsetX = (canvasWidth / 2) - (tileX * CONFIG.TILE_SIZE);
+        const targetOffsetY = (canvasHeight / 2) - (tileY * CONFIG.TILE_SIZE);
+
+        // Set both current and target offset for smooth transition
+        this.targetOffset.x = targetOffsetX;
+        this.targetOffset.y = targetOffsetY;
+        this.dragOffset.x = targetOffsetX;
+        this.dragOffset.y = targetOffsetY;
+
+        // Stop any inertia
+        this.inertiaVelocity = { x: 0, y: 0 };
+
+        // Load chunks for the new position
+        if (this.worldData && this.onRender) {
+            this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
+        }
+
+        // Trigger re-render
+        if (this.onRender) {
+            this.onRender();
+        }
+
+        console.log(`📍 Centered view on tile (${tileX}, ${tileY})`);
     }
 
     /**
