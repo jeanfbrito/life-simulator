@@ -538,7 +538,9 @@ this.setupEventListeners();
         // Force immediate chunk loading for the new position (not debounced)
         // Reset last loaded center to ensure chunks are loaded even if we haven't moved far
         if (this.worldData && this.chunkManager) {
+            // Reset to force chunk reload
             this.chunkManager.lastLoadedCenter = { x: -9999, y: -9999 };
+            // Load all visible chunks (now properly calculates rectangular visible area)
             this.chunkManager.loadVisibleChunks(this.dragOffset, this.worldData).then(() => {
                 if (this.onRender) {
                     this.onRender();
