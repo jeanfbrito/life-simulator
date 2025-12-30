@@ -33,6 +33,97 @@
 - **RCT2 Extraction**: `tools/rct2-extraction/EXTRACTION_GUIDE.md` - Sprite extraction tools
 - **Map Generation**: `docs/OPENRCT2_TERRAIN_EXTRACTION.md` - Terrain generation algorithms
 
+---
+
+## 🌐 Web-Viewer Debugging with Chrome MCP
+
+When debugging or developing the web-viewer (`web-viewer/`), use the Chrome MCP tools for live browser interaction.
+
+### Quick Start Workflow
+
+```bash
+# 1. Start the life-simulator server (serves both API and web-viewer)
+cargo run --release --bin life-simulator
+
+# Server runs at http://localhost:54321
+# - Viewer: http://localhost:54321/viewer.html
+# - API: http://localhost:54321/api/entities
+```
+
+### Chrome MCP Commands
+
+```javascript
+// 1. Get browser tab context (ALWAYS do this first)
+mcp__claude-in-chrome__tabs_context_mcp({ createIfEmpty: true })
+
+// 2. Create a new tab for testing
+mcp__claude-in-chrome__tabs_create_mcp()
+
+// 3. Navigate to the viewer
+mcp__claude-in-chrome__navigate({ url: "http://localhost:54321/viewer.html", tabId: <TAB_ID> })
+
+// 4. Take screenshots to see results
+mcp__claude-in-chrome__computer({ action: "screenshot", tabId: <TAB_ID> })
+
+// 5. Test interactions
+mcp__claude-in-chrome__computer({ action: "scroll", coordinate: [700, 400], scroll_direction: "up", scroll_amount: 3, tabId: <TAB_ID> })
+mcp__claude-in-chrome__computer({ action: "left_click_drag", start_coordinate: [700, 400], coordinate: [500, 300], tabId: <TAB_ID> })
+mcp__claude-in-chrome__computer({ action: "key", text: "ArrowRight", repeat: 10, tabId: <TAB_ID> })
+
+// 6. Execute JavaScript to inspect state
+mcp__claude-in-chrome__javascript_tool({
+    action: "javascript_exec",
+    text: "window.lifeSimulatorApp.controls.getDragOffset()",
+    tabId: <TAB_ID>
+})
+
+// 7. Check for console errors
+mcp__claude-in-chrome__read_console_messages({ tabId: <TAB_ID>, onlyErrors: true })
+```
+
+### Web-Viewer Key Files
+- `web-viewer/viewer.html` - Main HTML page with styles
+- `web-viewer/js/app.js` - Application entry point
+- `web-viewer/js/controls.js` - Mouse/keyboard/zoom controls
+- `web-viewer/js/renderer.js` - Canvas rendering
+- `web-viewer/js/config.js` - Configuration constants
+- `web-viewer/js/entity-manager.js` - Entity polling and tracking
+
+### Web-Viewer Controls (Current Implementation)
+| Control | Action |
+|---------|--------|
+| Click + drag | Pan the map |
+| Scroll wheel | Zoom in/out (centers on cursor) |
+| WASD / Arrow keys | Pan continuously |
+| + / - | Zoom in/out |
+| R | Reset view |
+| H | Toggle help overlay |
+
+### Common Debugging Tasks
+
+**Test zoom centering:**
+```javascript
+// Get current zoom and offset
+const controls = window.lifeSimulatorApp.controls;
+({ zoom: CONFIG.renderScale, offset: controls.getDragOffset() })
+```
+
+**Verify keyboard handlers:**
+```javascript
+const controls = window.lifeSimulatorApp.controls;
+({
+    hasKeyHandlers: typeof controls.boundHandlers.keyDown === 'function',
+    keysPressed: [...controls.keysPressed]
+})
+```
+
+**Check entity data:**
+```javascript
+window.lifeSimulatorApp.entityManager.getEntities().length
+```
+
+---
+
 ## 🎯 Agent Context Selection
 
 ### 🤖 When you need to...

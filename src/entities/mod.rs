@@ -203,6 +203,8 @@ impl Plugin for EntitiesPlugin {
         use crate::simulation::SimulationSet;
 
         app
+            // Add entity tracker resource for web API
+            .init_resource::<entity_tracker::EntityTrackerResource>()
             // Add fear system plugin
             .add_plugins(FearPlugin)
             // Startup
