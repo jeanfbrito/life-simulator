@@ -535,12 +535,18 @@ this.setupEventListeners();
         // Stop any inertia
         this.inertiaVelocity = { x: 0, y: 0 };
 
-        // Load chunks for the new position
-        if (this.worldData && this.onRender) {
-            this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
+        // Force immediate chunk loading for the new position (not debounced)
+        // Reset last loaded center to ensure chunks are loaded even if we haven't moved far
+        if (this.worldData && this.chunkManager) {
+            this.chunkManager.lastLoadedCenter = { x: -9999, y: -9999 };
+            this.chunkManager.loadVisibleChunks(this.dragOffset, this.worldData).then(() => {
+                if (this.onRender) {
+                    this.onRender();
+                }
+            });
         }
 
-        // Trigger re-render
+        // Trigger immediate re-render (chunks will re-render when loaded)
         if (this.onRender) {
             this.onRender();
         }
