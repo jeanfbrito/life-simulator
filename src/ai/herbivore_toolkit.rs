@@ -2,21 +2,29 @@ use bevy::prelude::*;
 
 use crate::ai::actions::ActionType;
 use crate::ai::behaviors::{
-    evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
+    evaluate_drinking_behavior_optimized, evaluate_eating_behavior_optimized, evaluate_fleeing_behavior,
     evaluate_follow_behavior_with_priority, evaluate_grazing_behavior, evaluate_resting_behavior,
     evaluate_wandering_behavior, eating::HerbivoreDiet,
 };
+use crate::pathfinding::RegionMap;
+use crate::resources::WaterSpatialGrid;
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
 use crate::entities::{ActiveMate, MatingTarget, BehaviorConfig, FearState, TilePosition};
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Evaluate the baseline herbivore actions (drink, eat, rest, graze).
 ///
 /// Species-specific modules can call this helper and then push any additional
 /// actions (social, unique behaviours) afterwards.
+///
+/// PERFORMANCE: Uses spatial grids for O(k) lookups instead of O(radius²)
+/// - VegetationSpatialGrid for food lookups
+/// - WaterSpatialGrid for water lookups
+/// - RegionMap for O(1) reachability filtering (eliminates pathfinding failures)
 pub fn evaluate_core_actions(
     position: &TilePosition,
     thirst: &Thirst,
@@ -25,6 +33,9 @@ pub fn evaluate_core_actions(
     behavior_config: &BehaviorConfig,
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
+    spatial_grid: &VegetationSpatialGrid,
+    water_grid: &WaterSpatialGrid,
+    region_map: &RegionMap,
     fear_state: Option<&FearState>,
     diet: &HerbivoreDiet,
 ) -> Vec<UtilityScore> {
@@ -33,23 +44,30 @@ pub fn evaluate_core_actions(
     // Get fear utility modifier if fear state is available
     let fear_modifier = fear_state.map_or(1.0, |f| f.get_utility_modifier());
 
-    if let Some(drink) = evaluate_drinking_behavior(
+    // OPTIMIZED: Use water spatial grid for O(k) lookup + O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable water
+    if let Some(drink) = evaluate_drinking_behavior_optimized(
         position,
         thirst,
-        world_loader,
+        water_grid,
+        region_map,
         behavior_config.thirst_threshold,
         behavior_config.water_search_radius,
     ) {
         actions.push(drink);
     }
 
-    if let Some(eat) = evaluate_eating_behavior(
+    // OPTIMIZED: Use spatial grid for O(k) food lookup + O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable food
+    if let Some(eat) = evaluate_eating_behavior_optimized(
         position,
         hunger,
-        energy.0.normalized(),                    // NEW: energy affects pickiness
-        behavior_config.satisfaction_biomass,     // NEW: species-specific satisfaction
+        energy.0.normalized(),                    // energy affects pickiness
+        behavior_config.satisfaction_biomass,     // species-specific satisfaction
         world_loader,
         resource_grid,
+        spatial_grid,
+        region_map,                               // NEW: for reachability filtering
         behavior_config.hunger_threshold,
         behavior_config.food_search_radius,
         behavior_config.foraging_strategy,
@@ -64,9 +82,14 @@ pub fn evaluate_core_actions(
         actions.push(rest);
     }
 
-    if let Some(graze) =
-        evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
-    {
+    // OPTIMIZED: Use RegionMap for O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable grass
+    if let Some(graze) = evaluate_grazing_behavior(
+        position,
+        world_loader,
+        region_map,
+        behavior_config.graze_range,
+    ) {
         actions.push(graze);
     }
 
@@ -356,7 +379,7 @@ fn find_nearest_predator(prey_pos: IVec2, predator_positions: &[IVec2]) -> Optio
 #[cfg(test)]
 mod emergency_mating_tests {
     use super::*;
-    use crate::entities::reproduction::{MatingIntent, ReproductionConfig};
+    use crate::entities::reproduction::ReproductionConfig;
     use bevy::prelude::Entity;
 
     /// Helper to create test reproduction config

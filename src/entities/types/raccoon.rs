@@ -13,34 +13,32 @@ use crate::entities::reproduction::{
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::{ActiveMate, MatingTarget};
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
 use crate::entities::Mother;
 use crate::entities::{Raccoon, TilePosition};
 use crate::simulation::SimulationTick;
-use crate::world_loader::WorldLoader;
 
 /// Raccoon behavior preset
 pub struct RaccoonBehavior;
 
 impl RaccoonBehavior {
-    /// Reproduction parameters for raccoons
+    /// Fast reproduction parameters for raccoons (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 6_000,            // ~10 minutes to maturity
-            gestation_ticks: 3_600,           // ~6 minutes pregnant
-            mating_cooldown_ticks: 1_800,     // ~3 minutes between matings (male)
-            postpartum_cooldown_ticks: 5_400, // ~9 minutes recovery (female)
-            litter_size_range: (2, 4),        // Raccoons usually have litters of 2-4
-            mating_search_radius: 50,         // Comfortable search radius
-            well_fed_hunger_norm: 0.55,
-            well_fed_thirst_norm: 0.55,
-            well_fed_required_ticks: 80, // Reduced from 480 (~8s instead of 48s)
-            matching_interval_ticks: 60, // Evaluate partners every ~6 seconds (optimized)
-            mating_duration_ticks: 40,    // ~4 seconds together
-            min_energy_norm: 0.4,
-            min_health_norm: 0.4,
+            maturity_ticks: 120,             // ~12 seconds (fast for testing)
+            gestation_ticks: 60,             // ~6 seconds
+            mating_cooldown_ticks: 40,       // ~4 seconds
+            postpartum_cooldown_ticks: 80,   // ~8 seconds
+            litter_size_range: (2, 3),       // Kits
+            mating_search_radius: 35,        // Reduced from 50: Prevents pathfinding failures (150 tile limit)
+            well_fed_hunger_norm: 0.60,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 20,  // ~2 seconds
+            matching_interval_ticks: 12,  // check every 1.2s
+            mating_duration_ticks: 18,    // ~1.8s together
+            min_energy_norm: 0.35,
+            min_health_norm: 0.35,
         }
     }
 
@@ -55,7 +53,7 @@ impl RaccoonBehavior {
             (4, 12), // graze/forage range (semi-opportunistic)
             120,     // water search radius
             120,     // food search radius (they roam)
-            25,      // wander radius
+            10,      // wander_radius: Reduced from 25 to prevent pathfinding failures
         )
         .with_satisfaction(20.0) // Raccoons are opportunistic but have some standards
         .with_habitat(HabitatPreference::raccoon()) // Prefer forest, wetlands
@@ -86,6 +84,9 @@ impl RaccoonBehavior {
     }
 
     /// Evaluate raccoon actions using shared herbivore logic
+    ///
+    /// PERFORMANCE: Uses spatial grids for O(k) lookups instead of O(radius²)
+    /// - RegionMap for O(1) reachability filtering (eliminates pathfinding failures)
     pub fn evaluate_actions(
         position: &crate::entities::TilePosition,
         thirst: &crate::entities::stats::Thirst,
@@ -94,6 +95,9 @@ impl RaccoonBehavior {
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
         vegetation_grid: &crate::vegetation::resource_grid::ResourceGrid,
+        spatial_grid: &crate::vegetation::VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
         fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
         // Use raccoon diet preferences (generalist but prefers shrubs)
@@ -107,6 +111,9 @@ impl RaccoonBehavior {
             behavior_config,
             world_loader,
             vegetation_grid,
+            spatial_grid,
+            water_grid,
+            region_map,
             fear_state,
             &diet,
         )
@@ -164,6 +171,9 @@ pub fn plan_raccoon_actions(
                 behavior,
                 loader,
                 &resources.vegetation_grid,
+                &resources.vegetation_spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
                 fear_state,
             );
 
@@ -232,7 +242,7 @@ pub fn raccoon_birth_system(
     birth_common::<Raccoon>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| entity_types::spawn_raccoon(cmds, name, pos),
+        entity_types::spawn_raccoon,
         "🦝🍼",
         "Kit",
     );

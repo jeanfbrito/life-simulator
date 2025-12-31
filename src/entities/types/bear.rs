@@ -13,12 +13,12 @@ use crate::entities::reproduction::{
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::{ActiveMate, MatingTarget};
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Bear behaviour preset with omnivore+scavenger leaning parameters.
@@ -33,7 +33,7 @@ impl BearBehavior {
             mating_cooldown_ticks: 70,       // ~7 seconds
             postpartum_cooldown_ticks: 120,  // ~12 seconds
             litter_size_range: (1, 2),       // Cubs
-            mating_search_radius: 80,
+            mating_search_radius: 50,        // Reduced from 80: Prevents pathfinding failures (150 tile limit)
             well_fed_hunger_norm: 0.60,
             well_fed_thirst_norm: 0.60,
             well_fed_required_ticks: 30,  // ~3 seconds
@@ -53,7 +53,7 @@ impl BearBehavior {
             (6, 18), // forage radius when sampling plants
             150,     // water search radius
             150,     // food search radius (shared with scavenging grid)
-            80,      // roaming radius (large territory)
+            10,      // wander_radius: Reduced from 80 to prevent pathfinding failures
             super::ForagingStrategy::Sampled { sample_size: 6 },
         )
     }
@@ -83,7 +83,9 @@ impl BearBehavior {
         }
     }
 
-    /// Evaluate bear actions via the predator toolkit (filled in later steps).
+    /// Evaluate bear actions via the predator toolkit.
+    ///
+    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -97,6 +99,9 @@ impl BearBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
+        spatial_grid: &VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_bear_actions(
             entity,
@@ -110,6 +115,9 @@ impl BearBehavior {
             carcasses,
             deer,
             vegetation,
+            spatial_grid,
+            water_grid,
+            region_map,
         )
     }
 }
@@ -145,6 +153,7 @@ pub fn plan_bear_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
+    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_bear_actions");
 
     plan_species_actions(
@@ -165,6 +174,9 @@ pub fn plan_bear_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
+                spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
             )
         },
         Some(MateActionParams {
@@ -220,7 +232,7 @@ pub fn bear_birth_system(
     birth_common::<Bear>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| crate::entities::entity_types::spawn_bear(cmds, name, pos),
+        crate::entities::entity_types::spawn_bear,
         "🐻🍼",
         "Cub",
     );

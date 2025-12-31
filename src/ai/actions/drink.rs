@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::entities::stats::Thirst;
 use crate::entities::TilePosition;
+use crate::pathfinding::RegionMap;
 use crate::simulation::tick::SimulationTick;
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
@@ -38,7 +39,7 @@ enum DrinkWaterState {
     NeedPath,
     /// Waiting for pathfinding result
     WaitingForPath {
-        request_id: crate::pathfinding::PathRequestId,
+        _request_id: crate::pathfinding::PathRequestId,
     },
     /// Moving to target (MovementComponent handles actual movement)
     Moving,
@@ -62,23 +63,27 @@ impl DrinkWaterAction {
     /// Transition from NeedPath to WaitingForPath state
     /// Called by pathfinding bridge system after queuing pathfinding request
     pub fn transition_to_waiting(&mut self, request_id: crate::pathfinding::PathRequestId) {
-        self.state = DrinkWaterState::WaitingForPath { request_id };
+        self.state = DrinkWaterState::WaitingForPath { _request_id: request_id };
     }
 }
 
 impl Action for DrinkWaterAction {
     fn can_execute(&self, world: &World, entity: Entity) -> bool {
         // Check entity has thirst component
+        let Some(pos) = world.get::<TilePosition>(entity) else {
+            warn!("DrinkWater can_execute: entity {:?} has no TilePosition", entity);
+            return false;
+        };
+
         if world.get::<Thirst>(entity).is_none() {
             warn!("DrinkWater can_execute: entity {:?} has no Thirst", entity);
             return false;
         }
 
-        // Check target tile is adjacent to water (target_tile is now a walkable tile next to water)
-        if let Some(world_loader) = world.get_resource::<WorldLoader>() {
-            // Check all adjacent tiles for water (including the target tile itself)
+        // Check target tile is adjacent to water (target_tile is a walkable tile next to water)
+        let water_adjacent = if let Some(world_loader) = world.get_resource::<WorldLoader>() {
+            // Check all adjacent tiles for water (NOT the target tile itself - it should be walkable!)
             let offsets = [
-                IVec2::new(0, 0),  // Check target tile itself too
                 IVec2::new(0, 1),
                 IVec2::new(1, 0),
                 IVec2::new(0, -1),
@@ -89,6 +94,7 @@ impl Action for DrinkWaterAction {
                 IVec2::new(-1, -1),
             ];
 
+            let mut found_water = false;
             let mut found_terrains = Vec::new();
             for offset in offsets {
                 let check_pos = self.target_tile + offset;
@@ -98,20 +104,36 @@ impl Action for DrinkWaterAction {
                     found_terrains.push(format!("({},{}): {}", check_pos.x, check_pos.y, terrain_str));
                     if let Some(terrain) = TerrainType::from_str(&terrain_str) {
                         if matches!(terrain, TerrainType::ShallowWater | TerrainType::Water) {
-                            return true;
+                            found_water = true;
+                            break;
                         }
                     }
                 }
             }
-            warn!(
-                "DrinkWater can_execute failed: target {:?}, terrains: {:?}",
-                self.target_tile, found_terrains
-            );
-            false
+            if !found_water {
+                warn!(
+                    "DrinkWater can_execute failed: target {:?}, terrains: {:?}",
+                    self.target_tile, found_terrains
+                );
+            }
+            found_water
         } else {
             warn!("DrinkWater can_execute: no WorldLoader resource");
             false
+        };
+
+        if !water_adjacent {
+            return false;
         }
+
+        // Reachability check: only block if RegionMap exists AND says unreachable
+        if let Some(region_map) = world.get_resource::<RegionMap>() {
+            if !region_map.are_connected(pos.tile, self.target_tile) {
+                return false; // Water target unreachable, don't even try
+            }
+        }
+
+        true
     }
 
     fn execute(&mut self, world: &World, entity: Entity) -> ActionResult {
@@ -142,7 +164,7 @@ impl Action for DrinkWaterAction {
         if self.move_target.is_none() {
             if let Some(world_loader) = world.get_resource::<WorldLoader>() {
                 self.move_target = find_adjacent_walkable_tile(self.target_tile, world_loader)
-                    .or_else(|| Some(self.target_tile));
+                    .or(Some(self.target_tile));
             } else {
                 return ActionResult::Failed;
             }
@@ -168,7 +190,7 @@ impl Action for DrinkWaterAction {
                 ActionResult::NeedsPathfinding { target: move_target }
             }
 
-            DrinkWaterState::WaitingForPath { request_id: _ } => {
+            DrinkWaterState::WaitingForPath { .. } => {
                 // Check for PathReady component (Phase 2: Component-based pathfinding)
                 let entity_ref = world.get_entity(entity).ok();
 
@@ -252,8 +274,8 @@ impl Action for DrinkWaterAction {
         }
     }
 
-    fn cancel(&mut self, world: &World, entity: Entity) {
-        clear_navigation_state(world, entity);
+    fn cancel(&mut self, _world: &World, entity: Entity) {
+        // Navigation state clearing now handled by system layer via Commands
         self.state = DrinkWaterState::NeedPath;
         self.retry_count = 0;
         self.move_target = None;
@@ -306,13 +328,4 @@ fn find_adjacent_walkable_tile(water_pos: IVec2, world_loader: &WorldLoader) -> 
     None
 }
 
-/// Clear navigation state for an entity (deprecated - handled by system layer)
-///
-/// Actions should not mutate directly - mutations handled by execute_active_actions system.
-#[deprecated(note = "Use Commands in system layer instead")]
-fn clear_navigation_state(world: &World, entity: Entity) {
-    // This function is now a no-op since actions can't mutate World.
-    // Navigation state clearing will be handled by the system layer via Commands.
-    // Keeping function signature for compatibility during refactor.
-    let _ = (world, entity); // Suppress unused warnings
-}
+// Note: clear_navigation_state() removed - now handled by system layer via Commands

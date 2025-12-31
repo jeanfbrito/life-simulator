@@ -16,35 +16,33 @@ use crate::entities::reproduction::{
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::{ActiveMate, MatingTarget};
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
 use crate::entities::Mother;
 use crate::entities::Rabbit;
 use crate::entities::TilePosition;
 use crate::simulation::SimulationTick;
-use crate::world_loader::WorldLoader;
 
 /// Rabbit behavior preset
 pub struct RabbitBehavior;
 
 impl RabbitBehavior {
-    /// Default reproduction parameters for rabbits
+    /// Fast reproduction parameters for rabbits (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 3600,            // ~6 minutes at 10 TPS
-            gestation_ticks: 1200,           // ~2 minutes
-            mating_cooldown_ticks: 600,      // ~1 minute (male)
-            postpartum_cooldown_ticks: 1800, // ~3 minutes (female)
-            litter_size_range: (2, 6),
-            mating_search_radius: 50,
-            well_fed_hunger_norm: 0.50,  // Relaxed from 0.35
-            well_fed_thirst_norm: 0.50,  // Relaxed from 0.35
-            well_fed_required_ticks: 50, // Reduced from 300 (~5s instead of 30s)
-            matching_interval_ticks: 20,  // run matcher every 2s (optimized for breeding)
-            mating_duration_ticks: 30,    // ~3s mating interaction
-            min_energy_norm: 0.5,
-            min_health_norm: 0.6,
+            maturity_ticks: 100,             // ~10 seconds at 10 TPS (fast for testing)
+            gestation_ticks: 50,             // ~5 seconds
+            mating_cooldown_ticks: 30,       // ~3 seconds (male)
+            postpartum_cooldown_ticks: 60,   // ~6 seconds (female)
+            litter_size_range: (2, 4),
+            mating_search_radius: 35,        // Reduced from 50: Prevents pathfinding failures (150 tile limit)
+            well_fed_hunger_norm: 0.60,  // Relaxed threshold
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 20, // ~2 seconds well-fed
+            matching_interval_ticks: 10, // check every second
+            mating_duration_ticks: 15,   // ~1.5s mating
+            min_energy_norm: 0.4,
+            min_health_norm: 0.4,
         }
     }
     /// Get the default behavior configuration for rabbits
@@ -66,7 +64,7 @@ impl RabbitBehavior {
             (3, 8), // graze_range: Short-range grazing (3-8 tiles)
             100,    // water_search_radius: Wide water search
             100,    // food_search_radius: Wide food search
-            25,     // wander_radius: Moderate territory (Phase 3: aligned with mating search)
+            10,     // wander_radius: Reduced from 25 to prevent pathfinding failures on fragmented terrain
         )
         .with_satisfaction(15.0) // Rabbits are not picky - eat nearby grass quickly
         .with_habitat(HabitatPreference::rabbit()) // Prefer grassland, avoid forest
@@ -102,6 +100,11 @@ impl RabbitBehavior {
 
     /// Evaluate Rabbit actions
     /// Delegates to generic behavior evaluators but centralizes Rabbit logic.
+    ///
+    /// PERFORMANCE: Uses spatial grids for O(k) lookups instead of O(radius²)
+    /// - VegetationSpatialGrid for food
+    /// - WaterSpatialGrid for water
+    /// - RegionMap for O(1) reachability filtering (eliminates pathfinding failures)
     pub fn evaluate_actions(
         position: &crate::entities::TilePosition,
         thirst: &crate::entities::stats::Thirst,
@@ -110,6 +113,9 @@ impl RabbitBehavior {
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
         vegetation_grid: &crate::vegetation::resource_grid::ResourceGrid,
+        spatial_grid: &crate::vegetation::VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
         fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
         // Use rabbit-specific diet preferences
@@ -123,6 +129,9 @@ impl RabbitBehavior {
             behavior_config,
             world_loader,
             vegetation_grid,
+            spatial_grid,
+            water_grid,
+            region_map,
             fear_state,
             &diet,
         )
@@ -180,6 +189,9 @@ pub fn plan_rabbit_actions(
                 behavior,
                 loader,
                 &resources.vegetation_grid,
+                &resources.vegetation_spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
                 fear_state,
             );
 
@@ -248,7 +260,7 @@ pub fn rabbit_birth_system(
     birth_common::<Rabbit>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| entity_types::spawn_rabbit(cmds, name, pos),
+        entity_types::spawn_rabbit,
         "🐇🍼",
         "Kit",
     );

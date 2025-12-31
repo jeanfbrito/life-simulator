@@ -1,12 +1,11 @@
 /// Tick-based movement system for entities
 /// Movement happens discretely on simulation ticks, not smoothly over time
 use bevy::prelude::*;
-use bevy::ecs::component::ComponentId;
 use bevy::ecs::world::DeferredWorld;
 use bevy::ecs::component::HookContext;
 
 use crate::pathfinding::{GridPathRequest, Path};
-use super::Creature;  // For #[require] attribute
+  // For #[require] attribute
 
 // ============================================================================
 // COMPONENTS
@@ -205,7 +204,7 @@ pub fn initiate_pathfinding(
                 origin: position.tile,
                 destination: order.destination,
                 allow_diagonal: order.allow_diagonal,
-                max_steps: Some(5000), // Prevent infinite search (needs to be high for fragmented world terrain)
+                max_steps: Some(1500), // Reduced from 5000 - with smaller wander radius, paths should be shorter
             });
 
         info!(
@@ -305,7 +304,7 @@ pub fn initialize_movement_state(
 pub fn issue_move_order(commands: &mut Commands, entity: Entity, destination: IVec2) {
     commands.entity(entity).insert(MoveOrder {
         destination,
-        allow_diagonal: false,
+        allow_diagonal: true, // Enable diagonal movement with corner-cutting prevention (matches RegionMap's 8-directional flood-fill)
     });
 }
 
@@ -358,7 +357,7 @@ pub fn execute_movement_component(
     for (entity, mut position, mut movement, speed, movement_tick) in query.iter_mut() {
         if let super::MovementComponent::FollowingPath { path, index } = &*movement {
             // Get or initialize movement tick tracker
-            let ticks_since_move = if let Some(mut tick) = movement_tick {
+            let _ticks_since_move = if let Some(mut tick) = movement_tick {
                 tick.ticks_since_move += 1;
                 if tick.ticks_since_move < speed.ticks_per_move {
                     continue; // Not time to move yet

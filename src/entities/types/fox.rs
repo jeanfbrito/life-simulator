@@ -13,12 +13,12 @@ use crate::entities::reproduction::{
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::{ActiveMate, MatingTarget};
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Fox behaviour preset (applies to red fox or coyote analogue).
@@ -33,7 +33,7 @@ impl FoxBehavior {
             mating_cooldown_ticks: 50,       // ~5 seconds
             postpartum_cooldown_ticks: 90,   // ~9 seconds
             litter_size_range: (2, 4),       // Kits
-            mating_search_radius: 80,
+            mating_search_radius: 50,        // Reduced from 80: Prevents pathfinding failures (150 tile limit)
             well_fed_hunger_norm: 0.60,
             well_fed_thirst_norm: 0.60,
             well_fed_required_ticks: 25,  // ~2.5 seconds
@@ -52,7 +52,7 @@ impl FoxBehavior {
             (5, 14),
             150,
             160,
-            40,
+            10,  // wander_radius: Reduced from 40 to prevent pathfinding failures
             super::ForagingStrategy::Exhaustive,
         )
     }
@@ -80,6 +80,9 @@ impl FoxBehavior {
         }
     }
 
+    /// Evaluate fox actions via predator toolkit.
+    ///
+    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -93,6 +96,9 @@ impl FoxBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         rabbits: &Query<(Entity, &TilePosition, Option<&Age>), With<Rabbit>>,
         vegetation: &ResourceGrid,
+        spatial_grid: &VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_fox_actions(
             entity,
@@ -106,6 +112,9 @@ impl FoxBehavior {
             carcasses,
             rabbits,
             vegetation,
+            spatial_grid,
+            water_grid,
+            region_map,
         )
     }
 }
@@ -140,6 +149,7 @@ pub fn plan_fox_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
+    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_fox_actions");
 
     plan_species_actions(
@@ -150,7 +160,7 @@ pub fn plan_fox_actions(
         |entity, position, thirst, hunger, energy, behavior, fear_state| {
             FoxBehavior::evaluate_actions(
                 entity, position, thirst, hunger, energy, behavior, loader, fear_state, &carcasses,
-                &rabbits, vegetation,
+                &rabbits, vegetation, spatial_grid, &resources.water_spatial_grid, &resources.region_map,
             )
         },
         Some(MateActionParams {
@@ -203,7 +213,7 @@ pub fn fox_birth_system(
     birth_common::<Fox>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| crate::entities::entity_types::spawn_fox(cmds, name, pos),
+        crate::entities::entity_types::spawn_fox,
         "🦊🍼",
         "Kit",
     );

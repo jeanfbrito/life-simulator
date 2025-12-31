@@ -13,12 +13,12 @@ use crate::entities::reproduction::{
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::{ActiveMate, MatingTarget};
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Wolf behaviour preset (pack predator baseline).
@@ -33,7 +33,7 @@ impl WolfBehavior {
             mating_cooldown_ticks: 60,       // ~6 seconds
             postpartum_cooldown_ticks: 100,  // ~10 seconds
             litter_size_range: (2, 3),       // Pups
-            mating_search_radius: 100,
+            mating_search_radius: 60,        // Reduced from 100: Prevents pathfinding failures (150 tile limit)
             well_fed_hunger_norm: 0.65,
             well_fed_thirst_norm: 0.60,
             well_fed_required_ticks: 30,  // ~3 seconds
@@ -52,7 +52,7 @@ impl WolfBehavior {
             (8, 22),
             180,
             220,
-            200,
+            10,  // wander_radius: Reduced from 200 to prevent pathfinding failures
             super::ForagingStrategy::Exhaustive,
         )
     }
@@ -80,6 +80,9 @@ impl WolfBehavior {
         }
     }
 
+    /// Evaluate wolf actions via predator toolkit.
+    ///
+    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -93,6 +96,9 @@ impl WolfBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
+        spatial_grid: &VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_wolf_actions(
             entity,
@@ -106,6 +112,9 @@ impl WolfBehavior {
             carcasses,
             deer,
             vegetation,
+            spatial_grid,
+            water_grid,
+            region_map,
         )
     }
 }
@@ -142,6 +151,7 @@ pub fn plan_wolf_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
+    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_wolf_actions");
 
     plan_species_actions(
@@ -162,6 +172,9 @@ pub fn plan_wolf_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
+                spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
             );
 
             // PACK TACTICS: Apply generic group-aware coordination bonuses
@@ -220,7 +233,7 @@ pub fn wolf_birth_system(
     birth_common::<Wolf>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| crate::entities::entity_types::spawn_wolf(cmds, name, pos),
+        crate::entities::entity_types::spawn_wolf,
         "🐺🍼",
         "Pup",
     );
