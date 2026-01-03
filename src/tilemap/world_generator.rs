@@ -1881,6 +1881,134 @@ impl WorldMetadata {
     }
 }
 
+/// Map quality validation results
+/// Checks that generated maps meet playability constraints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MapValidation {
+    pub is_valid: bool,
+    pub land_percentage: f32,
+    pub green_coverage_percentage: f32,
+    pub water_accessible: bool,
+    pub spawn_point_found: bool,
+    pub validation_errors: Vec<String>,
+}
+
+impl MapValidation {
+    /// Validate a generated map against quality constraints
+    ///
+    /// Requirements:
+    /// - Land coverage >= 60% of total tiles
+    /// - Grass + Forest >= 50% of land tiles
+    /// - At least one valid spawn point exists
+    /// - Water tiles are accessible (connected to land)
+    pub fn validate(statistics: &WorldStatistics, spawn_point: Option<(i32, i32)>) -> Self {
+        let mut validation_errors = Vec::new();
+
+        // Calculate land percentage (non-water tiles)
+        let total_tiles = statistics.total_tiles as f32;
+        let water_tiles = statistics.terrain_distribution.get(&TerrainType::DeepWater).unwrap_or(&0)
+            + statistics.terrain_distribution.get(&TerrainType::ShallowWater).unwrap_or(&0);
+        let land_tiles = statistics.total_tiles.saturating_sub(water_tiles);
+        let land_percentage = if total_tiles > 0.0 {
+            (land_tiles as f32 / total_tiles) * 100.0
+        } else {
+            0.0
+        };
+
+        // Calculate green coverage (grass + forest as percentage of land)
+        let grass_tiles = statistics.terrain_distribution.get(&TerrainType::Grass).unwrap_or(&0);
+        let forest_tiles = statistics.terrain_distribution.get(&TerrainType::Forest).unwrap_or(&0);
+        let green_tiles = grass_tiles + forest_tiles;
+        let green_coverage_percentage = if land_tiles > 0 {
+            (green_tiles as f32 / land_tiles as f32) * 100.0
+        } else {
+            0.0
+        };
+
+        // Validate land coverage requirement (>= 60%)
+        if land_percentage < 60.0 {
+            validation_errors.push(format!(
+                "Insufficient land coverage: {:.1}% (required: >= 60%)",
+                land_percentage
+            ));
+        }
+
+        // Validate green coverage requirement (>= 50% of land)
+        if green_coverage_percentage < 50.0 {
+            validation_errors.push(format!(
+                "Insufficient green coverage: {:.1}% of land (required: >= 50%)",
+                green_coverage_percentage
+            ));
+        }
+
+        // Check spawn point availability
+        let spawn_point_found = spawn_point.is_some();
+        if !spawn_point_found {
+            validation_errors.push("No valid spawn point found".to_string());
+        }
+
+        // Water accessibility check (water exists and is adjacent to land)
+        // A map with water should have both water and land tiles for animals to drink
+        let has_water = water_tiles > 0;
+        let has_land = land_tiles > 0;
+        let water_accessible = has_water && has_land;
+
+        if has_water && !water_accessible {
+            validation_errors.push("Water tiles exist but are not accessible from land".to_string());
+        }
+
+        let is_valid = validation_errors.is_empty();
+
+        Self {
+            is_valid,
+            land_percentage,
+            green_coverage_percentage,
+            water_accessible,
+            spawn_point_found,
+            validation_errors,
+        }
+    }
+
+    /// Check if the map meets minimum quality standards
+    pub fn is_playable(&self) -> bool {
+        self.is_valid && self.spawn_point_found && self.land_percentage >= 60.0
+    }
+
+    /// Get a summary of validation results as a formatted string
+    pub fn summary(&self) -> String {
+        if self.is_valid {
+            format!(
+                "Map validation PASSED\n\
+                 - Land coverage: {:.1}%\n\
+                 - Green coverage: {:.1}% of land\n\
+                 - Spawn point: {}\n\
+                 - Water accessible: {}",
+                self.land_percentage,
+                self.green_coverage_percentage,
+                if self.spawn_point_found { "Found" } else { "Not found" },
+                if self.water_accessible { "Yes" } else { "No" }
+            )
+        } else {
+            format!(
+                "Map validation FAILED\n\
+                 - Land coverage: {:.1}% (required: >= 60%)\n\
+                 - Green coverage: {:.1}% of land (required: >= 50%)\n\
+                 - Spawn point: {}\n\
+                 - Water accessible: {}\n\
+                 Errors:\n{}",
+                self.land_percentage,
+                self.green_coverage_percentage,
+                if self.spawn_point_found { "Found" } else { "Not found" },
+                if self.water_accessible { "Yes" } else { "No" },
+                self.validation_errors.iter()
+                    .map(|e| format!("  - {}", e))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
