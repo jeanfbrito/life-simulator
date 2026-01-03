@@ -21,8 +21,8 @@ pub use tilemap::{
 };
 
 pub use serialization::{
-    SerializedChunk, SerializedWorld, WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin,
-    WorldSerializer,
+    BiomeConfig, SerializedChunk, SerializedWorld, WorldLoadRequest, WorldSaveRequest,
+    WorldSerializationPlugin, WorldSerializer,
 };
 
 pub use cached_world::{CachedWorld, CachedWorldPlugin, UpdateCachedWorld};
