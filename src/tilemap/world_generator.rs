@@ -916,6 +916,55 @@ impl WorldGenerator {
         }
     }
 
+    /// Apply internal water transition rules (Map Generator 2.0)
+    /// Enforces smooth deep→shallow→land transitions without requiring sand
+    /// Prevents deep water from being directly adjacent to land tiles
+    fn apply_internal_water_transitions(
+        &self,
+        heights: &mut Vec<Vec<u8>>,
+        whole_map: &WholeMapHeights,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) {
+        let cfg = &self.openrct2_config;
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+        // Create a copy to check original heights while modifying
+        let original_heights = heights.clone();
+
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+                let current_height = original_heights[local_y][local_x];
+
+                // Check if this is a deep water tile
+                if current_height <= cfg.deep_water_max {
+                    // Check all 4 orthogonal neighbors for land tiles
+                    let neighbors = [
+                        (world_x, world_y - 1), // North
+                        (world_x + 1, world_y), // East
+                        (world_x, world_y + 1), // South
+                        (world_x - 1, world_y), // West
+                    ];
+
+                    for (nx, ny) in neighbors {
+                        let neighbor_height = whole_map.get_height(nx, ny) as u8;
+
+                        // Check if neighbor is land (above beach threshold)
+                        if neighbor_height > cfg.beach_max {
+                            // Deep water adjacent to land - convert to shallow water
+                            // Use mid-point between deep and shallow thresholds
+                            heights[local_y][local_x] = (cfg.deep_water_max + cfg.shallow_water_max) / 2;
+                            break; // No need to check more neighbors
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Calculate slope bits for a tile (both diagonal and normal slopes)
     /// Used during Phase 3 finalization
     fn calculate_slope_for_tile(
