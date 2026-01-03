@@ -235,8 +235,9 @@
             "command": "cargo test test_water_spot_generation 2>&1 | grep -E '(ok|FAILED)' || echo 'test not found yet'",
             "expected": "ok"
           },
-          "status": "pending",
-          "notes": "Call generate_water_spots in generate_all_initial_heights, apply spot heights before smooth_whole_map"
+          "status": "completed",
+          "notes": "Successfully integrated water spots into height generation pipeline. The generate_water_spots() function is now called in generate_all_initial_heights() BEFORE smooth_whole_map() (Phase 1.5). This allows water bodies to integrate naturally with terrain during Phase 2 smoothing. Added comprehensive test_water_spot_generation() that verifies: (1) Water tiles are generated, (2) Reasonable water distribution exists, (3) Map is not dominated by water. The integration follows the Factorio-inspired spot noise algorithm and uses the configured SpotNoiseConfig parameters for natural water body placement.",
+          "updated_at": "2026-01-03T04:23:10.480372+00:00"
         }
       ]
     },
@@ -266,8 +267,9 @@
             "command": "grep -c 'biome_generator: BiomeGenerator' src/tilemap/world_generator.rs || echo '0'",
             "expected": "1"
           },
-          "status": "pending",
-          "notes": "Add BiomeGenerator as field, initialize with same seed in new()"
+          "status": "completed",
+          "notes": "Added BiomeGenerator field to WorldGenerator struct. Updated imports to include BiomeGenerator, added field to struct definition, and initialized it in the new() method using the world seed.",
+          "updated_at": "2026-01-03T04:24:29.065256+00:00"
         },
         {
           "id": "subtask-5-2",
@@ -717,5 +719,5 @@
   "updated_at": "2026-01-03T04:04:50.702Z",
   "status": "in_progress",
   "planStatus": "in_progress",
-  "last_updated": "2026-01-03T04:20:36.620427+00:00"
+  "last_updated": "2026-01-03T04:24:29.065265+00:00"
 }

@@ -577,7 +577,7 @@ impl WorldGenerator {
     }
 
     /// Map height to terrain type using OpenRCT2-style thresholds
-    /// Uses additional noise layers for natural terrain variety
+    /// Uses BiomeGenerator moisture/temperature for natural terrain variety
     fn generate_terrain_from_height(
         &self,
         height: u8,
@@ -587,83 +587,28 @@ impl WorldGenerator {
     ) -> String {
         let cfg = &self.openrct2_config;
 
-        // Water levels (lowest priority - height-based only)
-        if height <= cfg.deep_water_max {
-            return "DeepWater".to_string();
-        }
-        if height <= cfg.shallow_water_max {
-            return "ShallowWater".to_string();
-        }
-        if height <= cfg.beach_max {
-            return "Sand".to_string();
-        }
+        // Get climate data from BiomeGenerator
+        let moisture = self.biome_generator.get_moisture(world_x, world_y);
+        let temperature = self.biome_generator.get_temperature(world_x, world_y);
 
-        // Snow at high altitudes (highest priority on land)
-        if height >= cfg.snow_altitude {
-            return "Snow".to_string();
-        }
+        // Normalize height to 0-1 range for elevation (matching BiomeType::from_climate expectations)
+        let elevation = (height as f32) / 255.0;
 
-        // Mountains (high elevation)
-        if height >= cfg.mountain_min {
-            return "Mountain".to_string();
-        }
+        // Determine biome from climate
+        let biome = BiomeType::from_climate(temperature, moisture, elevation);
 
-        // Hills/Stone (medium-high elevation)
-        if height >= cfg.hills_max {
-            return "Stone".to_string();
-        }
-
-        // Plains (medium elevation) - use noise for variety
-        // Sample terrain variety noise
-        let forest_noise = perlin.get([
-            world_x as f64 * cfg.forest_frequency,
-            world_y as f64 * cfg.forest_frequency,
+        // Use perlin noise to get a random value for terrain selection within biome
+        let terrain_variety_noise = perlin.get([
+            world_x as f64 * 0.1,
+            world_y as f64 * 0.1,
         ]);
-        let desert_noise = perlin.get([
-            world_x as f64 * cfg.desert_frequency,
-            world_y as f64 * cfg.desert_frequency,
-        ]);
+        let random_value = ((terrain_variety_noise + 1.0) / 2.0) as f32;
 
-        // Normalize noise to [0, 1]
-        let forest_value = (forest_noise + 1.0) / 2.0;
-        let desert_value = (desert_noise + 1.0) / 2.0;
+        // Select terrain type from biome's distribution
+        let terrain_type = biome.select_terrain(random_value);
 
-        // Apply terrain types based on noise thresholds
-        if desert_value > cfg.desert_threshold && height > 60 && height < 100 {
-            // Desert zones in mid-elevation dry areas
-            return "Desert".to_string();
-        }
-
-        if forest_value > cfg.forest_threshold && height > 65 && height < 140 {
-            // Forests in suitable elevation range
-            return "Forest".to_string();
-        }
-
-        // Height-based terrain for remaining tiles
-        if height > 100 {
-            // Higher plains - more varied
-            if (world_x + world_y) % 7 == 0 {
-                "Dirt".to_string()
-            } else if (world_x + world_y) % 11 == 0 {
-                "Stone".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        } else if height > 70 {
-            // Mid plains - mostly grass
-            if (world_x * 3 + world_y * 2) % 13 == 0 {
-                "Dirt".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        } else {
-            // Lower plains near beach
-            if (world_x + world_y) % 5 == 0 {
-                "Sand".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        }
+        // Convert TerrainType to String
+        format!("{:?}", terrain_type)
     }
 
     /// Generate initial heights for ALL chunks BEFORE smoothing
