@@ -833,6 +833,9 @@ impl WorldGenerator {
             }
         }
 
+        // Apply perimeter boundary enforcement (Map Generator 2.0)
+        self.apply_perimeter_boundary(&mut heights, whole_map, chunk_x, chunk_y);
+
         // Calculate slopes based on final smoothed heights
         for local_y in 0..CHUNK_SIZE {
             for local_x in 0..CHUNK_SIZE {
@@ -864,6 +867,52 @@ impl WorldGenerator {
             heights,
             slope_masks,
             slope_indices,
+        }
+    }
+
+    /// Apply perimeter boundary enforcement (Map Generator 2.0)
+    /// Forces map edges to follow strict layering: DeepWater → ShallowWater → Sand
+    fn apply_perimeter_boundary(
+        &self,
+        heights: &mut Vec<Vec<u8>>,
+        whole_map: &WholeMapHeights,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) {
+        let cfg = &self.mapgen2_config;
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+
+                // Calculate distance from each edge
+                let dist_from_min_x = (world_x - whole_map.min_x).abs();
+                let dist_from_max_x = (whole_map.max_x - 1 - world_x).abs();
+                let dist_from_min_y = (world_y - whole_map.min_y).abs();
+                let dist_from_max_y = (whole_map.max_y - 1 - world_y).abs();
+
+                // Minimum distance from any edge
+                let dist_from_edge = dist_from_min_x
+                    .min(dist_from_max_x)
+                    .min(dist_from_min_y)
+                    .min(dist_from_max_y);
+
+                // Apply boundary layers based on distance from edge
+                if dist_from_edge < cfg.perimeter_deep_water_width as i32 {
+                    // Outermost layer: Deep water (height below deep_water_max threshold)
+                    heights[local_y][local_x] = self.openrct2_config.deep_water_max.saturating_sub(5);
+                } else if dist_from_edge < (cfg.perimeter_deep_water_width + cfg.perimeter_shallow_water_width) as i32 {
+                    // Middle layer: Shallow water (height between deep and shallow thresholds)
+                    heights[local_y][local_x] = (self.openrct2_config.deep_water_max + self.openrct2_config.shallow_water_max) / 2;
+                } else if dist_from_edge < (cfg.perimeter_deep_water_width + cfg.perimeter_shallow_water_width + cfg.perimeter_sand_min_width) as i32 {
+                    // Inner boundary: Sand/Beach (height between shallow water and beach thresholds)
+                    heights[local_y][local_x] = (self.openrct2_config.shallow_water_max + self.openrct2_config.beach_max) / 2;
+                }
+                // Beyond boundary layers: keep original terrain (no change)
+            }
         }
     }
 
