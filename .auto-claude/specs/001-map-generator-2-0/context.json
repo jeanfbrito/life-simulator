@@ -1,0 +1,87 @@
+{
+  "task_description": "Improve map generation with strict boundary rules, maximized green coverage, and strategic water placement for animal habitats",
+  "scoped_services": ["main"],
+  "files_to_modify": {
+    "main": [
+      "src/tilemap/world_generator.rs",
+      "src/tilemap/openrct2/settings.rs",
+      "src/tilemap/biome.rs",
+      "src/bin/map_generator.rs",
+      "src/resources/generator.rs"
+    ]
+  },
+  "files_to_reference": [
+    "src/tilemap/world_generator.rs",
+    "src/tilemap/biome.rs",
+    "src/resources/generator.rs",
+    "src/resources/types.rs"
+  ],
+  "patterns": {
+    "openrct2_config_pattern": {
+      "description": "All parameters numeric and configurable via config structs",
+      "example_file": "src/tilemap/world_generator.rs",
+      "key_fields": ["deep_water_max", "shallow_water_max", "beach_max", "plains_max", "hills_max", "forest_frequency", "forest_threshold"]
+    },
+    "multi_phase_generation": {
+      "description": "Three-phase generation: initial heights → smoothing → finalization",
+      "functions": ["generate_all_initial_heights", "smooth_whole_map", "finalize_chunk_from_whole_map"],
+      "key_insight": "Boundary rules should be applied in finalize_chunk_from_whole_map (Phase 3)"
+    },
+    "multi_octave_noise": {
+      "description": "Primary layer (large scale) * 0.7 + Detail layer (smaller scale) * 0.3, normalized to 0-1",
+      "example_file": "src/tilemap/biome.rs",
+      "functions": ["get_moisture", "get_temperature", "get_elevation"]
+    },
+    "biome_aware_resources": {
+      "description": "Resources spawn based on terrain type with biome multipliers",
+      "example_file": "src/resources/generator.rs",
+      "functions": ["generate_resource_layer_with_biome", "determine_resource_for_terrain_with_biome"]
+    }
+  },
+  "existing_implementations": {
+    "biome_generator": {
+      "description": "Already has moisture, temperature, elevation via multi-octave noise",
+      "file": "src/tilemap/biome.rs",
+      "methods": ["get_moisture(x, y) -> f32", "get_temperature(x, y) -> f32", "get_elevation(x, y) -> f32"],
+      "notes": "Ready to integrate with WorldGenerator for multi-factor terrain determination"
+    },
+    "foraging_resources": {
+      "description": "Already implemented - BerryBush, HazelShrub, MushroomPatch, WildRoot",
+      "file": "src/resources/types.rs",
+      "types": {
+        "HerbivoreBrowse": ["BerryBush", "HazelShrub", "Bush"],
+        "HumanGather": ["MushroomPatch", "WildRoot"]
+      },
+      "notes": "Resources already spawn on terrain, verify they work with new generation"
+    },
+    "whole_map_heights": {
+      "description": "WholeMapHeights struct stores all tile heights for cross-chunk smoothing",
+      "file": "src/tilemap/world_generator.rs",
+      "methods": ["get_height(x, y)", "set_height(x, y, height)"],
+      "notes": "Use for perimeter detection and boundary rule enforcement"
+    },
+    "terrain_types": {
+      "description": "12 terrain types already defined",
+      "file": "src/tilemap/terrain.rs",
+      "types": ["DeepWater", "ShallowWater", "Sand", "Grass", "Forest", "Dirt", "Stone", "Mountain", "Snow", "Desert", "Swamp", "Water"],
+      "walkability": "Water, DeepWater, ShallowWater, Mountain are non-walkable"
+    }
+  },
+  "boundary_rules": {
+    "perimeter": {
+      "description": "Map edges must have: DeepWater (1 tile) → ShallowWater → Sand (minimum 1 tile) → Land",
+      "implementation_point": "finalize_chunk_from_whole_map after height generation"
+    },
+    "internal": {
+      "description": "Internal water bodies: DeepWater → ShallowWater → Land (NO sand required)",
+      "implementation_point": "Post-process terrain layer to ensure transitions"
+    }
+  },
+  "terrain_targets": {
+    "land_coverage": "≥ 60% of total map",
+    "grass_forest": "≥ 50% of land tiles",
+    "water_distribution": "Minimum 4 spots distributed across quadrants"
+  },
+  "created_at": "2026-01-03T00:44:44.248270",
+  "updated_at": "2026-01-03T01:00:00.000000"
+}
