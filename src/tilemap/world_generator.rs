@@ -427,6 +427,55 @@ impl WorldGenerator {
         None
     }
 
+    /// Validate a generated map with retry logic
+    ///
+    /// This function generates world statistics and attempts to validate the map.
+    /// If validation fails, it modifies the seed and regenerates (up to max_attempts).
+    ///
+    /// Returns the final MapValidation result, which includes validation status,
+    /// land percentage, green coverage, and any validation errors.
+    ///
+    /// # Arguments
+    /// * `max_attempts` - Maximum number of generation attempts (default recommended: 5)
+    ///
+    /// # Returns
+    /// * `MapValidation` - Validation results for the final attempt
+    pub fn validate_generated_map(&mut self, max_attempts: u32) -> MapValidation {
+        let original_seed = self.config.seed;
+        let mut attempt = 0;
+
+        loop {
+            attempt += 1;
+
+            // Generate statistics for current map
+            let statistics = self.generate_world_statistics();
+            let spawn_point = self.find_spawn_point();
+
+            // Validate the map
+            let validation = MapValidation::validate(&statistics, spawn_point);
+
+            // If validation passed or we're out of attempts, return the result
+            if validation.is_valid || attempt >= max_attempts {
+                if validation.is_valid {
+                    info!("✅ Map validation PASSED on attempt {}/{}", attempt, max_attempts);
+                } else {
+                    warn!("❌ Map validation FAILED after {} attempts", max_attempts);
+                    warn!("Validation errors: {:?}", validation.validation_errors);
+                }
+                return validation;
+            }
+
+            // Validation failed, try again with modified seed
+            warn!("⚠️  Map validation FAILED (attempt {}/{}): {:?}",
+                  attempt, max_attempts, validation.validation_errors);
+
+            // Modify seed for next attempt (increment by a large prime to ensure variation)
+            let new_seed = original_seed.wrapping_add(attempt as u64 * 982451653);
+            info!("🔄 Retrying with modified seed: {} -> {}", self.config.seed, new_seed);
+            self.set_seed(new_seed);
+        }
+    }
+
     // Circular island terrain generation methods for web API
     pub fn generate_chunks_json(&self, path: &str) -> String {
         // Parse coordinates from path like /api/chunks?coords=0,0&coords=1,0
