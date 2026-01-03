@@ -870,6 +870,14 @@ impl WorldGenerator {
         }
     }
 
+    /// Check if a tile is at the world perimeter (on the edge of the map)
+    fn is_perimeter_tile(&self, world_x: i32, world_y: i32, whole_map: &WholeMapHeights) -> bool {
+        world_x == whole_map.min_x
+            || world_x == whole_map.max_x - 1
+            || world_y == whole_map.min_y
+            || world_y == whole_map.max_y - 1
+    }
+
     /// Apply perimeter boundary enforcement (Map Generator 2.0)
     /// Forces map edges to follow strict layering: DeepWater → ShallowWater → Sand
     fn apply_perimeter_boundary(
