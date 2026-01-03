@@ -5,7 +5,7 @@ use std::process;
 // Import the world generation and serialization modules
 use life_simulator::{
     tilemap::{WorldGenerator, WorldConfig, CHUNK_SIZE},
-    serialization::{WorldSerializer, SerializedWorld},
+    serialization::{BiomeConfig, WorldSerializer, SerializedWorld},
     resources::ResourceGenerator,
 };
 
@@ -317,6 +317,8 @@ fn list_saved_worlds() -> Result<(), Box<dyn std::error::Error>> {
                                        name: "Unknown".to_string(),
                                        seed: 0,
                                        config: WorldConfig::default(),
+                                       biome_config: BiomeConfig::default(),
+                                       elevation_map: HashMap::new(),
                                        chunks: HashMap::new(),
                                        version: "Unknown".to_string(),
                                    }));
