@@ -100,3 +100,24 @@ impl Default for MapGen2Config {
         }
     }
 }
+
+/// Spot noise configuration for Factorio-style water body placement
+/// Controls noise-based distribution of internal water bodies for natural clustering
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpotNoiseConfig {
+    pub frequency: f64,          // Base frequency of spot noise (default: 0.02)
+    pub spot_threshold: f64,     // Noise value threshold for spot placement (default: 0.6)
+    pub spot_radius_scale: f32,  // Multiplier for water spot size (default: 1.0)
+    pub jitter_amount: f32,      // Random position offset 0.0-1.0 (default: 0.3)
+}
+
+impl Default for SpotNoiseConfig {
+    fn default() -> Self {
+        Self {
+            frequency: 0.02,
+            spot_threshold: 0.6,
+            spot_radius_scale: 1.0,
+            jitter_amount: 0.3,
+        }
+    }
+}
