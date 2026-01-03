@@ -17,7 +17,7 @@ pub mod world_loader;
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,
     TerrainQuery, TerrainQuerySystem, TerrainType, TilemapPlugin, WorldConfig, WorldGenerator,
-    WorldMetadata, WorldStatistics,
+    WorldMetadata, WorldStatistics, CHUNK_SIZE,
 };
 
 pub use serialization::{
