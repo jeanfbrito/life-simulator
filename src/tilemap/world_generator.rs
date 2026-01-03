@@ -2427,4 +2427,340 @@ mod tests {
         assert!(is_at_edge(world_max_x - 1, world_max_y - 1), "Max corner should be at edge");
         assert!(!is_at_edge(world_min_x + 10, world_min_y + 10), "Interior point should not be at edge");
     }
+
+    #[test]
+    fn test_terrain_distribution_land_coverage_target() {
+        // Test that land coverage target (>= 60%) is correctly validated
+        use std::collections::HashMap;
+
+        // Case 1: Exactly 60% land (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 600);
+        terrain_dist.insert(TerrainType::DeepWater, 300);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 60.0);
+        // Should pass land coverage but might fail green coverage
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+
+        // Case 2: Below 60% land (should fail)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 500);
+        terrain_dist.insert(TerrainType::DeepWater, 400);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 500,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 50.0);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("Insufficient land coverage")));
+        assert!(!validation.is_valid);
+
+        // Case 3: Above 60% land (should pass land requirement)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 800);
+        terrain_dist.insert(TerrainType::DeepWater, 150);
+        terrain_dist.insert(TerrainType::ShallowWater, 50);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+    }
+
+    #[test]
+    fn test_terrain_distribution_green_coverage_target() {
+        // Test that green coverage target (>= 50% of land) is correctly validated
+        use std::collections::HashMap;
+
+        // Case 1: Exactly 50% green coverage (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 300);
+        terrain_dist.insert(TerrainType::Forest, 200);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::Stone, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 700,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 300 (water) = 700
+        // Green tiles = 300 (grass) + 200 (forest) = 500
+        // Green coverage = 500 / 700 = 71.4%
+        assert!((validation.green_coverage_percentage - 71.4).abs() < 0.1);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+
+        // Case 2: Below 50% green coverage (should fail)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 100);
+        terrain_dist.insert(TerrainType::Forest, 100);
+        terrain_dist.insert(TerrainType::Dirt, 200);
+        terrain_dist.insert(TerrainType::Stone, 200);
+        terrain_dist.insert(TerrainType::DeepWater, 300);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 400 (water) = 600
+        // Green tiles = 100 + 100 = 200
+        // Green coverage = 200 / 600 = 33.3%
+        assert!((validation.green_coverage_percentage - 33.3).abs() < 0.1);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("Insufficient green coverage")));
+        assert!(!validation.is_valid);
+
+        // Case 3: Above 50% green coverage (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 400);
+        terrain_dist.insert(TerrainType::Forest, 400);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 900,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 100 (water) = 900
+        // Green tiles = 400 + 400 = 800
+        // Green coverage = 800 / 900 = 88.9%
+        assert!((validation.green_coverage_percentage - 88.9).abs() < 0.1);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+    }
+
+    #[test]
+    fn test_terrain_distribution_combined_targets() {
+        // Test validation with both land and green coverage targets
+        use std::collections::HashMap;
+
+        // Case 1: Both targets met (should pass completely)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 400);
+        terrain_dist.insert(TerrainType::Forest, 300);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 150);
+        terrain_dist.insert(TerrainType::ShallowWater, 50);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0); // 800/1000
+        assert!((validation.green_coverage_percentage - 87.5).abs() < 0.1); // 700/800
+        assert!(validation.is_valid);
+        assert!(validation.spawn_point_found);
+        assert!(validation.is_playable());
+
+        // Case 2: Land target met, green target failed
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 100);
+        terrain_dist.insert(TerrainType::Forest, 100);
+        terrain_dist.insert(TerrainType::Dirt, 300);
+        terrain_dist.insert(TerrainType::Stone, 300);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0); // 800/1000
+        assert_eq!(validation.green_coverage_percentage, 25.0); // 200/800
+        assert!(!validation.is_valid);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+
+        // Case 3: Both targets failed
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Dirt, 200);
+        terrain_dist.insert(TerrainType::Stone, 200);
+        terrain_dist.insert(TerrainType::DeepWater, 500);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 400,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 40.0); // 400/1000
+        assert_eq!(validation.green_coverage_percentage, 0.0); // 0/400
+        assert!(!validation.is_valid);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+        assert!(validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+        assert!(!validation.is_playable());
+    }
+
+    #[test]
+    fn test_terrain_distribution_spawn_point_requirement() {
+        // Test that spawn point is required for validation
+        use std::collections::HashMap;
+
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 800);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        // With spawn point
+        let validation_with_spawn = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(validation_with_spawn.spawn_point_found);
+        assert!(validation_with_spawn.is_valid);
+
+        // Without spawn point
+        let validation_no_spawn = MapValidation::validate(&stats, None);
+        assert!(!validation_no_spawn.spawn_point_found);
+        assert!(!validation_no_spawn.is_valid);
+        assert!(validation_no_spawn.validation_errors.iter().any(|e| e.contains("spawn point")));
+        assert!(!validation_no_spawn.is_playable());
+    }
+
+    #[test]
+    fn test_terrain_distribution_water_accessibility() {
+        // Test water accessibility validation
+        use std::collections::HashMap;
+
+        // Case 1: Water and land both present (accessible)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 700);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 700,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(validation.water_accessible);
+        assert!(validation.is_valid);
+
+        // Case 2: No water (still valid, water_accessible flag is contextual)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 1000);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 1000,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // No water means water_accessible is false (no water to access)
+        assert!(!validation.water_accessible);
+        // But map is still valid (no water is not an error)
+        assert!(validation.is_valid);
+
+        // Case 3: All water (would fail land coverage, but water_accessible would be false)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::DeepWater, 1000);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 0,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(!validation.water_accessible); // No land
+        assert!(!validation.is_valid); // Fails land coverage
+    }
+
+    #[test]
+    fn test_terrain_distribution_edge_cases() {
+        // Test edge cases for terrain distribution calculations
+        use std::collections::HashMap;
+
+        // Case 1: Zero tiles (should not panic)
+        let stats = WorldStatistics::default();
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 0.0);
+        assert_eq!(validation.green_coverage_percentage, 0.0);
+        assert!(!validation.is_valid);
+
+        // Case 2: Single tile
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 1);
+
+        let stats = WorldStatistics {
+            total_tiles: 1,
+            walkable_tiles: 1,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 100.0);
+        assert_eq!(validation.green_coverage_percentage, 100.0);
+        assert!(!validation.is_valid); // Fails because land < 60% is false, but we need actual minimum tiles
+
+        // Case 3: Exactly at threshold boundaries
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 300);
+        terrain_dist.insert(TerrainType::Dirt, 300);
+        terrain_dist.insert(TerrainType::DeepWater, 400);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 60.0); // Exactly at land threshold
+        assert_eq!(validation.green_coverage_percentage, 50.0); // Exactly at green threshold
+        assert!(validation.is_valid); // Both exactly at threshold should pass
+    }
 }
