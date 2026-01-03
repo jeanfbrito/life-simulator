@@ -4,14 +4,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::time::Instant;
 
-mod cached_world;
-mod resources;
-mod serialization;
-mod tilemap;
-
-use resources::ResourceGenerator;
-use serialization::WorldSerializer;
-use tilemap::{TerrainGenerationMode, WorldConfig, WorldGenerator};
+// Import from the library crate instead of declaring local modules
+use life_simulator::resources::ResourceGenerator;
+use life_simulator::serialization::WorldSerializer;
+use life_simulator::tilemap::{TerrainGenerationMode, WorldConfig, WorldGenerator};
 
 /// Map Generator for Life Simulator
 ///
@@ -362,7 +358,7 @@ fn main() {
         println!("  Preview: {}", preview_path);
     }
 }
-fn generate_preview(_args: &Args, _world: &serialization::SerializedWorld, _world_file: &str) {
+fn generate_preview(_args: &Args, _world: &life_simulator::serialization::SerializedWorld, _world_file: &str) {
     println!("Preview generation temporarily disabled");
 }
 
