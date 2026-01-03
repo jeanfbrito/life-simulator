@@ -62,7 +62,7 @@ cargo run --bin map_generator generate my_world "World Name" 12345
 | `src/tilemap/openrct2/settings.rs` | main | Add new configurable parameters for boundaries, water ratio, vegetation density |
 | `src/tilemap/biome.rs` | main | Extend BiomeGenerator to support world_generator integration (moisture/temperature layers already implemented) |
 | `src/map_generator.rs` | main | Primary CLI tool - add new configurable parameters, verbose output options, map validation |
-| `src/bin/map_generator.rs` | main | Simple CLI wrapper - update to pass new parameters to generator |
+| `src/bin/simple_map_generator.rs` | main | Simple CLI wrapper - update to pass new parameters to generator |
 | `src/resources/mod.rs` | main | Add/verify foraging bush and fruit resource types |
 
 ## Files to Reference
@@ -304,12 +304,12 @@ The task is complete when:
 |---------|----------------|
 | `cargo run --bin map_generator -- -n test -s 12345` | Map generated using clap CLI, statistics show proper distribution |
 | `cargo run --bin map_generator -- -n test -s 12345 -v` | Verbose output showing boundary rules and validation |
-| Simple CLI: `cargo run --bin map_generator generate test TestMap 12345` | Map generated (simple wrapper in src/bin/) |
-| Simple CLI: `cargo run --bin map_generator list` | Lists saved maps with stats |
+| Simple CLI: `cargo run --bin simple_map_generator generate test TestMap 12345` | Map generated (simple wrapper in src/bin/) |
+| Simple CLI: `cargo run --bin simple_map_generator list` | Lists saved maps with stats |
 
 **Note**: Two map_generator binaries exist:
 - `src/map_generator.rs` - Full-featured CLI with clap (radius, terrain-mode, verbose flags)
-- `src/bin/map_generator.rs` - Simple wrapper with basic commands
+- `src/bin/simple_map_generator.rs` - Simple wrapper with basic commands
 
 ### QA Sign-off Requirements
 - [ ] Pre-implementation snapshot exists (git tag `pre-mapgen2.0`)
