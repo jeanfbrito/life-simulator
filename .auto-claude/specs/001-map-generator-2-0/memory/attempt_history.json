@@ -131,11 +131,71 @@
         }
       ],
       "status": "completed"
+    },
+    "subtask-5-2": {
+      "attempts": [
+        {
+          "session": 12,
+          "timestamp": "2026-01-03T01:26:31.149379",
+          "approach": "Implemented: Use moisture/temperature from BiomeGenerator in terrain determination",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-5-3": {
+      "attempts": [
+        {
+          "session": 13,
+          "timestamp": "2026-01-03T01:28:14.955562",
+          "approach": "Implemented: Maximize grass/forest coverage by adjusting height-to-terrain thresholds",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-6-1": {
+      "attempts": [
+        {
+          "session": 14,
+          "timestamp": "2026-01-03T01:29:42.322238",
+          "approach": "Implemented: Implement MapValidation struct with quality checks",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-6-2": {
+      "attempts": [
+        {
+          "session": 15,
+          "timestamp": "2026-01-03T01:32:06.447917",
+          "approach": "Implemented: Add validate_generated_map function with retry logic",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-7-1": {
+      "attempts": [
+        {
+          "session": 16,
+          "timestamp": "2026-01-03T01:35:08.310234",
+          "approach": "Implemented: Add new CLI parameters for map generation configuration",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
     }
   },
   "stuck_subtasks": [],
   "metadata": {
     "created_at": "2026-01-03T01:04:53.814021",
-    "last_updated": "2026-01-03T01:24:36.498562"
+    "last_updated": "2026-01-03T01:35:08.310246"
   }
 }

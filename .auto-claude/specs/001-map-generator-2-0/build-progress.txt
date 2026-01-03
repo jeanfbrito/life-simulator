@@ -240,3 +240,39 @@ Verification:
 Next steps:
 - subtask-4-2: Integrate water spots into height generation pipeline
 - Call generate_water_spots() in generate_all_initial_heights before smoothing
+
+
+[2026-01-03 - subtask-5-2] Use moisture/temperature from BiomeGenerator in terrain determination
+STATUS: ✅ COMPLETED
+
+Implementation:
+1. Modified generate_terrain_from_height() to use BiomeGenerator climate data
+2. Replaced simple height-threshold + noise approach with comprehensive biome-based system
+3. Now uses multi-factor terrain selection based on moisture, temperature, and elevation
+
+Changes made:
+- Get moisture from biome_generator.get_moisture(world_x, world_y)
+- Get temperature from biome_generator.get_temperature(world_x, world_y)
+- Normalize height (0-255) to elevation (0.0-1.0) to match BiomeType expectations
+- Determine biome using BiomeType::from_climate(temperature, moisture, elevation)
+- Use biome.select_terrain(random_value) for natural terrain variety within biome
+- Convert TerrainType to String for return value
+
+Key improvements:
+- Terrain now reflects climate conditions (moisture + temperature)
+- Natural biome boundaries instead of arbitrary noise thresholds
+- Consistent with BiomeGenerator's multi-octave noise patterns
+- Eliminates hardcoded desert/forest thresholds
+- Uses biome-specific terrain distributions from biome.rs
+
+Files modified:
+- src/tilemap/world_generator.rs (generate_terrain_from_height method)
+
+Verification:
+✓ grep -c 'biome_generator.get_moisture' returns 1 (expected)
+✓ Function now integrates BiomeGenerator properly
+✓ Follows pattern from biome.rs (BiomeType::from_climate)
+✓ Git commit created successfully
+
+Next steps:
+- subtask-5-3: Maximize grass/forest coverage by adjusting thresholds
