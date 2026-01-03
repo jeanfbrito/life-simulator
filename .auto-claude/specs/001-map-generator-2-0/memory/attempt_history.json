@@ -11,11 +11,107 @@
         }
       ],
       "status": "completed"
+    },
+    "subtask-1-2": {
+      "attempts": [
+        {
+          "session": 2,
+          "timestamp": "2026-01-03T01:08:10.126115",
+          "approach": "Implemented: Verify current system works and all tests pass",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-2-1": {
+      "attempts": [
+        {
+          "session": 3,
+          "timestamp": "2026-01-03T01:09:49.874253",
+          "approach": "Implemented: Add MapGen2Config struct with all numeric boundary and terrain parameters",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-2-2": {
+      "attempts": [
+        {
+          "session": 4,
+          "timestamp": "2026-01-03T01:11:17.904305",
+          "approach": "Implemented: Add SpotNoiseConfig struct for water body placement (Factorio-inspired)",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-2-3": {
+      "attempts": [
+        {
+          "session": 5,
+          "timestamp": "2026-01-03T01:13:06.635043",
+          "approach": "Implemented: Integrate new config structs into WorldGenerator",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-3-1": {
+      "attempts": [
+        {
+          "session": 6,
+          "timestamp": "2026-01-03T01:15:38.041715",
+          "approach": "Implemented: Implement perimeter boundary enforcement in finalize_chunk_from_whole_map",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-3-2": {
+      "attempts": [
+        {
+          "session": 7,
+          "timestamp": "2026-01-03T01:17:35.975436",
+          "approach": "Implemented: Implement internal water transition rules (deep\u2192shallow\u2192land, no sand required)",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-3-3": {
+      "attempts": [
+        {
+          "session": 8,
+          "timestamp": "2026-01-03T01:18:36.823696",
+          "approach": "Implemented: Add helper function to detect if tile is at world perimeter",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
+    },
+    "subtask-4-1": {
+      "attempts": [
+        {
+          "session": 9,
+          "timestamp": "2026-01-03T01:21:17.802257",
+          "approach": "Implemented: Implement spot noise water placement algorithm (Factorio-inspired)",
+          "success": true,
+          "error": null
+        }
+      ],
+      "status": "completed"
     }
   },
   "stuck_subtasks": [],
   "metadata": {
     "created_at": "2026-01-03T01:04:53.814021",
-    "last_updated": "2026-01-03T01:06:03.280479"
+    "last_updated": "2026-01-03T01:21:17.802271"
   }
 }
