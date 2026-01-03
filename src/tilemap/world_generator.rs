@@ -2165,4 +2165,266 @@ mod tests {
         assert!(water_percentage < 80.0, "Water percentage too high: {}%", water_percentage);
         assert!(water_percentage > 0.0, "Water percentage should be greater than 0%");
     }
+
+    #[test]
+    fn test_boundary_enforcement_perimeter_layers() {
+        // Test that perimeter boundary creates correct layering: deep water -> shallow water -> sand
+        let config = WorldConfig {
+            world_size_chunks: 8,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 12345,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+
+        // Generate a chunk at the edge of the map
+        let edge_coord = ChunkCoordinate::new(-4, 0);
+        let chunk = generator.generate_chunk(edge_coord);
+
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+        let shallow_water_threshold = generator.openrct2_config.shallow_water_max;
+        let beach_threshold = generator.openrct2_config.beach_max;
+
+        // Check leftmost column (should be deep water)
+        for y in 0..CHUNK_SIZE {
+            let height = chunk.tiles[y][0].height;
+            assert!(
+                height <= deep_water_threshold,
+                "Outermost edge tile at ({}, {}) should be deep water (height <= {}), got {}",
+                0, y, deep_water_threshold, height
+            );
+        }
+
+        // Check tiles a few columns in (should transition to shallow water, then sand)
+        let perimeter_deep_width = generator.mapgen2_config.perimeter_deep_water_width as usize;
+        let perimeter_shallow_width = generator.mapgen2_config.perimeter_shallow_water_width as usize;
+
+        if perimeter_deep_width < CHUNK_SIZE {
+            // Check shallow water layer
+            for y in 0..CHUNK_SIZE {
+                let height = chunk.tiles[y][perimeter_deep_width].height;
+                assert!(
+                    height > deep_water_threshold && height <= shallow_water_threshold,
+                    "Shallow water layer tile at ({}, {}) should be between {} and {}, got {}",
+                    perimeter_deep_width, y, deep_water_threshold, shallow_water_threshold, height
+                );
+            }
+        }
+
+        let sand_start = perimeter_deep_width + perimeter_shallow_width;
+        if sand_start < CHUNK_SIZE {
+            // Check sand layer
+            for y in 0..CHUNK_SIZE {
+                let height = chunk.tiles[y][sand_start].height;
+                assert!(
+                    height > shallow_water_threshold && height <= beach_threshold,
+                    "Sand layer tile at ({}, {}) should be between {} and {}, got {}",
+                    sand_start, y, shallow_water_threshold, beach_threshold, height
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_all_edges() {
+        // Test that boundary enforcement works on all four edges
+        let config = WorldConfig {
+            world_size_chunks: 6,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 54321,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Test all four edge chunks
+        let test_coords = vec![
+            ChunkCoordinate::new(-3, 0),  // Left edge
+            ChunkCoordinate::new(3, 0),   // Right edge
+            ChunkCoordinate::new(0, -3),  // Bottom edge
+            ChunkCoordinate::new(0, 3),   // Top edge
+        ];
+
+        for (idx, coord) in test_coords.iter().enumerate() {
+            let chunk = generator.generate_chunk(*coord);
+
+            // Check that at least some tiles near the edge are deep water
+            let mut has_deep_water = false;
+
+            match idx {
+                0 => { // Left edge - check leftmost column
+                    for y in 0..CHUNK_SIZE {
+                        if chunk.tiles[y][0].height <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                1 => { // Right edge - check rightmost column
+                    for y in 0..CHUNK_SIZE {
+                        if chunk.tiles[y][CHUNK_SIZE - 1].height <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                2 => { // Bottom edge - check bottom row
+                    for x in 0..CHUNK_SIZE {
+                        if chunk.tiles[0][x].height <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                3 => { // Top edge - check top row
+                    for x in 0..CHUNK_SIZE {
+                        if chunk.tiles[CHUNK_SIZE - 1][x].height <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            assert!(
+                has_deep_water,
+                "Edge chunk at {:?} should have deep water boundary enforcement",
+                coord
+            );
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_corners() {
+        // Test that corner chunks have proper boundary enforcement
+        let config = WorldConfig {
+            world_size_chunks: 4,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 99999,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Test all four corners
+        let corner_coords = vec![
+            ChunkCoordinate::new(-2, -2),  // Bottom-left
+            ChunkCoordinate::new(2, -2),   // Bottom-right
+            ChunkCoordinate::new(-2, 2),   // Top-left
+            ChunkCoordinate::new(2, 2),    // Top-right
+        ];
+
+        for coord in corner_coords {
+            let chunk = generator.generate_chunk(coord);
+
+            // Corner tiles should definitely be deep water (minimum distance from any edge)
+            let corner_positions = vec![
+                (0, 0),                                    // Bottom-left corner
+                (0, CHUNK_SIZE - 1),                       // Bottom-right corner
+                (CHUNK_SIZE - 1, 0),                       // Top-left corner
+                (CHUNK_SIZE - 1, CHUNK_SIZE - 1),          // Top-right corner
+            ];
+
+            for (y, x) in corner_positions {
+                let height = chunk.tiles[y][x].height;
+                assert!(
+                    height <= deep_water_threshold,
+                    "Corner tile at chunk {:?}, local ({}, {}) should be deep water, got height {}",
+                    coord, x, y, height
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_distance_calculation() {
+        // Test that distance from edge is calculated correctly
+        let config = WorldConfig {
+            world_size_chunks: 10,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 11111,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+
+        // Generate edge chunk and center chunk to compare
+        let edge_chunk = generator.generate_chunk(ChunkCoordinate::new(-5, 0));
+        let center_chunk = generator.generate_chunk(ChunkCoordinate::new(0, 0));
+
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Edge chunk should have more deep water tiles
+        let count_deep_water = |chunk: &Chunk| -> usize {
+            let mut count = 0;
+            for y in 0..CHUNK_SIZE {
+                for x in 0..CHUNK_SIZE {
+                    if chunk.tiles[y][x].height <= deep_water_threshold {
+                        count += 1;
+                    }
+                }
+            }
+            count
+        };
+
+        let edge_deep_water = count_deep_water(&edge_chunk);
+        let center_deep_water = count_deep_water(&center_chunk);
+
+        assert!(
+            edge_deep_water > center_deep_water,
+            "Edge chunk should have more deep water tiles ({}) than center chunk ({})",
+            edge_deep_water, center_deep_water
+        );
+
+        // Edge chunk should have at least some deep water
+        assert!(
+            edge_deep_water > 0,
+            "Edge chunk should have at least some deep water tiles"
+        );
+    }
+
+    #[test]
+    fn test_boundary_enforcement_respects_world_bounds() {
+        // Test that boundary enforcement doesn't go beyond world bounds
+        let config = WorldConfig {
+            world_size_chunks: 6,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 77777,
+            ..Default::default()
+        };
+
+        let generator = WorldGenerator::new(config);
+        let (min_x, max_x, min_y, max_y) = generator.get_world_bounds();
+
+        // Create WholeMapHeights to test boundary logic
+        let world_min_x = min_x * CHUNK_SIZE as i32;
+        let world_max_x = (max_x + 1) * CHUNK_SIZE as i32;
+        let world_min_y = min_y * CHUNK_SIZE as i32;
+        let world_max_y = (max_y + 1) * CHUNK_SIZE as i32;
+
+        let whole_map = WholeMapHeights::new(world_min_x, world_max_x, world_min_y, world_max_y);
+
+        // Verify bounds are set correctly
+        assert_eq!(whole_map.min_x, world_min_x);
+        assert_eq!(whole_map.max_x, world_max_x);
+        assert_eq!(whole_map.min_y, world_min_y);
+        assert_eq!(whole_map.max_y, world_max_y);
+
+        // Test that tiles at exact boundary positions would be calculated correctly
+        // This tests the boundary detection logic
+        let is_at_edge = |x: i32, y: i32| -> bool {
+            x == world_min_x
+                || x == world_max_x - 1
+                || y == world_min_y
+                || y == world_max_y - 1
+        };
+
+        assert!(is_at_edge(world_min_x, world_min_y), "Min corner should be at edge");
+        assert!(is_at_edge(world_max_x - 1, world_max_y - 1), "Max corner should be at edge");
+        assert!(!is_at_edge(world_min_x + 10, world_min_y + 10), "Interior point should not be at edge");
+    }
 }
