@@ -1634,7 +1634,8 @@ cargo run --bin analyze_terrain 12345
 - `src/tilemap/openrct2/settings.rs` (64 lines) - Configuration
 
 **Tools:**
-- `src/bin/map_generator.rs` - Map generation CLI
+- `src/map_generator.rs` - Full-featured map generation CLI (clap)
+- `src/bin/simple_map_generator.rs` - Simple map generation CLI
 - `tools/rct2-extraction/` - Sprite extraction scripts
 
 **Documentation:**
