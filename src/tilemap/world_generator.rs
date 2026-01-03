@@ -1,5 +1,6 @@
 use super::openrct2::{
-    generate_simplex_noise, smooth_height_map, HeightMap, OpenRct2Settings,
+    generate_simplex_noise, smooth_height_map, HeightMap, MapGen2Config, OpenRct2Settings,
+    SpotNoiseConfig,
 };
 use super::{BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
 use bevy::log::debug;
@@ -101,6 +102,8 @@ pub struct WorldGenerator {
     config: WorldConfig,
     rng: RwLock<Pcg64>,
     openrct2_config: OpenRCT2TerrainConfig,
+    mapgen2_config: MapGen2Config,
+    spot_noise_config: SpotNoiseConfig,
 }
 
 /// Whole-map height storage for OpenRCT2-style generation
@@ -143,11 +146,23 @@ impl WorldGenerator {
             config,
             rng: RwLock::new(rng),
             openrct2_config: OpenRCT2TerrainConfig::default(),
+            mapgen2_config: MapGen2Config::default(),
+            spot_noise_config: SpotNoiseConfig::default(),
         }
     }
 
     pub fn with_openrct2_config(mut self, openrct2_config: OpenRCT2TerrainConfig) -> Self {
         self.openrct2_config = openrct2_config;
+        self
+    }
+
+    pub fn with_mapgen2_config(mut self, mapgen2_config: MapGen2Config) -> Self {
+        self.mapgen2_config = mapgen2_config;
+        self
+    }
+
+    pub fn with_spot_noise_config(mut self, spot_noise_config: SpotNoiseConfig) -> Self {
+        self.spot_noise_config = spot_noise_config;
         self
     }
 
