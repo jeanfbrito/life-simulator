@@ -179,6 +179,101 @@ impl WorldGenerator {
         }
     }
 
+    /// Generate water spots using Factorio-inspired spot noise algorithm
+    /// Applies noise-based water body placement with radial falloff
+    /// This is called BEFORE smoothing to allow natural integration with terrain
+    pub fn generate_water_spots(&self, whole_map: &mut WholeMapHeights) {
+        // Convert u64 to u32 by XORing upper and lower bits to preserve entropy
+        let to_u32 = |s: u64| ((s >> 32) as u32) ^ (s as u32);
+
+        // Create noise function for spot placement
+        let spot_noise = noise::Simplex::new(to_u32(self.config.seed.wrapping_add(5000)));
+
+        // Multi-octave noise generation pattern from biome.rs
+        let frequency = self.spot_noise_config.frequency;
+        let threshold = self.spot_noise_config.spot_threshold;
+        let radius_scale = self.spot_noise_config.spot_radius_scale;
+
+        println!("💧 Generating water spots (frequency={}, threshold={}, radius_scale={})...",
+                 frequency, threshold, radius_scale);
+
+        let mut water_spot_count = 0;
+        let mut total_tiles_modified = 0;
+
+        // Calculate water target height based on OpenRCT2 config
+        let water_height = (self.openrct2_config.deep_water_max / 2) as u8;
+
+        // Scan entire map for potential water spots
+        for world_y in whole_map.min_y..whole_map.max_y {
+            for world_x in whole_map.min_x..whole_map.max_x {
+                let nx = world_x as f64 * frequency;
+                let ny = world_y as f64 * frequency;
+
+                // Primary noise layer (large scale spots)
+                let primary = spot_noise.get([nx, ny]) as f32;
+
+                // Secondary detail layer for natural variation
+                let detail_scale = frequency * 4.0;
+                let detail_x = world_x as f64 * detail_scale;
+                let detail_y = world_y as f64 * detail_scale;
+                let detail = spot_noise.get([detail_x, detail_y]) as f32 * 0.3;
+
+                // Combine and normalize to 0..1 (pattern from biome.rs)
+                let combined = primary * 0.7 + detail;
+                let normalized = ((combined + 1.0) * 0.5).clamp(0.0, 1.0);
+
+                // Check if this tile is a water spot center
+                if normalized > threshold as f32 {
+                    water_spot_count += 1;
+
+                    // Calculate radius based on noise value and config
+                    let spot_strength = (normalized - threshold as f32) / (1.0 - threshold as f32);
+                    let base_radius = self.mapgen2_config.water_spot_radius_min
+                        + (self.mapgen2_config.water_spot_radius_max - self.mapgen2_config.water_spot_radius_min)
+                        * spot_strength;
+                    let radius = base_radius * radius_scale;
+
+                    // Apply radial falloff around this spot
+                    let radius_i = radius.ceil() as i32;
+                    for dy in -radius_i..=radius_i {
+                        for dx in -radius_i..=radius_i {
+                            let target_x = world_x + dx;
+                            let target_y = world_y + dy;
+
+                            // Check if target is within map bounds
+                            if target_x < whole_map.min_x || target_x >= whole_map.max_x
+                                || target_y < whole_map.min_y || target_y >= whole_map.max_y {
+                                continue;
+                            }
+
+                            // Calculate distance from spot center
+                            let distance = ((dx * dx + dy * dy) as f32).sqrt();
+
+                            // Apply radial falloff (output falls to zero at radius distance)
+                            if distance <= radius {
+                                let falloff = 1.0 - (distance / radius);
+                                let current_height = whole_map.get_height(target_x, target_y);
+
+                                // Interpolate between current height and water height
+                                let target_height = (current_height as f32 * (1.0 - falloff)
+                                    + water_height as f32 * falloff) as i32;
+
+                                // Only lower heights (don't raise), and only if not already water
+                                if target_height < current_height && current_height > water_height as i32 {
+                                    whole_map.set_height(target_x, target_y, target_height as u8);
+                                    total_tiles_modified += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        println!("✅ Water spots generated: {} spot centers, {} tiles modified",
+                 water_spot_count, total_tiles_modified);
+    }
+
     pub fn generate_chunk(&self, coordinate: ChunkCoordinate) -> Chunk {
         let mut chunk = Chunk::new(coordinate, self.config.seed);
 
