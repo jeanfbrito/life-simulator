@@ -1,0 +1,340 @@
+{
+  "summary": "This is primarily an INTERNAL ALGORITHM improvement task, not an external library integration. The requirements reference Dwarf Fortress, Factorio, and OpenRCT2 as algorithm inspiration sources, not libraries to integrate. The project already has all necessary dependencies in place.",
+
+  "integrations_researched": [
+    {
+      "name": "noise (Rust crate)",
+      "type": "library",
+      "status": "already_integrated",
+      "verified_package": {
+        "name": "noise",
+        "install_command": "Already in Cargo.toml: noise = \"0.9\"",
+        "version": "0.9",
+        "verified": true,
+        "downloads_per_month": 48308
+      },
+      "api_patterns": {
+        "imports": [
+          "use noise::{NoiseFn, Perlin};",
+          "use noise::Fbm;",
+          "use noise::Simplex;"
+        ],
+        "initialization": "let perlin = Perlin::new(seed as u32);",
+        "key_functions": [
+          "perlin.get([x, y]) -> f64",
+          "Fbm<Perlin>::new(seed)",
+          "Simplex::new(seed)"
+        ],
+        "verified_against": "docs.rs/noise, github.com/Razaekel/noise-rs"
+      },
+      "capabilities": {
+        "noise_types": [
+          "Perlin noise (1/2/3/4D)",
+          "Open Simplex noise (2/3/4D)",
+          "Ridged-multifractal noise",
+          "Heterogenous Multifractal noise",
+          "Billowy noise",
+          "Fbm (Fractional Brownian Motion)"
+        ],
+        "features": [
+          "Combinable noise functions",
+          "Seeded generation for reproducibility",
+          "Image output support (optional feature)"
+        ]
+      },
+      "current_usage_in_project": "Already used in world_generator.rs for terrain height and variety generation",
+      "gotchas": [],
+      "research_sources": [
+        "https://docs.rs/noise",
+        "https://github.com/Razaekel/noise-rs",
+        "https://crates.io/crates/noise"
+      ]
+    },
+    {
+      "name": "rand / rand_pcg (Rust crates)",
+      "type": "library",
+      "status": "already_integrated",
+      "verified_package": {
+        "name": "rand + rand_pcg",
+        "install_command": "Already in Cargo.toml: rand = \"0.8\", rand_pcg = \"0.3\"",
+        "version": "0.8 / 0.3",
+        "verified": true
+      },
+      "api_patterns": {
+        "imports": [
+          "use rand::{Rng, SeedableRng};",
+          "use rand_pcg::Pcg64;"
+        ],
+        "initialization": "let mut rng = Pcg64::seed_from_u64(seed);",
+        "key_functions": [
+          "rng.gen::<f32>()",
+          "rng.gen_range(min..max)",
+          "rand::random::<u64>()"
+        ]
+      },
+      "current_usage_in_project": "Used throughout for deterministic seeded generation",
+      "gotchas": [],
+      "research_sources": [
+        "https://docs.rs/rand",
+        "https://docs.rs/rand_pcg"
+      ]
+    },
+    {
+      "name": "Dwarf Fortress",
+      "type": "algorithm_reference",
+      "status": "research_only",
+      "description": "Referenced as inspiration for world generation algorithms, NOT a library to integrate",
+      "algorithm_patterns": {
+        "terrain_generation": {
+          "approach": "Fractal-based terrain with rejection sampling",
+          "parameters": [
+            "elevation (height values)",
+            "rainfall (moisture)",
+            "temperature",
+            "drainage",
+            "volcanism",
+            "wildness"
+          ],
+          "process": [
+            "1. Allocate map memory",
+            "2. Choose pole type (north/south temperature variation)",
+            "3. Seed basic field values along variable-size grid",
+            "4. Fill in values fractally respecting settings",
+            "5. Temperature varies along Y axis",
+            "6. Select points for highest peaks",
+            "7. First pass adjustment to fit desired parameters",
+            "8. Reject invalid maps and regenerate"
+          ]
+        },
+        "key_techniques": [
+          "Fractal subdivision for natural terrain",
+          "Temperature gradient along latitude (Y axis)",
+          "Weighted meshes for distribution control",
+          "Feature placement with rejection if terrain unsuitable",
+          "Multiple biome types based on combined factors"
+        ]
+      },
+      "applicability_to_project": {
+        "relevant_patterns": [
+          "Multi-factor terrain determination (elevation + moisture + temperature)",
+          "Configurable weighted distribution of features",
+          "Rejection-based generation until valid",
+          "Fractal noise for natural variation"
+        ],
+        "already_implemented": [
+          "Height-based terrain thresholds (OpenRCT2TerrainConfig)",
+          "Multiple terrain types",
+          "Noise-based variation with Perlin"
+        ],
+        "could_add": [
+          "Moisture layer for biome determination",
+          "Temperature gradients",
+          "Feature rejection system for water placement"
+        ]
+      },
+      "research_sources": [
+        "https://dwarffortresswiki.org/index.php/DF2014:World_generation",
+        "https://dwarffortresswiki.org/index.php/Advanced_world_generation",
+        "https://github.com/Dozed12/df-style-worldgen"
+      ]
+    },
+    {
+      "name": "Factorio",
+      "type": "algorithm_reference",
+      "status": "research_only",
+      "description": "Referenced as inspiration for map generation algorithms, NOT a library to integrate",
+      "algorithm_patterns": {
+        "noise_expressions": {
+          "approach": "AST-based noise expressions compiled to programs",
+          "description": "Noise expressions represent abstract syntax tree of mathematical operations, fully configurable via Lua, compiled to optimized noise programs"
+        },
+        "core_noise": {
+          "type": "factorio-basis-noise",
+          "description": "Custom coherent noise function similar to Perlin/Simplex, optimized for 2D surface generation (replaced original Ken Perlin's Improved Noise)"
+        },
+        "spot_noise": {
+          "purpose": "Resource patch placement",
+          "algorithm": [
+            "1. Divide map into regions",
+            "2. Generate random points per region",
+            "3. Calculate density, quantity, radius, favorability per point",
+            "4. Sort points by favorability",
+            "5. Choose points until target quantity reached",
+            "6. Output high near spot centers, zero at radius distance"
+          ]
+        },
+        "performance": {
+          "multithreaded": true,
+          "simd_optimized": true,
+          "chunk_based": "Generates chunks on-demand as needed"
+        }
+      },
+      "applicability_to_project": {
+        "relevant_patterns": [
+          "Spot noise for controlled feature placement (water sources, forests)",
+          "Chunk-based generation (already implemented)",
+          "Configurable noise parameters",
+          "SIMD/parallel generation for performance"
+        ],
+        "already_implemented": [
+          "Chunk-based generation",
+          "Configurable terrain thresholds",
+          "Multi-layered generation (terrain + resources + heights)"
+        ],
+        "could_add": [
+          "Spot noise for strategic water placement",
+          "Region-based feature distribution",
+          "Favorability-weighted placement"
+        ]
+      },
+      "research_sources": [
+        "https://factorio.com/blog/post/fff-390",
+        "https://factorio.com/blog/post/fff-112",
+        "https://factorio.com/blog/post/fff-258"
+      ]
+    },
+    {
+      "name": "OpenRCT2",
+      "type": "algorithm_reference",
+      "status": "already_implemented",
+      "description": "OpenRCT2-style terrain generation is ALREADY IMPLEMENTED in the project",
+      "current_implementation": {
+        "file": "src/tilemap/world_generator.rs",
+        "mode": "TerrainGenerationMode::OpenRCT2Heights",
+        "features": [
+          "Simplex noise-based height generation",
+          "3-phase generation (initial heights → smoothing → finalization)",
+          "Height-to-terrain type mapping",
+          "Slope calculation and indexing",
+          "Configurable thresholds via OpenRCT2TerrainConfig"
+        ]
+      },
+      "existing_config_parameters": {
+        "water_levels": {
+          "deep_water_max": "Below this height = DeepWater (default: 35)",
+          "shallow_water_max": "Below this = ShallowWater (default: 60)",
+          "beach_max": "Below this = Sand (default: 65)"
+        },
+        "land_elevations": {
+          "plains_max": "Below this = Grass/Dirt (default: 120)",
+          "hills_max": "Below this = Stone (default: 160)",
+          "mountain_min": "Above this = Mountain (default: 160)"
+        },
+        "terrain_variety": {
+          "forest_frequency": "Perlin noise frequency (default: 0.05)",
+          "forest_threshold": "Noise threshold for forests (default: 0.0 = 50% coverage)",
+          "desert_frequency": "Frequency for desert zones (default: 0.03)",
+          "desert_threshold": "Threshold for desert (default: 0.5)",
+          "snow_altitude": "Height for snow (default: 255 = disabled)"
+        }
+      },
+      "research_sources": [
+        "https://github.com/OpenRCT2/OpenRCT2/wiki/Map-Generation",
+        "https://github.com/OpenRCT2/OpenRCT2/issues/804",
+        "https://github.com/OpenRCT2/OpenRCT2/pull/23509"
+      ]
+    }
+  ],
+
+  "existing_project_infrastructure": {
+    "terrain_generation": {
+      "location": "src/tilemap/world_generator.rs",
+      "modes": ["CircularIsland (legacy)", "OpenRCT2Heights (recommended)"],
+      "configurable_via": "WorldConfig, OpenRCT2TerrainConfig"
+    },
+    "terrain_types": {
+      "location": "src/tilemap/terrain.rs",
+      "types": ["Grass", "Stone", "Sand", "Water", "Dirt", "Snow", "Forest", "Mountain", "DeepWater", "ShallowWater", "Swamp", "Desert"],
+      "properties": ["is_walkable()", "movement_cost()", "fertility()", "resource_potential()"]
+    },
+    "noise_generation": {
+      "location": "src/tilemap/openrct2/",
+      "files": ["simplex_noise.rs", "height_map.rs", "settings.rs"],
+      "features": ["Simplex noise generation", "Height map smoothing", "Settings configuration"]
+    },
+    "map_generator_cli": {
+      "location": "src/map_generator.rs",
+      "features": ["Seed control", "Radius configuration", "Output directory", "Terrain mode selection", "Verbose output"]
+    }
+  },
+
+  "requirements_analysis": {
+    "perimeter_water_pattern": {
+      "requirement": "1 tile deep water (outermost) → shallow water → min 1 tile sand",
+      "current_state": "Uses height-based thresholds, no explicit edge handling",
+      "implementation_approach": "Add explicit edge detection or distance-from-edge calculations"
+    },
+    "internal_water_pattern": {
+      "requirement": "Deep water → shallow water → terrain (no sand required)",
+      "current_state": "Height thresholds create this naturally",
+      "implementation_approach": "Already partially working via height gradients"
+    },
+    "maximize_grass": {
+      "requirement": "Most of map should be grass/green",
+      "current_state": "forest_threshold: 0.0 gives 50% forest, rest varies",
+      "implementation_approach": "Adjust thresholds to favor Grass over other terrain types"
+    },
+    "strategic_water_placement": {
+      "requirement": "Enough water for animals, not excessive",
+      "current_state": "Water placement is purely height-based",
+      "implementation_approach": "Consider Factorio-style 'spot noise' for controlled water source placement"
+    },
+    "configurability": {
+      "requirement": "All number-based parameters for easy regeneration",
+      "current_state": "OpenRCT2TerrainConfig has many parameters",
+      "implementation_approach": "Extend config with new parameters, expose via CLI"
+    },
+    "foraging_resources": {
+      "requirement": "Foraging bushes and fruits",
+      "current_state": "Resource generation exists (ResourceGenerator)",
+      "location": "src/resources.rs (referenced in map_generator.rs)"
+    }
+  },
+
+  "unverified_claims": [],
+
+  "recommendations": [
+    {
+      "priority": "high",
+      "recommendation": "Extend OpenRCT2TerrainConfig with new parameters for perimeter handling",
+      "details": "Add: perimeter_water_depth, perimeter_sand_width, internal_water_sand_required (bool)"
+    },
+    {
+      "priority": "high",
+      "recommendation": "Implement distance-from-edge calculation for perimeter terrain",
+      "details": "Calculate distance from map edge and force terrain types based on distance bands"
+    },
+    {
+      "priority": "medium",
+      "recommendation": "Consider Factorio-style 'spot noise' for strategic water source placement",
+      "details": "Instead of pure height-based water, use spot noise to create controlled water bodies at regular intervals"
+    },
+    {
+      "priority": "medium",
+      "recommendation": "Add Dwarf Fortress-style moisture layer for richer biome determination",
+      "details": "Separate moisture noise layer combined with height for more natural terrain variety"
+    },
+    {
+      "priority": "low",
+      "recommendation": "Create snapshot/backup mechanism before changes",
+      "details": "User requested preserving current good state - consider git tag or backup of current map generation"
+    }
+  ],
+
+  "no_external_integrations_needed": true,
+  "rationale": "All required functionality can be achieved with existing Rust crates (noise, rand, rand_pcg) and internal algorithm improvements. The references to Dwarf Fortress, Factorio, and OpenRCT2 are for algorithm patterns/inspiration, not library dependencies.",
+
+  "research_sources": [
+    "https://docs.rs/noise",
+    "https://github.com/Razaekel/noise-rs",
+    "https://dwarffortresswiki.org/index.php/DF2014:World_generation",
+    "https://dwarffortresswiki.org/index.php/Advanced_world_generation",
+    "https://factorio.com/blog/post/fff-390",
+    "https://factorio.com/blog/post/fff-112",
+    "https://factorio.com/blog/post/fff-258",
+    "https://github.com/OpenRCT2/OpenRCT2/wiki/Map-Generation",
+    "https://github.com/OpenRCT2/OpenRCT2/issues/804"
+  ],
+
+  "created_at": "2025-01-03T00:00:00Z"
+}

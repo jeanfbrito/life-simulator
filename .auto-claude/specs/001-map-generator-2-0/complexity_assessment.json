@@ -1,0 +1,144 @@
+{
+  "complexity": "complex",
+  "workflow_type": "feature",
+  "confidence": 0.88,
+  "reasoning": "Major map generation system overhaul requiring 10+ files, architectural redesign of terrain generation patterns, research into Dwarf Fortress/Factorio algorithms, cross-cutting changes affecting terrain, vegetation, and entity systems, plus strict stability requirements (snapshot current state, maintain working status).",
+
+  "analysis": {
+    "scope": {
+      "estimated_files": 12,
+      "estimated_services": 1,
+      "is_cross_cutting": true,
+      "notes": "Core changes in world_generator.rs (1700+ lines), map_generator.rs, biome.rs, openrct2 modules, plus vegetation system integration. Task also requires modifying entity spawn patterns and potentially AI behaviors that depend on terrain."
+    },
+    "integrations": {
+      "external_services": [],
+      "new_dependencies": [],
+      "research_needed": true,
+      "notes": "Research required for Dwarf Fortress map generation algorithms, Factorio terrain algorithms, and improving upon existing OpenRCT2 patterns. No new external services or packages, but significant algorithm research."
+    },
+    "infrastructure": {
+      "docker_changes": false,
+      "database_changes": false,
+      "config_changes": true,
+      "notes": "Major configuration changes needed - task requires making ALL generation parameters numerical/configurable for easy iteration. New config structs will be needed for terrain thresholds, water placement, beach patterns, forest density, etc."
+    },
+    "knowledge": {
+      "patterns_exist": true,
+      "research_required": true,
+      "unfamiliar_tech": ["dwarf_fortress_algorithms", "factorio_terrain_generation"],
+      "notes": "OpenRCT2 patterns exist in codebase (tilemap/openrct2/). However, new algorithms from Dwarf Fortress and Factorio need research. The current world_generator.rs is complex (1700+ lines with multi-phase generation)."
+    },
+    "risk": {
+      "level": "high",
+      "concerns": [
+        "Breaking existing entity spawn logic",
+        "Vegetation system integration with new terrain",
+        "Requirement to snapshot and restore working state adds complexity",
+        "Must maintain same stability as current system",
+        "Complex perimeter water/sand/shallow water pattern logic",
+        "Internal water body transition patterns differ from perimeter",
+        "Animal habitat suitability must be preserved"
+      ],
+      "notes": "User explicitly requests snapshotting current working state before changes and restoring same stability after. This is a safety-critical refactoring requirement."
+    }
+  },
+
+  "recommended_phases": [
+    "discovery",
+    "requirements",
+    "research",
+    "context",
+    "spec_writing",
+    "self_critique",
+    "planning",
+    "validation"
+  ],
+
+  "flags": {
+    "needs_research": true,
+    "needs_self_critique": true,
+    "needs_infrastructure_setup": false
+  },
+
+  "validation_recommendations": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "minimal_mode": false,
+    "test_types_required": ["unit", "integration", "e2e"],
+    "security_scan_required": false,
+    "staging_deployment_required": false,
+    "reasoning": "Map generation changes affect core simulation systems including entity spawning and vegetation. Comprehensive testing required including unit tests for new terrain algorithms, integration tests for terrain-vegetation-entity interaction, and E2E tests to verify the simulation runs stably with new maps. No security implications but high stability requirements."
+  },
+
+  "detailed_scope_breakdown": {
+    "primary_files": [
+      "src/tilemap/world_generator.rs",
+      "src/map_generator.rs",
+      "src/bin/map_generator.rs",
+      "src/tilemap/biome.rs"
+    ],
+    "secondary_files": [
+      "src/tilemap/openrct2/height_map.rs",
+      "src/tilemap/openrct2/simplex_noise.rs",
+      "src/tilemap/openrct2/settings.rs",
+      "src/tilemap/terrain.rs",
+      "src/tilemap/chunk.rs",
+      "src/tilemap/mod.rs"
+    ],
+    "integration_points": [
+      "src/vegetation/mod.rs",
+      "src/vegetation/resource_grid.rs",
+      "src/entities/spawn_config.rs"
+    ],
+    "test_files_needed": [
+      "tests/map_generation_tests.rs",
+      "tests/terrain_patterns_tests.rs"
+    ]
+  },
+
+  "research_requirements": {
+    "topics": [
+      {
+        "name": "Dwarf Fortress map generation",
+        "priority": "high",
+        "reason": "User specified as 'biggest muse' - need to understand erosion, river systems, biome distribution"
+      },
+      {
+        "name": "Factorio terrain generation",
+        "priority": "medium",
+        "reason": "User referenced for configurable generation patterns and noise-based algorithms"
+      },
+      {
+        "name": "OpenRCT2 height map improvements",
+        "priority": "medium",
+        "reason": "Existing codebase uses OpenRCT2 patterns - need to extend for perimeter water rules"
+      },
+      {
+        "name": "Procedural beach/coastline algorithms",
+        "priority": "high",
+        "reason": "New requirement for specific perimeter pattern: deep water → shallow water → sand → terrain"
+      }
+    ]
+  },
+
+  "configuration_design": {
+    "needs_new_config_struct": true,
+    "proposed_params": [
+      "perimeter_deep_water_width",
+      "perimeter_shallow_water_width",
+      "perimeter_sand_min_width",
+      "perimeter_beach_variation",
+      "internal_water_transition_width",
+      "grass_coverage_target_percent",
+      "water_body_count_range",
+      "water_body_size_range",
+      "forest_density",
+      "mountain_frequency",
+      "map_size_tiles"
+    ],
+    "notes": "All parameters must be numerical and configurable for rapid iteration and testing as per user requirements"
+  },
+
+  "created_at": "2026-01-03T12:00:00Z"
+}
