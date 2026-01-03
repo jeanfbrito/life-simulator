@@ -412,8 +412,9 @@
             "command": "cargo run --bin map_generator generate test_verbose TestMap 12345 2>&1 | grep -E '(Generating|Progress|statistics)' | head -5",
             "expected": "Generating"
           },
-          "status": "pending",
-          "notes": "Add terrain distribution stats, boundary verification, water spot count, validation pass/fail"
+          "status": "completed",
+          "notes": "Successfully enhanced verbose output with comprehensive boundary rules and validation results. Added: (1) Detailed boundary rules section showing perimeter enforcement, shallow water band, beach transition, interior water bodies, and validation policy, (2) Validation results section displaying terrain generation stats (chunks generated), boundary enforcement confirmation, multi-layer structure verification, and chunk coverage grid dimensions. Verbose output now provides complete visibility into the OpenRCT2-style terrain generation process and post-generation validation status.",
+          "updated_at": "2026-01-03T04:36:25.123760+00:00"
         }
       ]
     },
@@ -441,8 +442,9 @@
             "command": "cargo test test_resource_generation 2>&1 | grep -E '(ok|FAILED)'",
             "expected": "ok"
           },
-          "status": "pending",
-          "notes": "Resources already exist in RESOURCE_DEFINITIONS - verify they spawn on generated terrain"
+          "status": "completed",
+          "notes": "Verified foraging resources (BerryBush, HazelShrub, MushroomPatch, WildRoot) spawn correctly. All four resources are fully implemented in src/resources.rs with proper HarvestProfiles, consumption kinds, and nutritional values. ResourceGenerator includes biome-aware placement logic with terrain-specific spawn rules. Tests exist: test_resource_generation() verifies basic spawning, test_biome_aware_resource_generation() verifies biome multipliers work correctly. Resources spawn on appropriate terrain types (grass, forest, dirt, swamp) with biome-specific density multipliers (e.g., 2.5x collectables in RiparianZone, 3x mushrooms in forests).",
+          "updated_at": "2026-01-03T04:37:43.438877+00:00"
         },
         {
           "id": "subtask-8-2",
@@ -724,5 +726,5 @@
   "updated_at": "2026-01-03T04:04:50.702Z",
   "status": "in_progress",
   "planStatus": "in_progress",
-  "last_updated": "2026-01-03T04:34:56.799534+00:00"
+  "last_updated": "2026-01-03T04:37:43.438886+00:00"
 }
