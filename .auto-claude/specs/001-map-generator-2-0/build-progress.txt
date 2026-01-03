@@ -1,0 +1,164 @@
+=== AUTO-BUILD PROGRESS ===
+
+Project: Map Generator 2.0 - Enhanced Terrain Generation
+Workspace: /Users/jean/Github/life-simulator
+Started: 2026-01-03
+
+Workflow Type: feature
+Rationale: This is a significant feature implementation that enhances an existing system
+(OpenRCT2-style terrain generation) with new boundary rules, improved biome distribution,
+and strategic water placement. Maintains backward compatibility with existing simulation.
+
+Session 1 (Planner):
+- Completed deep codebase investigation
+- Analyzed existing patterns in world_generator.rs (1700+ lines)
+- Identified BiomeGenerator already has moisture/temperature/elevation
+- Found foraging resources already implemented (BerryBush, HazelShrub, etc.)
+- Created implementation_plan.json
+- Phases: 10
+- Total subtasks: 23
+- Created init.sh
+
+=== PHASE SUMMARY ===
+
+Phase 1: Pre-Implementation Setup (2 subtasks)
+  - Create git tag snapshot
+  - Verify current system works
+  Depends on: None
+
+Phase 2: Configuration Parameters (3 subtasks)
+  - Add MapGen2Config struct
+  - Add SpotNoiseConfig struct
+  - Integrate into WorldGenerator
+  Depends on: phase-1-setup
+
+Phase 3: Boundary Enforcement (3 subtasks)
+  - Perimeter boundary rules (deep→shallow→sand)
+  - Internal water transitions (deep→shallow, no sand)
+  - Helper function for perimeter detection
+  Depends on: phase-2-configuration
+
+Phase 4: Strategic Water Placement (2 subtasks)
+  - Spot noise algorithm implementation
+  - Integration with height generation
+  Depends on: phase-2-configuration
+
+Phase 5: Biome Integration (3 subtasks)
+  - Add BiomeGenerator to WorldGenerator
+  - Use moisture/temperature for terrain
+  - Maximize grass/forest coverage
+  Depends on: phase-3-boundary
+
+Phase 6: Map Validation System (2 subtasks)
+  - MapValidation struct with quality checks
+  - Validation with retry logic
+  Depends on: phase-3-boundary, phase-4-spot-noise
+
+Phase 7: CLI Enhancements (2 subtasks)
+  - Add new CLI parameters
+  - Verbose output with stats
+  Depends on: phase-6-validation
+
+Phase 8: Resource Verification (2 subtasks)
+  - Verify foraging resources spawn
+  - Biome-aware resource placement
+  Depends on: phase-5-biome-integration
+
+Phase 9: Testing and Verification (3 subtasks)
+  - Unit tests for boundaries
+  - Unit tests for terrain distribution
+  - Full regression test suite
+  Depends on: phase-7-cli, phase-8-resources
+
+Phase 10: Integration (3 subtasks)
+  - E2E map generation and viewer test
+  - Entity spawning verification
+  - Stability verification
+  Depends on: phase-9-testing
+
+=== SERVICES INVOLVED ===
+
+- main (Rust simulation engine)
+  - Primary modification target: src/tilemap/world_generator.rs
+  - Configuration: src/tilemap/openrct2/settings.rs
+  - Biome: src/tilemap/biome.rs
+  - CLI: src/bin/map_generator.rs
+  - Resources: src/resources/generator.rs
+
+=== PARALLELISM ANALYSIS ===
+
+Max parallel phases: 3
+Recommended workers: 1 (sequential due to shared world_generator.rs)
+
+Parallel groups:
+- phase-4-spot-noise + phase-5-biome-integration (work on different aspects)
+- phase-7-cli + phase-8-resources (work on different files)
+
+=== KEY PATTERNS IDENTIFIED ===
+
+1. OpenRCT2TerrainConfig pattern:
+   - Cascading height thresholds (35 → 60 → 65 → 120 → 160)
+   - Frequency + threshold pairs for feature density
+   - All parameters numeric for easy tuning
+
+2. Multi-phase generation:
+   - Phase 1: generate_all_initial_heights()
+   - Phase 2: smooth_whole_map()
+   - Phase 3: finalize_chunk_from_whole_map() ← Apply boundary rules HERE
+
+3. BiomeGenerator already has:
+   - get_moisture(x, y) → 0.0-1.0
+   - get_temperature(x, y) → 0.0-1.0
+   - get_elevation(x, y) → 0.0-1.0
+   - Multi-octave noise (primary + detail layers)
+
+4. ResourceGenerator already has:
+   - BerryBush, HazelShrub (HerbivoreBrowse)
+   - MushroomPatch, WildRoot (HumanGather)
+   - Biome-aware placement via BiomeResourceMultipliers
+
+=== CRITICAL REQUIREMENTS ===
+
+✓ Perimeter: Deep water → Shallow water → Sand (minimum 1 tile each)
+✓ Internal: Deep water → Shallow water → Land (no sand required)
+✓ Land coverage: ≥ 60% of total map
+✓ Grass + Forest: ≥ 50% of land tiles
+✓ Water spots: Distributed across all quadrants
+✓ Foraging resources: Spawn on walkable terrain
+✓ All parameters: Numeric and configurable
+✓ Validation: Reject invalid maps, retry with modified seed
+
+=== STARTUP COMMAND ===
+
+To continue building this spec, run:
+
+  cd /Users/jean/Github/life-simulator
+
+  # First, create the safety snapshot:
+  git tag -a pre-mapgen2.0 -m "Snapshot before Map Generator 2.0 implementation"
+
+  # Then start implementation:
+  # (Coder agent will pick up from phase-1-setup)
+
+=== VERIFICATION STRATEGY ===
+
+Risk Level: HIGH
+Skip Validation: NO
+Test Types Required: unit, integration, e2e
+
+Acceptance Criteria:
+- All existing tests pass (no regressions)
+- New boundary enforcement tests pass
+- Terrain distribution meets targets
+- Map generates without errors
+- Animals spawn and move correctly
+- System stability matches pre-implementation
+
+=== END SESSION 1 (PLANNER) ===
+
+Next: Coder agent will begin with subtask-1-1 (create git snapshot)
+
+Session 2 (Coder):
+- ✅ subtask-1-1: Created git tag 'pre-mapgen2.0' at commit 7c765180
+  - Tag points to: "perf: Eliminate action failures with pathfinding and behavior optimizations"
+  - Verification passed: git tag -l shows 'pre-mapgen2.0'

@@ -1,0 +1,713 @@
+{
+  "feature": "Map Generator 2.0 - Enhanced Terrain Generation",
+  "workflow_type": "feature",
+  "workflow_rationale": "This is a significant feature implementation that enhances an existing system (OpenRCT2-style terrain generation) with new boundary rules, improved biome distribution, and strategic water placement. It requires coordinated changes across multiple files while maintaining backward compatibility with existing simulation systems.",
+  "phases": [
+    {
+      "id": "phase-1-setup",
+      "name": "Pre-Implementation Setup",
+      "type": "setup",
+      "description": "Create git snapshot and prepare for implementation - critical safety step",
+      "depends_on": [],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Create git tag snapshot of current working state before any changes",
+          "service": "main",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "git tag -l 'pre-mapgen2.0'",
+            "expected": "pre-mapgen2.0"
+          },
+          "status": "completed",
+          "notes": "Git tag 'pre-mapgen2.0' created successfully at commit 7c765180 (pathfinding and behavior optimizations)",
+          "updated_at": "2026-01-03T04:05:24.600807+00:00"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Verify current system works and all tests pass",
+          "service": "main",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --lib 2>&1 | tail -3",
+            "expected": "test result: ok"
+          },
+          "status": "pending",
+          "notes": "Verify baseline functionality before modifications"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-configuration",
+      "name": "Configuration Parameters",
+      "type": "implementation",
+      "description": "Add new configurable parameters for boundary rules, water placement, and terrain distribution",
+      "depends_on": [
+        "phase-1-setup"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Add MapGen2Config struct with all numeric boundary and terrain parameters",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/openrct2/settings.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo check 2>&1 | grep -E '(error|warning:)' | head -5 || echo 'OK: No errors'",
+            "expected": "OK: No errors"
+          },
+          "status": "pending",
+          "notes": "Add: perimeter_deep_water_width, perimeter_shallow_water_width, perimeter_sand_min_width, internal_water_transition_width, land_coverage_target, grass_forest_ratio, water_spot_count, water_spot_radius_min/max"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Add SpotNoiseConfig struct for water body placement (Factorio-inspired)",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/openrct2/settings.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'SpotNoiseConfig' src/tilemap/openrct2/settings.rs",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Add: region_size, spots_per_region, min_spot_radius, max_spot_radius, spot_density"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Integrate new config structs into WorldGenerator",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo check 2>&1 | grep -E '(error|warning:)' | head -5 || echo 'OK: No errors'",
+            "expected": "OK: No errors"
+          },
+          "status": "pending",
+          "notes": "Add mapgen2_config field to WorldGenerator, update new() and with_* builder methods"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-boundary",
+      "name": "Boundary Enforcement",
+      "type": "implementation",
+      "description": "Implement perimeter and internal water boundary rules",
+      "depends_on": [
+        "phase-2-configuration"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Implement perimeter boundary enforcement in finalize_chunk_from_whole_map",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'apply_perimeter_boundary' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Apply AFTER height generation: detect edge tiles, force DeepWater for outermost, ShallowWater for next ring, Sand for inner boundary"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Implement internal water transition rules (deep\u2192shallow\u2192land, no sand required)",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'apply_internal_water_transitions' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Post-process terrain: find all DeepWater tiles, ensure ShallowWater buffer exists between DeepWater and land terrain"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Add helper function to detect if tile is at world perimeter",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'is_perimeter_tile' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Calculate distance from world edge based on WholeMapHeights bounds and chunk coordinates"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-spot-noise",
+      "name": "Strategic Water Placement",
+      "type": "implementation",
+      "description": "Implement spot noise algorithm for controlled water body distribution",
+      "depends_on": [
+        "phase-2-configuration"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Implement spot noise water placement algorithm (Factorio-inspired)",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/biome.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'generate_water_spots' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Algorithm: Divide map into regions, generate random points per region, calculate radius per spot, sort by favorability, select until quota met, apply spots to height map"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Integrate water spots into height generation (before smoothing)",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_water_spot_generation 2>&1 | grep -E '(ok|FAILED)' || echo 'test not found yet'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Call generate_water_spots in generate_all_initial_heights, apply spot heights before smooth_whole_map"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-biome-integration",
+      "name": "Biome Integration",
+      "type": "implementation",
+      "description": "Connect BiomeGenerator to terrain determination for multi-factor terrain selection",
+      "depends_on": [
+        "phase-3-boundary"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Add BiomeGenerator field to WorldGenerator",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/biome.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'biome_generator: BiomeGenerator' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Add BiomeGenerator as field, initialize with same seed in new()"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Use moisture/temperature from BiomeGenerator in terrain determination",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/biome.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'biome_generator.get_moisture' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Modify generate_terrain_from_height to use moisture/temperature for grass vs forest decision instead of pure noise"
+        },
+        {
+          "id": "subtask-5-3",
+          "description": "Maximize grass/forest coverage by adjusting height-to-terrain thresholds",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_terrain_distribution 2>&1 | grep -E '(ok|FAILED)' || echo 'test not found yet'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Adjust default thresholds to ensure grass+forest >= 50% of land tiles, disable desert by default, reduce stone/dirt variation"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-validation",
+      "name": "Map Validation System",
+      "type": "implementation",
+      "description": "Add validation checks to ensure generated maps meet quality criteria",
+      "depends_on": [
+        "phase-3-boundary",
+        "phase-4-spot-noise"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Implement MapValidation struct with quality checks",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'struct MapValidation' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "Add checks: land_percentage >= 60%, grass_forest_percentage >= 50%, water_spots_in_all_quadrants, spawn_point_available"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Add validate_generated_map function with retry logic",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "grep -c 'fn validate_generated_map' src/tilemap/world_generator.rs || echo '0'",
+            "expected": "1"
+          },
+          "status": "pending",
+          "notes": "If validation fails, modify seed and regenerate (max 5 attempts), return validation results for CLI output"
+        }
+      ]
+    },
+    {
+      "id": "phase-7-cli",
+      "name": "CLI Enhancements",
+      "type": "implementation",
+      "description": "Add new parameters and verbose output to map generator CLI",
+      "depends_on": [
+        "phase-6-validation"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Add new CLI parameters for map generation configuration",
+          "service": "main",
+          "files_to_modify": [
+            "src/bin/map_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/bin/map_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo run --bin map_generator -- --help 2>&1 | grep -E '(generate|verbose|water)' || echo 'help not updated'",
+            "expected": "generate"
+          },
+          "status": "pending",
+          "notes": "Add: --water-density, --forest-density, --verbose flags; update help text"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Add verbose output showing boundary rules and validation results",
+          "service": "main",
+          "files_to_modify": [
+            "src/bin/map_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/bin/map_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo run --bin map_generator generate test_verbose TestMap 12345 2>&1 | grep -E '(Generating|Progress|statistics)' | head -5",
+            "expected": "Generating"
+          },
+          "status": "pending",
+          "notes": "Add terrain distribution stats, boundary verification, water spot count, validation pass/fail"
+        }
+      ]
+    },
+    {
+      "id": "phase-8-resources",
+      "name": "Resource Verification",
+      "type": "implementation",
+      "description": "Verify and enhance foraging resource placement",
+      "depends_on": [
+        "phase-5-biome-integration"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Verify foraging resources (BerryBush, HazelShrub, MushroomPatch, WildRoot) spawn correctly",
+          "service": "main",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/resources/generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_resource_generation 2>&1 | grep -E '(ok|FAILED)'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Resources already exist in RESOURCE_DEFINITIONS - verify they spawn on generated terrain"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Ensure ResourceGenerator uses BiomeGenerator for biome-aware resource placement",
+          "service": "main",
+          "files_to_modify": [
+            "src/resources/generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/resources/generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_biome_aware_resource_generation 2>&1 | grep -E '(ok|FAILED)'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Ensure chunk biome is passed to generate_resource_layer_with_biome for appropriate resource distribution"
+        }
+      ]
+    },
+    {
+      "id": "phase-9-testing",
+      "name": "Testing and Verification",
+      "type": "implementation",
+      "description": "Add unit tests and run full test suite",
+      "depends_on": [
+        "phase-7-cli",
+        "phase-8-resources"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Add unit tests for boundary enforcement",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_boundary 2>&1 | grep -E '(ok|FAILED)'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Add tests: test_perimeter_boundary_enforcement, test_internal_water_transitions, test_no_deep_water_adjacent_to_land"
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Add unit tests for terrain distribution targets",
+          "service": "main",
+          "files_to_modify": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/tilemap/world_generator.rs"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cargo test test_terrain_distribution 2>&1 | grep -E '(ok|FAILED)'",
+            "expected": "ok"
+          },
+          "status": "pending",
+          "notes": "Add tests: test_land_coverage_minimum, test_grass_forest_coverage, test_water_spot_distribution"
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "Run full test suite and verify no regressions",
+          "service": "main",
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "cargo test --lib 2>&1 | tail -3",
+            "expected": "test result: ok"
+          },
+          "status": "pending",
+          "notes": "All existing tests must pass, no regressions in simulation functionality"
+        }
+      ]
+    },
+    {
+      "id": "phase-10-integration",
+      "name": "Integration and Final Verification",
+      "type": "integration",
+      "description": "Verify complete system works end-to-end",
+      "depends_on": [
+        "phase-9-testing"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-10-1",
+          "description": "Generate test map and verify in viewer",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Run: cargo run --bin map_generator generate mapgen2_test 'MapGen2 Test' 12345",
+              "Start simulation: cargo run --release --bin life-simulator",
+              "Open viewer: http://localhost:54321/viewer.html",
+              "Verify: Map has water perimeter, grass/forest interior, water spots distributed"
+            ]
+          },
+          "status": "pending",
+          "notes": "Visual verification of map quality and boundary rules"
+        },
+        {
+          "id": "subtask-10-2",
+          "description": "Verify animals spawn and behave correctly on new maps",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Start simulation with generated map",
+              "Wait for entity spawning (30 seconds)",
+              "Verify via API: curl http://localhost:54321/api/entities | jq '.total'",
+              "Verify animals are on walkable terrain"
+            ]
+          },
+          "status": "pending",
+          "notes": "Entities should spawn on walkable terrain, no spawns in water"
+        },
+        {
+          "id": "subtask-10-3",
+          "description": "Document configuration parameters and verify system stability matches pre-implementation",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "manual",
+            "instructions": "Run simulation for 5 minutes, verify no crashes, entity counts stable, no error logs"
+          },
+          "status": "pending",
+          "notes": "System must have same stability as before implementation (snapshot state)"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 10,
+    "total_subtasks": 23,
+    "services_involved": [
+      "main"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 3,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-4-spot-noise",
+            "phase-5-biome-integration"
+          ],
+          "reason": "Both depend on phase-2-configuration and phase-3-boundary respectively, work on different aspects"
+        },
+        {
+          "phases": [
+            "phase-7-cli",
+            "phase-8-resources"
+          ],
+          "reason": "Both depend on earlier phases, work on different files"
+        }
+      ],
+      "recommended_workers": 1,
+      "speedup_estimate": "Sequential recommended due to shared world_generator.rs modifications"
+    },
+    "startup_command": "cargo run --bin map_generator generate test TestMap 12345"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "phase-9-testing",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "e2e"
+    ],
+    "security_scanning_required": false,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All existing tests pass (no regressions)",
+      "New boundary enforcement tests pass",
+      "Terrain distribution meets targets (60% land, 50% grass+forest)",
+      "Map generates without errors",
+      "Animals spawn and move correctly on new terrain",
+      "System stability matches pre-implementation state"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests",
+        "command": "cargo test --lib",
+        "expected_outcome": "All tests pass",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Map Generation Test",
+        "command": "cargo run --bin map_generator generate mapgen2_test 'Test Map' 12345",
+        "expected_outcome": "Map generated successfully",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Simulation Startup Test",
+        "command": "timeout 30 cargo run --release --bin life-simulator 2>&1 | head -20",
+        "expected_outcome": "Simulation starts without errors",
+        "type": "integration",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "High risk change affecting core map generation system. Comprehensive testing required including boundary rule verification, terrain distribution validation, and end-to-end simulation testing."
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "cargo test --lib"
+      ],
+      "minimum_coverage": null
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "cargo test test_map_generation",
+        "cargo test test_resource_generation"
+      ],
+      "services_to_test": [
+        "main"
+      ]
+    },
+    "e2e_tests": {
+      "required": true,
+      "commands": [
+        "cargo run --bin map_generator generate e2e_test E2ETest 12345"
+      ],
+      "flows": [
+        "map-generation",
+        "simulation-startup",
+        "entity-spawning"
+      ]
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:54321/viewer.html",
+          "checks": [
+            "map-renders",
+            "boundaries-visible",
+            "entities-spawn"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": false,
+      "checks": []
+    }
+  },
+  "qa_signoff": null,
+  "created_at": "2026-01-03T00:54:00Z",
+  "updated_at": "2026-01-03T04:04:50.702Z",
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "last_updated": "2026-01-03T04:05:24.600821+00:00"
+}
