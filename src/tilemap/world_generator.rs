@@ -2188,7 +2188,7 @@ mod tests {
 
         // Check leftmost column (should be deep water)
         for y in 0..CHUNK_SIZE {
-            let height = chunk.tiles[y][0].height;
+            let height = chunk.heights[y][0];
             assert!(
                 height <= deep_water_threshold,
                 "Outermost edge tile at ({}, {}) should be deep water (height <= {}), got {}",
@@ -2203,7 +2203,7 @@ mod tests {
         if perimeter_deep_width < CHUNK_SIZE {
             // Check shallow water layer
             for y in 0..CHUNK_SIZE {
-                let height = chunk.tiles[y][perimeter_deep_width].height;
+                let height = chunk.heights[y][perimeter_deep_width];
                 assert!(
                     height > deep_water_threshold && height <= shallow_water_threshold,
                     "Shallow water layer tile at ({}, {}) should be between {} and {}, got {}",
@@ -2216,7 +2216,7 @@ mod tests {
         if sand_start < CHUNK_SIZE {
             // Check sand layer
             for y in 0..CHUNK_SIZE {
-                let height = chunk.tiles[y][sand_start].height;
+                let height = chunk.heights[y][sand_start];
                 assert!(
                     height > shallow_water_threshold && height <= beach_threshold,
                     "Sand layer tile at ({}, {}) should be between {} and {}, got {}",
@@ -2256,7 +2256,7 @@ mod tests {
             match idx {
                 0 => { // Left edge - check leftmost column
                     for y in 0..CHUNK_SIZE {
-                        if chunk.tiles[y][0].height <= deep_water_threshold {
+                        if chunk.heights[y][0] <= deep_water_threshold {
                             has_deep_water = true;
                             break;
                         }
@@ -2264,7 +2264,7 @@ mod tests {
                 }
                 1 => { // Right edge - check rightmost column
                     for y in 0..CHUNK_SIZE {
-                        if chunk.tiles[y][CHUNK_SIZE - 1].height <= deep_water_threshold {
+                        if chunk.heights[y][CHUNK_SIZE - 1] <= deep_water_threshold {
                             has_deep_water = true;
                             break;
                         }
@@ -2272,7 +2272,7 @@ mod tests {
                 }
                 2 => { // Bottom edge - check bottom row
                     for x in 0..CHUNK_SIZE {
-                        if chunk.tiles[0][x].height <= deep_water_threshold {
+                        if chunk.heights[0][x] <= deep_water_threshold {
                             has_deep_water = true;
                             break;
                         }
@@ -2280,7 +2280,7 @@ mod tests {
                 }
                 3 => { // Top edge - check top row
                     for x in 0..CHUNK_SIZE {
-                        if chunk.tiles[CHUNK_SIZE - 1][x].height <= deep_water_threshold {
+                        if chunk.heights[CHUNK_SIZE - 1][x] <= deep_water_threshold {
                             has_deep_water = true;
                             break;
                         }
@@ -2330,7 +2330,7 @@ mod tests {
             ];
 
             for (y, x) in corner_positions {
-                let height = chunk.tiles[y][x].height;
+                let height = chunk.heights[y][x];
                 assert!(
                     height <= deep_water_threshold,
                     "Corner tile at chunk {:?}, local ({}, {}) should be deep water, got height {}",
@@ -2363,7 +2363,7 @@ mod tests {
             let mut count = 0;
             for y in 0..CHUNK_SIZE {
                 for x in 0..CHUNK_SIZE {
-                    if chunk.tiles[y][x].height <= deep_water_threshold {
+                    if chunk.heights[y][x] <= deep_water_threshold {
                         count += 1;
                     }
                 }
