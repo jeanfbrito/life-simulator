@@ -69,12 +69,12 @@ pub struct OpenRCT2TerrainConfig {
 impl Default for OpenRCT2TerrainConfig {
     fn default() -> Self {
         Self {
-            deep_water_max: 35,
-            shallow_water_max: 60,  // Increased to capture gradual water→land transitions
-            beach_max: 65,          // Adjusted to maintain natural shoreline progression
-            plains_max: 120,
-            hills_max: 160,
-            mountain_min: 160,
+            deep_water_max: 25,      // Reduced to shrink deep water coverage
+            shallow_water_max: 45,   // Reduced to shrink shallow water coverage
+            beach_max: 52,           // Reduced to minimize beach area
+            plains_max: 180,         // Increased to maximize grassland/forest zones
+            hills_max: 200,          // Increased to reduce stone coverage
+            mountain_min: 200,       // Increased to reduce mountain coverage
             forest_frequency: 0.05,
             forest_threshold: 0.0, // 50% forest coverage (balanced with grassland)
             desert_frequency: 0.03,
