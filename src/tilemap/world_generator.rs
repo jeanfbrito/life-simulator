@@ -752,6 +752,10 @@ impl WorldGenerator {
             }
         }
 
+        // Apply water spots BEFORE smoothing (Phase 1.5)
+        // This allows water bodies to integrate naturally with terrain during Phase 2 smoothing
+        self.generate_water_spots(&mut whole_map);
+
         // Sample initial heights for debugging
         let sample_heights: Vec<i32> = whole_map.heights.values().take(100).map(|&h| h as i32).collect();
         let min_h = sample_heights.iter().min().unwrap_or(&0);
@@ -1994,5 +1998,47 @@ mod tests {
 
         assert!(x >= world_min_x && x < world_max_x);
         assert!(y >= world_min_y && y < world_max_y);
+    }
+
+    #[test]
+    fn test_water_spot_generation() {
+        // Create a small test map
+        let config = WorldConfig {
+            world_size_chunks: 4,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 12345,
+            ..Default::default()
+        };
+
+        let generator = WorldGenerator::new(config);
+
+        // Generate chunks
+        let chunks: Vec<(i32, i32)> = vec![(0, 0), (1, 0), (0, 1), (1, 1)];
+
+        // Generate initial heights (which now includes water spot integration)
+        let whole_map = generator.generate_all_initial_heights(&chunks);
+
+        // Verify that some water heights exist
+        // Water spots should create tiles with heights below shallow_water_max threshold
+        let water_height_threshold = generator.openrct2_config.shallow_water_max;
+        let mut water_tile_count = 0;
+
+        for height in whole_map.heights.values() {
+            if *height <= water_height_threshold {
+                water_tile_count += 1;
+            }
+        }
+
+        // Verify that water spots were actually generated
+        // We expect at least some water tiles to exist
+        assert!(water_tile_count > 0, "Expected water spots to be generated, but found no water tiles");
+
+        // Verify the map has a reasonable distribution (not all water)
+        let total_tiles = whole_map.heights.len();
+        let water_percentage = (water_tile_count as f32 / total_tiles as f32) * 100.0;
+
+        // Water should be present but not dominate the entire map
+        assert!(water_percentage < 80.0, "Water percentage too high: {}%", water_percentage);
+        assert!(water_percentage > 0.0, "Water percentage should be greater than 0%");
     }
 }

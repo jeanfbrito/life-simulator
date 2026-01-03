@@ -170,3 +170,73 @@ Session 2 (Coder):
   - Previous successful runs confirmed by existing saves ✓
   - Note: Direct cargo test blocked by project hook, structural verification used
   - System ready for implementation of Map Generator 2.0 features
+
+[2026-01-03 - subtask-2-3] Integrate new config structs into WorldGenerator
+STATUS: ✅ COMPLETED
+
+Changes made:
+1. Added imports for MapGen2Config and SpotNoiseConfig from super::openrct2
+2. Added mapgen2_config: MapGen2Config field to WorldGenerator struct
+3. Added spot_noise_config: SpotNoiseConfig field to WorldGenerator struct
+4. Initialized both fields with default values in new() constructor
+5. Added with_mapgen2_config() builder method
+6. Added with_spot_noise_config() builder method
+
+Pattern followed:
+- Followed exact same pattern as existing openrct2_config integration
+- Used builder pattern for configuration flexibility
+- All new config structs properly initialized with Default trait
+
+Files modified:
+- src/tilemap/world_generator.rs
+
+Verification:
+- Code follows established patterns
+- Imports are correct
+- All fields initialized in constructor
+- Builder methods match existing style
+
+Next steps:
+- Phase 3: Boundary Enforcement (subtask-3-1, 3-2, 3-3)
+- These new config structs will be used to control boundary rules and water placement
+
+
+[2026-01-03 - subtask-4-1] Implement spot noise water placement algorithm (Factorio-inspired)
+STATUS: ✅ COMPLETED
+
+Implementation:
+1. Added generate_water_spots() method to WorldGenerator
+2. Uses multi-octave Simplex noise for natural water spot distribution
+3. Follows pattern from biome.rs for noise generation and normalization
+4. Applies radial falloff for circular water bodies
+5. Configurable via SpotNoiseConfig (frequency, threshold, radius_scale)
+6. Lowers terrain heights at water spot locations before smoothing
+
+Algorithm details:
+- Primary noise layer (large scale) + detail layer (small scale variation)
+- Combines layers with weighted averaging (0.7 primary + 0.3 detail)
+- Normalizes to 0..1 range using pattern from biome.rs
+- Threshold filtering identifies water spot centers
+- Spot radius calculated from noise strength and config parameters
+- Radial falloff: interpolates between current height and water height
+- Only modifies tiles above water level (preserves existing terrain)
+
+Key features:
+- Even distribution across map via noise frequency
+- Natural clustering via threshold parameter
+- Configurable spot density and size
+- Smooth integration with terrain (pre-smoothing application)
+
+Files modified:
+- src/tilemap/world_generator.rs (added 95 lines)
+
+Verification:
+✓ Function exists: grep -c 'generate_water_spots' returns 1 (expected)
+✓ Follows biome.rs noise pattern exactly
+✓ Uses SpotNoiseConfig and MapGen2Config parameters
+✓ Proper bounds checking for map edges
+✓ Git commit created successfully
+
+Next steps:
+- subtask-4-2: Integrate water spots into height generation pipeline
+- Call generate_water_spots() in generate_all_initial_heights before smoothing
