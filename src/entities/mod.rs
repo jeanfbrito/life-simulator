@@ -66,6 +66,7 @@ pub use pack_relationships::{PackLeader, PackMember, GroupType};
 
 pub use group_config::GroupFormationConfig;
 
+#[allow(deprecated)]
 pub use parent_child_relationships::{BirthInfo, LegacyChildOf, LegacyParentOf};
 
 // Backward compatibility type aliases (deprecated)
@@ -140,6 +141,7 @@ pub use systems_registry::{
     SpeciesSystemsDescriptor, SpeciesSystemsRegistry, SPECIES_SYSTEMS_REGISTRY,
 };
 
+#[allow(deprecated)]
 pub use reproduction::{
     mate_matching_system, tick_reproduction_timers_system, update_age_and_wellfed_system, Age,
     MatingIntent, Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
@@ -216,8 +218,7 @@ impl Plugin for EntitiesPlugin {
                 (
                     movement::initiate_pathfinding,
                     movement::initialize_movement_state,
-                    entity_tracker::sync_entities_to_tracker, // Sync for web API
-                    // Phase 7: Spatial parent updates now handled by TilePosition component hooks
+                    entity_tracker::sync_entities_to_tracker,
                 ),
             )
             // === PLANNING PHASE ===

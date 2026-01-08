@@ -35,7 +35,6 @@ mod config {
 // -----------------------------
 mod components {
     use bevy::prelude::*;
-    use crate::entities::Creature;  // For #[require] attribute
 
     /// Phase 4: Required Components
     /// Sex automatically requires Creature - compile-time guarantee.
@@ -666,10 +665,12 @@ mod systems {
 // -----------------------------
 // Re-exports
 // -----------------------------
+#[allow(deprecated)]
 pub use components::{
     Age, MatingIntent, Mother, Pregnancy, ReproductionCooldown, Sex, WellFedStreak,
 };
 pub use config::ReproductionConfig;
+#[allow(deprecated)]
 pub use systems::{
     birth_common, mate_matching_system, mate_matching_system_with_children,
     mate_matching_system_with_relationships,

@@ -505,7 +505,7 @@ impl ResourceGrid {
     pub fn consume_at(&mut self, pos: IVec2, requested: f32, max_fraction: f32) -> f32 {
         // Collect current data before any modifications
         let current_tick = self.current_tick;
-        let max_biomass = self.get_cell(pos).map(|c| c.max_biomass).unwrap_or(0.0);
+        let _max_biomass = self.get_cell(pos).map(|c| c.max_biomass).unwrap_or(0.0);
         let total_biomass = self.get_cell(pos).map(|c| c.total_biomass).unwrap_or(0.0);
 
         // Calculate what would be consumed

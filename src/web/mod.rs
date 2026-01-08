@@ -60,11 +60,11 @@ fn start_websocket_server() {
     // This would need to run in a separate tokio runtime
     // For now, we'll integrate it differently since Bevy manages its own runtime
     tokio::spawn(async move {
-        let listener = TcpListener::bind("127.0.0.1:8080")
+        let listener = TcpListener::bind("0.0.0.0:8080")
             .await
             .expect("Failed to bind to port 8080");
 
-        info!("WEB: WebSocket server listening on ws://127.0.0.1:8080");
+        info!("WEB: WebSocket server listening on ws://0.0.0.0:8080");
 
         while let Ok((stream, addr)) = listener.accept().await {
             info!("WEB: New connection from {}", addr);
@@ -212,10 +212,10 @@ fn generate_sample_chunk(chunk_x: i64, chunk_y: i64) -> Vec<Vec<String>> {
 }
 
 fn handle_websocket_requests(
-    world_generator: Res<WorldGenerator>,
-    websocket_server: Res<WebSocketServer>,
-    chunk_manager: Res<crate::tilemap::ChunkManager>,
-    chunks_query: Query<&Chunk>,
+    _world_generator: Res<WorldGenerator>,
+    _websocket_server: Res<WebSocketServer>,
+    _chunk_manager: Res<crate::tilemap::ChunkManager>,
+    _chunks_query: Query<&Chunk>,
 ) {
     // This system could handle requests from the game that need to be sent to WebSocket clients
     // For now, we'll keep it simple

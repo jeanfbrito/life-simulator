@@ -52,7 +52,7 @@ pub fn establish_parent_of_from_mother(
 ) {
     for (child_entity, mother) in children.iter() {
         let parent = mother.0;
-        let current_tick = tick.0;
+        let _current_tick = tick.0;
 
         if let Ok(mut parent_of) = parents.get_mut(parent) {
             // Parent already has LegacyParentOf, add this child

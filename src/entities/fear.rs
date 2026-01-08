@@ -198,7 +198,7 @@ pub fn predator_proximity_system(
                 );
             }
         } else {
-            let was_fearful = fear_state.is_fearful();
+            let _was_fearful = fear_state.is_fearful();
             fear_state.decay_fear();
 
             // Log when fear dissipates (crosses threshold)

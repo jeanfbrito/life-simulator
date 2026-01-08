@@ -1,4 +1,3 @@
-use bevy::math::IVec2;
 use crate::ai::action::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{stats::Energy, TilePosition};

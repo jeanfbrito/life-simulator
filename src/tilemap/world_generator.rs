@@ -634,7 +634,7 @@ impl WorldGenerator {
         world_y: i32,
         perlin: &Perlin,
     ) -> String {
-        let cfg = &self.openrct2_config;
+        let _cfg = &self.openrct2_config;
 
         // Get climate data from BiomeGenerator
         let moisture = self.biome_generator.get_moisture(world_x, world_y);
@@ -720,8 +720,8 @@ impl WorldGenerator {
                     let world_x = world_origin_x + tile_x;
                     let x_idx = tile_x;
 
-                    let height_x = x_idx * DENSITY;
-                    let height_y = y_idx * DENSITY;
+                let height_x = x_idx * DENSITY;
+            let height_y = y_idx * DENSITY;
 
                     let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
                     let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
@@ -1310,14 +1310,14 @@ impl WorldGenerator {
             let tile_y = local_y as i32;
             let world_y = world_origin_y + tile_y;
             let y_idx = world_y - world_min_y;
-            let height_y = y_idx * DENSITY;
+            let _height_y = y_idx * DENSITY;
             let border_y = (tile_y + 1) as usize;
 
             for local_x in 0..CHUNK_SIZE {
                 let tile_x = local_x as i32;
                 let world_x = world_origin_x + tile_x;
                 let x_idx = world_x - world_min_x;
-                let height_x = x_idx * DENSITY;
+                let _height_x = x_idx * DENSITY;
                 let border_x = (tile_x + 1) as usize;
 
                 // Use the potentially-modified height from previous iterations

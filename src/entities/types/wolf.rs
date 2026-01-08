@@ -12,7 +12,6 @@ use crate::entities::reproduction::{
     Mother, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::ActiveMate;
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};

@@ -34,7 +34,7 @@ pub fn evaluate_follow_behavior(
         }
     }
 
-    let Some((target, target_pos, dist)) = best else {
+    let Some((target, _target_pos, dist)) = best else {
         return None;
     };
 

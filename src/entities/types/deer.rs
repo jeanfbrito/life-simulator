@@ -16,13 +16,11 @@ use crate::entities::reproduction::{
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::ActiveMate;
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
 use crate::entities::Mother;
 use crate::entities::{Deer, TilePosition};
 use crate::simulation::SimulationTick;
-use crate::world_loader::WorldLoader;
 
 /// Deer behavior preset
 pub struct DeerBehavior;

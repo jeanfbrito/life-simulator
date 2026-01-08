@@ -13,6 +13,9 @@
 //!   └─ BirthInfo (custom metadata for birth tick)
 //! ```
 
+// Allow deprecated items - this module contains legacy components for backward compatibility
+#![allow(deprecated)]
+
 use bevy::prelude::*;
 
 /// Component tracking birth metadata for offspring entities.

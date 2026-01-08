@@ -1,12 +1,10 @@
 /// Tick-based movement system for entities
 /// Movement happens discretely on simulation ticks, not smoothly over time
 use bevy::prelude::*;
-use bevy::ecs::component::ComponentId;
 use bevy::ecs::world::DeferredWorld;
 use bevy::ecs::component::HookContext;
 
 use crate::pathfinding::{GridPathRequest, Path};
-use super::Creature;  // For #[require] attribute
 
 // ============================================================================
 // COMPONENTS
@@ -358,7 +356,7 @@ pub fn execute_movement_component(
     for (entity, mut position, mut movement, speed, movement_tick) in query.iter_mut() {
         if let super::MovementComponent::FollowingPath { path, index } = &*movement {
             // Get or initialize movement tick tracker
-            let ticks_since_move = if let Some(mut tick) = movement_tick {
+            let _ticks_since_move = if let Some(mut tick) = movement_tick {
                 tick.ticks_since_move += 1;
                 if tick.ticks_since_move < speed.ticks_per_move {
                     continue; // Not time to move yet

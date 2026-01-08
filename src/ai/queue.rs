@@ -11,7 +11,7 @@
 /// data structures (active, pending, recently_completed, pending_cancellations).
 use bevy::prelude::*;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashSet};
 
 use super::action::{create_action, Action, ActionResult, ActionType};
 use crate::entities::{ActiveAction, CurrentAction};

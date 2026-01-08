@@ -122,9 +122,9 @@ impl Plugin for TQUAIPlugin {
                 Update,
                 (
                     execute_active_actions_read_only,
-                    apply_deferred, // CRITICAL: flush commands between systems
+                    ApplyDeferred, // CRITICAL: flush commands between systems
                     action_pathfinding_bridge::bridge_actions_to_pathfinding,
-                    apply_deferred, // CRITICAL: flush pathfinding queue before result handling
+                    ApplyDeferred, // CRITICAL: flush pathfinding queue before result handling
                     handle_action_results,
                 )
                     .chain()

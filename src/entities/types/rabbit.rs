@@ -16,14 +16,12 @@ use crate::entities::reproduction::{
     Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
 };
 use crate::entities::ActiveMate;
-use crate::entities::{SpatialCell, SpatialCellGrid};
 use crate::entities::stats::{Energy, Health, Hunger, Thirst};
 use crate::entities::FearState;
 use crate::entities::Mother;
 use crate::entities::Rabbit;
 use crate::entities::TilePosition;
 use crate::simulation::SimulationTick;
-use crate::world_loader::WorldLoader;
 
 /// Rabbit behavior preset
 pub struct RabbitBehavior;

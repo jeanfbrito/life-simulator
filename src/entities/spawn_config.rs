@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use crate::entities::reproduction::Sex;
 use crate::entities::spawn_using_registry;
 use crate::pathfinding::PathfindingGrid;
-use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
 
 /// Configuration for spawning a group of entities

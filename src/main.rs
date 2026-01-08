@@ -40,9 +40,7 @@ fn main() {
                 1.0 / 60.0,
             ))),
         )
-        .add_plugins(bevy::log::LogPlugin::default()) // Enable logging!
-        // TilemapPlugin removed - we're loading a world, not generating one
-        // WorldSerializationPlugin removed - not needed for running simulation
+        .add_plugins(bevy::log::LogPlugin::default())
         .add_plugins(CachedWorldPlugin)
         .add_plugins((
             SimulationPlugin,
@@ -52,7 +50,7 @@ fn main() {
             VegetationPlugin,
             HealthCheckPlugin,
             HealthCheckApiPlugin,
-        )) // Core plugins
+        ))
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
@@ -64,8 +62,8 @@ fn main() {
         .add_systems(
             Update,
             (
-                process_pathfinding_requests, // Async pathfinding with cache
-                pathfinding_cache_cleanup_system, // Periodic cache cleanup
+                process_pathfinding_requests,
+                pathfinding_cache_cleanup_system,
                 simulation_system,
                 save_load_system.after(simulation_system),
             )

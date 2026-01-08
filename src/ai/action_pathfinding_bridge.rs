@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use crate::ai::action::ActionResult;
 use crate::ai::queue::ActionExecutionResult;
 use crate::entities::{ActiveAction, TilePosition};
-use crate::pathfinding::{PathfindingQueue, PathPriority, PathReason, PathRequested};
+use crate::pathfinding::{PathfindingQueue, PathReason, PathRequested};
 use crate::simulation::SimulationTick;
 
 /// Bridge system that handles NeedsPathfinding action results

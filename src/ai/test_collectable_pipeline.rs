@@ -8,7 +8,6 @@
 
 use crate::ai::collectables::*;
 use crate::ai::action::{HarvestAction, ActionResult, Action};
-use crate::resources::ResourceType;
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;

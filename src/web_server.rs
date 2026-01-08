@@ -40,7 +40,7 @@ impl WebSocketMessage {
 
 pub fn start_simple_web_server() -> u16 {
     let port = resolve_web_server_port();
-    let bind_address = format!("127.0.0.1:{}", port);
+    let bind_address = format!("0.0.0.0:{}", port);
     println!("🌐 WEB_SERVER: Starting web server on {}", bind_address);
     thread::spawn(move || {
         let listener = TcpListener::bind(&bind_address).unwrap_or_else(|e| {
