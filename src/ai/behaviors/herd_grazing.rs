@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use crate::ai::{UtilityScore};
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 
 /// Bonus utility for herd safety (makes grazing/resting safer in groups)
 const HERD_SAFETY_BONUS: f32 = 0.10;

@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-use super::action::ActionType;
+use super::actions::ActionType;
 
 /// How long (in ticks) before a failed action can be retried at full utility
 const DEFAULT_FAILURE_COOLDOWN: u64 = 50; // ~5 seconds at 10 TPS

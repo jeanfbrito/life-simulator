@@ -6,7 +6,7 @@
 ///
 /// CRITICAL: Uses Commands and Query parameters (NO &World) to avoid Bevy ECS conflicts
 use bevy::prelude::*;
-use crate::ai::action::ActionResult;
+use crate::ai::actions::ActionResult;
 use crate::ai::queue::ActionExecutionResult;
 use crate::entities::{ActiveAction, TilePosition};
 use crate::pathfinding::{PathfindingQueue, PathReason, PathRequested};
@@ -60,6 +60,7 @@ pub fn bridge_actions_to_pathfinding(
                 "Graze" => PathReason::MovingToFood,
                 "Hunt" => PathReason::Hunting,
                 "Wander" => PathReason::Wandering,
+                "Mate" => PathReason::MovingToMate,
                 _ => PathReason::Wandering, // Default fallback
             };
 
@@ -108,11 +109,11 @@ pub fn bridge_actions_to_pathfinding(
 /// This function uses unsafe downcast to access the concrete action type
 /// and transition its internal state machine.
 fn transition_action_to_waiting(
-    action: &mut Box<dyn crate::ai::action::Action>,
+    action: &mut Box<dyn crate::ai::actions::Action>,
     request_id: crate::pathfinding::PathRequestId,
     action_name: &str,
 ) {
-    use crate::ai::action::{DrinkWaterAction, GrazeAction, HuntAction, WanderAction};
+    use crate::ai::actions::{DrinkWaterAction, GrazeAction, HuntAction, MateAction, WanderAction};
 
     // Match action name to determine concrete type
     match action_name {
@@ -134,6 +135,11 @@ fn transition_action_to_waiting(
         "Wander" => {
             if let Some(wander_action) = action.as_any_mut().downcast_mut::<WanderAction>() {
                 wander_action.transition_to_waiting(request_id);
+            }
+        }
+        "Mate" => {
+            if let Some(mate_action) = action.as_any_mut().downcast_mut::<MateAction>() {
+                mate_action.transition_to_waiting(request_id);
             }
         }
         _ => {

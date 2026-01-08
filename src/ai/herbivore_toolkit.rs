@@ -1,22 +1,30 @@
 use bevy::prelude::*;
 
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::ai::behaviors::{
-    evaluate_drinking_behavior, evaluate_eating_behavior, evaluate_fleeing_behavior,
-    evaluate_follow_behavior, evaluate_grazing_behavior, evaluate_resting_behavior,
+    evaluate_drinking_behavior_optimized, evaluate_eating_behavior_optimized, evaluate_fleeing_behavior,
+    evaluate_follow_behavior_with_priority, evaluate_grazing_behavior, evaluate_resting_behavior,
     evaluate_wandering_behavior, eating::HerbivoreDiet,
 };
+use crate::pathfinding::RegionMap;
+use crate::resources::WaterSpatialGrid;
 use crate::ai::planner::UtilityScore;
 use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{ActiveMate, BehaviorConfig, FearState, TilePosition};
+use crate::entities::{ActiveMate, MatingTarget, BehaviorConfig, FearState, TilePosition};
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Evaluate the baseline herbivore actions (drink, eat, rest, graze).
 ///
 /// Species-specific modules can call this helper and then push any additional
 /// actions (social, unique behaviours) afterwards.
+///
+/// PERFORMANCE: Uses spatial grids for O(k) lookups instead of O(radius²)
+/// - VegetationSpatialGrid for food lookups
+/// - WaterSpatialGrid for water lookups
+/// - RegionMap for O(1) reachability filtering (eliminates pathfinding failures)
 pub fn evaluate_core_actions(
     position: &TilePosition,
     thirst: &Thirst,
@@ -25,6 +33,9 @@ pub fn evaluate_core_actions(
     behavior_config: &BehaviorConfig,
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
+    spatial_grid: &VegetationSpatialGrid,
+    water_grid: &WaterSpatialGrid,
+    region_map: &RegionMap,
     fear_state: Option<&FearState>,
     diet: &HerbivoreDiet,
 ) -> Vec<UtilityScore> {
@@ -33,23 +44,30 @@ pub fn evaluate_core_actions(
     // Get fear utility modifier if fear state is available
     let fear_modifier = fear_state.map_or(1.0, |f| f.get_utility_modifier());
 
-    if let Some(drink) = evaluate_drinking_behavior(
+    // OPTIMIZED: Use water spatial grid for O(k) lookup + O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable water
+    if let Some(drink) = evaluate_drinking_behavior_optimized(
         position,
         thirst,
-        world_loader,
+        water_grid,
+        region_map,
         behavior_config.thirst_threshold,
         behavior_config.water_search_radius,
     ) {
         actions.push(drink);
     }
 
-    if let Some(eat) = evaluate_eating_behavior(
+    // OPTIMIZED: Use spatial grid for O(k) food lookup + O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable food
+    if let Some(eat) = evaluate_eating_behavior_optimized(
         position,
         hunger,
-        energy.0.normalized(),                    // NEW: energy affects pickiness
-        behavior_config.satisfaction_biomass,     // NEW: species-specific satisfaction
+        energy.0.normalized(),                    // energy affects pickiness
+        behavior_config.satisfaction_biomass,     // species-specific satisfaction
         world_loader,
         resource_grid,
+        spatial_grid,
+        region_map,                               // NEW: for reachability filtering
         behavior_config.hunger_threshold,
         behavior_config.food_search_radius,
         behavior_config.foraging_strategy,
@@ -64,9 +82,14 @@ pub fn evaluate_core_actions(
         actions.push(rest);
     }
 
-    if let Some(graze) =
-        evaluate_grazing_behavior(position, world_loader, behavior_config.graze_range)
-    {
+    // OPTIMIZED: Use RegionMap for O(1) reachability check
+    // This eliminates pathfinding failures by only selecting reachable grass
+    if let Some(graze) = evaluate_grazing_behavior(
+        position,
+        world_loader,
+        region_map,
+        behavior_config.graze_range,
+    ) {
         actions.push(graze);
     }
 
@@ -124,6 +147,10 @@ pub struct FollowConfig {
 /// Attempt to add a follow-mother action for juvenile herbivores.
 ///
 /// Returns true if an action was added.
+///
+/// IMPORTANT: Juveniles have RELAXED conditions compared to adults because staying
+/// near mother is critical for survival. They will follow even when moderately hungry/thirsty
+/// (up to 70%), only breaking off when critically starving (>=80%).
 pub fn maybe_add_follow_mother(
     actions: &mut Vec<UtilityScore>,
     entity: Entity,
@@ -131,7 +158,7 @@ pub fn maybe_add_follow_mother(
     hunger: &Hunger,
     thirst: &Thirst,
     energy: &Energy,
-    behavior_config: &BehaviorConfig,
+    _behavior_config: &BehaviorConfig,  // No longer used for juvenile thresholds
     age: Option<&Age>,
     mother: Option<&Mother>,
     mother_position: Option<IVec2>,
@@ -151,20 +178,37 @@ pub fn maybe_add_follow_mother(
         return false;
     };
 
-    let hunger_ok = hunger.0.normalized() < behavior_config.hunger_threshold;
-    let thirst_ok = thirst.0.normalized() < behavior_config.thirst_threshold;
-    let energy_ok = energy.0.normalized() > behavior_config.energy_threshold;
+    // JUVENILE RELAXED CONDITIONS:
+    // Juveniles should prioritize staying with mother for safety
+    // Only break off when CRITICALLY hungry/thirsty (>=70%) or exhausted
+    // This prevents juveniles from wandering to beaches looking for food
+    const JUVENILE_CRITICAL_THRESHOLD: f32 = 0.70;
+    const JUVENILE_ENERGY_MINIMUM: f32 = 0.15;
+
+    let hunger_ok = hunger.0.normalized() < JUVENILE_CRITICAL_THRESHOLD;
+    let thirst_ok = thirst.0.normalized() < JUVENILE_CRITICAL_THRESHOLD;
+    let energy_ok = energy.0.normalized() > JUVENILE_ENERGY_MINIMUM;
+
     if !(hunger_ok && thirst_ok && energy_ok) {
+        debug!(
+            "🍼 Juvenile {:?} breaking from mother - critical needs: H:{:.1}% T:{:.1}% E:{:.1}%",
+            entity,
+            hunger.0.percentage(),
+            thirst.0.percentage(),
+            energy.0.percentage()
+        );
         return false;
     }
 
     let slice = [(mother.0, mother_pos)];
-    if let Some(follow) = evaluate_follow_behavior(
+    // Use juvenile-aware follow behavior with high priority
+    if let Some(follow) = evaluate_follow_behavior_with_priority(
         entity,
         position,
         &slice,
         follow_cfg.stop_distance,
         follow_cfg.max_distance,
+        true,  // is_juvenile = true for high priority
     ) {
         actions.push(follow);
         true
@@ -185,21 +229,29 @@ pub struct MateActionParams {
     pub energy_margin: f32,
 }
 
-/// Add a mate action if the entity currently has a mating intent and meets
-/// the reproduction requirements. Returns true if an action was added.
+/// Add a mate action if the entity currently has a mating relationship (ActiveMate or MatingTarget)
+/// and meets the reproduction requirements. Returns true if an action was added.
+///
+/// Both ActiveMate (pursuer) and MatingTarget (pursued) entities need to queue Mate actions
+/// so that both move to the meeting tile and complete mating together.
 pub fn maybe_add_mate_action(
     actions: &mut Vec<UtilityScore>,
-    mating_intent: Option<&ActiveMate>,
+    active_mate: Option<&ActiveMate>,
+    mating_target: Option<&MatingTarget>,
     repro_cfg: Option<&ReproductionConfig>,
     thirst: &Thirst,
     hunger: &Hunger,
     energy: &Energy,
     params: MateActionParams,
-    current_tick: u64,
+    _current_tick: u64,
 ) -> bool {
-    let Some(intent) = mating_intent else {
-        return false;
+    // Extract partner and meeting tile from whichever mating component is present
+    let (partner, meeting_tile) = match (active_mate, mating_target) {
+        (Some(am), _) => (am.partner, am.meeting_tile),
+        (_, Some(mt)) => (mt.suitor, mt.meeting_tile),
+        _ => return false,
     };
+
     let Some(cfg) = repro_cfg else {
         return false;
     };
@@ -240,13 +292,12 @@ pub fn maybe_add_mate_action(
     let energy_safe = energy_level >= (cfg.min_energy_norm + params.energy_margin).min(1.0);
 
     if thirst_safe && hunger_safe && energy_safe {
-        // Calculate duration_ticks as the time spent so far (current_tick - started_tick)
-        let elapsed = current_tick.saturating_sub(intent.started_tick) as u32;
+        // Use mating_duration_ticks from ReproductionConfig (how long mating takes)
         actions.push(UtilityScore {
             action_type: ActionType::Mate {
-                partner: intent.partner,
-                meeting_tile: intent.meeting_tile,
-                duration_ticks: elapsed,
+                partner,
+                meeting_tile,
+                duration_ticks: cfg.mating_duration_ticks,
             },
             utility: params.utility,
             priority: params.priority,
@@ -328,7 +379,7 @@ fn find_nearest_predator(prey_pos: IVec2, predator_positions: &[IVec2]) -> Optio
 #[cfg(test)]
 mod emergency_mating_tests {
     use super::*;
-    use crate::entities::reproduction::{MatingIntent, ReproductionConfig};
+    use crate::entities::reproduction::ReproductionConfig;
     use bevy::prelude::Entity;
 
     /// Helper to create test reproduction config
@@ -397,6 +448,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -436,6 +488,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -474,6 +527,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -504,6 +558,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,
@@ -545,6 +600,7 @@ mod emergency_mating_tests {
         let result = maybe_add_mate_action(
             &mut actions,
             Some(&mating_intent),
+            None, // mating_target
             Some(&repro_cfg),
             &thirst,
             &hunger,

@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use crate::ai::{UtilityScore};
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 
 /// Bonus utility for warren defense (group alert effect)
 const WARREN_FLEE_BONUS: f32 = 0.20;

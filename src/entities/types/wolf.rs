@@ -3,6 +3,7 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -17,39 +18,41 @@ use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Wolf behaviour preset (pack predator baseline).
 pub struct WolfBehavior;
 
 impl WolfBehavior {
+    /// Fast reproduction parameters for wolves (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 14_000,
-            gestation_ticks: 4_500,
-            mating_cooldown_ticks: 7_000,
-            postpartum_cooldown_ticks: 10_000,
-            litter_size_range: (2, 4),
-            mating_search_radius: 160,
-            well_fed_hunger_norm: 0.55,
-            well_fed_thirst_norm: 0.5,
-            well_fed_required_ticks: 900,
-            matching_interval_ticks: 150, // Check every 15s (optimized)
-            mating_duration_ticks: 60,
-            min_energy_norm: 0.45,
-            min_health_norm: 0.6,
+            maturity_ticks: 160,             // ~16 seconds (fast for testing)
+            gestation_ticks: 80,             // ~8 seconds
+            mating_cooldown_ticks: 60,       // ~6 seconds
+            postpartum_cooldown_ticks: 100,  // ~10 seconds
+            litter_size_range: (2, 3),       // Pups
+            mating_search_radius: 60,        // Reduced from 100: Prevents pathfinding failures (150 tile limit)
+            well_fed_hunger_norm: 0.65,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 30,  // ~3 seconds
+            matching_interval_ticks: 15,  // check every 1.5s
+            mating_duration_ticks: 25,
+            min_energy_norm: 0.40,
+            min_health_norm: 0.45,
         }
     }
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.55,
-            0.45,
+            0.15, // thirst_threshold: Drink when >= 15% thirsty
+            0.15, // hunger_threshold: Hunt when >= 15% hungry (lower for testing)
             0.25,
             (8, 22),
             180,
             220,
-            200,
+            10,  // wander_radius: Reduced from 200 to prevent pathfinding failures
             super::ForagingStrategy::Exhaustive,
         )
     }
@@ -69,14 +72,17 @@ impl WolfBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
         }
     }
 
+    /// Evaluate wolf actions via predator toolkit.
+    ///
+    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -90,6 +96,9 @@ impl WolfBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
+        spatial_grid: &VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_wolf_actions(
             entity,
@@ -103,6 +112,9 @@ impl WolfBehavior {
             carcasses,
             deer,
             vegetation,
+            spatial_grid,
+            water_grid,
+            region_map,
         )
     }
 }
@@ -121,6 +133,7 @@ pub fn plan_wolf_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -138,6 +151,7 @@ pub fn plan_wolf_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
+    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_wolf_actions");
 
     plan_species_actions(
@@ -158,6 +172,9 @@ pub fn plan_wolf_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
+                spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
             );
 
             // PACK TACTICS: Apply generic group-aware coordination bonuses
@@ -166,8 +183,16 @@ pub fn plan_wolf_actions(
 
             actions
         },
-        None,
-        None,
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 30,
+        }),
         "🐺",
         "Wolf",
         resources.current_tick(),
@@ -190,7 +215,7 @@ pub fn wolf_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Wolf>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Wolf>,
     >,
     tick: Res<SimulationTick>,
 ) {
@@ -208,7 +233,7 @@ pub fn wolf_birth_system(
     birth_common::<Wolf>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| crate::entities::entity_types::spawn_wolf(cmds, name, pos),
+        crate::entities::entity_types::spawn_wolf,
         "🐺🍼",
         "Pup",
     );

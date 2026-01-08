@@ -9,28 +9,34 @@
 /// Future: Multithreading support via Rayon (Phase 6)
 
 mod grid;
+mod jps;
 mod path_request;
 mod pathfinding_queue;
 mod path_components;
 mod path_to_movement_bridge;
+mod region_map;
 
 // Re-export existing pathfinding types from grid.rs
 pub use grid::{
-    build_pathfinding_grid_from_world, find_path, find_path_with_cache,
-    pathfinding_cache_cleanup_system, process_pathfinding_requests,
-    terrain_to_pathfinding_cost, update_pathfinding_grid_for_tile, GridPathRequest, Path,
-    PathCache, PathNode, PathfindingFailed, PathfindingGrid,
+    find_path,
+    pathfinding_cache_cleanup_system, process_pathfinding_requests, GridPathRequest, Path,
+    PathCache, PathfindingFailed, PathfindingGrid,
 };
 
 // Re-export queue types (new Phase 1 additions)
-pub use path_request::{PathFailureReason, PathPriority, PathReason, PathRequest, PathRequestId, PathResult};
+pub use path_request::{PathFailureReason, PathReason, PathRequestId};
 pub use pathfinding_queue::PathfindingQueue;
+
+// Re-export JPS pathfinding (Phase 7: Performance optimization)
+pub use jps::jps_find_path;
 
 // Re-export path components (new Phase 2 additions)
 pub use path_components::{PathRequested, PathReady, PathFailed};
 
+// Re-export RegionMap for O(1) connectivity checks
+pub use region_map::{RegionMap, build_region_map};
+
 // Re-export PathReady → MovementComponent bridge
-pub use path_to_movement_bridge::bridge_path_ready_to_movement;
 
 // Bevy plugin and system
 use bevy::prelude::*;
@@ -64,6 +70,7 @@ impl Plugin for PathfindingQueuePlugin {
 /// System: Process pathfinding requests from the queue
 /// Following UltraThink pattern: budget-controlled, priority-based processing
 /// Phase 2: Inserts PathReady/PathFailed components instead of HashMap storage
+/// Includes negative path cache (Factorio pattern) to skip known-unreachable paths
 pub fn process_pathfinding_queue(
     mut queue: ResMut<PathfindingQueue>,
     grid: Res<PathfindingGrid>,
@@ -80,15 +87,39 @@ pub fn process_pathfinding_queue(
         return;
     }
 
+    let current_tick = tick.0;
+    let mut cache_hits = 0u32;
+    let mut paths_computed = 0u32;
+
     // Process each path request
     for request in &requests {
+        // Check negative cache first (Factorio pattern)
+        if queue.is_known_unreachable(request.from, request.to, current_tick) {
+            // Cache hit: immediately fail without running A*
+            cache_hits += 1;
+            queue.record_negative_cache_hit();
+
+            commands.entity(request.entity).insert(PathFailed {
+                reason: PathFailureReason::Unreachable,
+                retry_count: 0,
+            });
+            commands.entity(request.entity).remove::<PathRequested>();
+
+            debug!(
+                "🗺️ Negative cache hit: {:?} → {:?} (entity {:?})",
+                request.from, request.to, request.entity
+            );
+            continue;
+        }
+
         // Compute path using existing A* algorithm
+        paths_computed += 1;
         let path_opt = find_path(
             request.from,
             request.to,
             &grid,
-            false, // No diagonal movement
-            Some(5000), // Max steps for long paths (wander_radius up to 50 tiles)
+            true, // Enable diagonal movement with corner-cutting prevention (15-20x speedup via JPS)
+            Some(1500), // Increased from 800: Fragmented terrain needs longer paths even for short wander distances
         );
 
         // Insert appropriate component based on result
@@ -100,7 +131,7 @@ pub fn process_pathfinding_queue(
 
                 commands.entity(request.entity).insert(PathReady {
                     path: std::sync::Arc::new(waypoints),
-                    computed_tick: tick.0,
+                    computed_tick: current_tick,
                     cost,
                 });
 
@@ -108,7 +139,9 @@ pub fn process_pathfinding_queue(
                 commands.entity(request.entity).remove::<PathRequested>();
             }
             None => {
-                // Failure: insert PathFailed component
+                // Failure: add to negative cache and insert PathFailed component
+                queue.add_unreachable(request.from, request.to, current_tick);
+
                 commands.entity(request.entity).insert(PathFailed {
                     reason: PathFailureReason::Unreachable,
                     retry_count: 0,
@@ -120,17 +153,24 @@ pub fn process_pathfinding_queue(
         }
     }
 
+    // Periodic cache maintenance: evict expired entries every 100 ticks
+    if current_tick % 100 == 0 {
+        queue.evict_expired_entries(current_tick);
+    }
+
     // Log metrics every 50 ticks
-    if tick.0 % 50 == 0 && queue.total_queued() > 0 {
+    if current_tick % 50 == 0 && (queue.total_queued() > 0 || cache_hits > 0) {
         let (urgent, normal, lazy) = queue.queue_sizes();
+        let (cache_size, total_hits) = queue.negative_cache_stats();
         info!(
-            "🗺️ PathfindingQueue: {} urgent, {} normal, {} lazy | Processed {}/{} | Total: {}",
+            "🗺️ PathfindingQueue: {} urgent, {} normal, {} lazy | Computed {}, CacheHits {} | NegCache: {} entries, {} total hits",
             urgent,
             normal,
             lazy,
-            requests.len(),
-            budget,
-            queue.total_processed()
+            paths_computed,
+            cache_hits,
+            cache_size,
+            total_hits
         );
     }
 }

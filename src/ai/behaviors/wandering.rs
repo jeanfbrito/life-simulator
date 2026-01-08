@@ -3,7 +3,7 @@ use rand::Rng;
 use std::f32::consts::TAU;
 
 use crate::ai::UtilityScore;
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::entities::TilePosition;
 use crate::entities::types::HabitatPreference;
 use crate::tilemap::TerrainType;
@@ -83,6 +83,15 @@ fn score_wander_tile(
 
     // Check if terrain is walkable
     if !terrain.is_walkable() {
+        return None;
+    }
+
+    // CRITICAL: Check if tile has a blocking resource (Tree or Rock)
+    let has_blocking_resource = world_loader
+        .get_resource_at(tile.x, tile.y)
+        .map(|r| crate::resources::is_blocking_resource(&r))
+        .unwrap_or(false);
+    if has_blocking_resource {
         return None;
     }
 

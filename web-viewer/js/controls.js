@@ -29,6 +29,14 @@ export class Controls {
         // Throttle tooltip updates to reduce getBoundingClientRect() calls
         this.lastTooltipUpdate = 0;
         this.tooltipThrottleMs = CONFIG.TOOLTIP_THROTTLE_MS; // Update max once per configured interval
+
+        // Keyboard panning state
+        this.keysPressed = new Set();
+        this.keyPanSpeed = 10; // Pixels per frame when holding a key
+
+        // Last mouse position for zoom centering
+        this.lastMousePos = { x: 0, y: 0 };
+
         // Store bound handlers for cleanup
         this.boundHandlers = {
             mouseMove: (e) => this.handleMouseMove(e),
@@ -41,7 +49,10 @@ export class Controls {
             zoomIn: () => this.zoomIn(),
             zoomOut: () => this.zoomOut(),
             resetView: () => this.resetView(),
-            toggleGrassDensity: () => this.toggleGrassDensity()
+            toggleGrassDensity: () => this.toggleGrassDensity(),
+            wheel: (e) => this.handleWheel(e),
+            keyDown: (e) => this.handleKeyDown(e),
+            keyUp: (e) => this.handleKeyUp(e)
         };
 this.setupEventListeners();
     }
@@ -74,6 +85,13 @@ this.setupEventListeners();
         if (zoomOutBtn) zoomOutBtn.addEventListener('click', this.boundHandlers.zoomOut);
         if (resetViewBtn) resetViewBtn.addEventListener('click', this.boundHandlers.resetView);
         if (toggleGrassBtn) toggleGrassBtn.addEventListener('click', this.boundHandlers.toggleGrassDensity);
+
+        // Scroll wheel zoom
+        this.canvas.addEventListener('wheel', this.boundHandlers.wheel, { passive: false });
+
+        // Keyboard controls for panning and zooming
+        window.addEventListener('keydown', this.boundHandlers.keyDown);
+        window.addEventListener('keyup', this.boundHandlers.keyUp);
     }
 
     /**
@@ -84,6 +102,9 @@ this.setupEventListeners();
      */
     handleMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
+
+        // Track mouse position for zoom centering
+        this.lastMousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
 
         // Convert mouse position to canvas coordinates
         const canvasX = e.clientX - rect.left - this.dragOffset.x;
@@ -277,9 +298,11 @@ this.setupEventListeners();
     }
 
     handleMouseDown(e) {
-        if (e.button === 1) { // Middle mouse button
+        // Support both left-click (0) and middle-click (1) for dragging
+        if (e.button === 0 || e.button === 1) {
             e.preventDefault();
             this.isDragging = true;
+            this.dragButton = e.button; // Track which button started the drag
             this.dragStart.x = e.clientX - this.dragOffset.x;
             this.dragStart.y = e.clientY - this.dragOffset.y;
             this.lastMouse.x = e.clientX;
@@ -313,16 +336,113 @@ this.setupEventListeners();
     }
 
     handleMouseUp(e) {
-        if (e.button === 1) { // Middle mouse button
+        // Support both left-click (0) and middle-click (1) for dragging
+        if ((e.button === 0 || e.button === 1) && this.isDragging && e.button === this.dragButton) {
             e.preventDefault();
             this.isDragging = false;
-            this.canvas.style.cursor = 'pointer';
+            this.dragButton = null;
+            this.canvas.style.cursor = 'grab';
             // On release, keep current target so inertia moves from current velocity
             // Load chunks for the new position immediately when dragging stops
             if (this.worldData && this.onRender) {
                 this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
             }
         }
+    }
+
+    /**
+     * Handle scroll wheel for zooming
+     * Zooms centered on mouse cursor position
+     * @param {WheelEvent} e - Wheel event
+     */
+    handleWheel(e) {
+        e.preventDefault();
+
+        // Determine zoom direction
+        const zoomIn = e.deltaY < 0;
+
+        // Get mouse position relative to canvas center
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Calculate world position under mouse before zoom
+        const worldXBefore = (mouseX - this.dragOffset.x) / CONFIG.TILE_SIZE;
+        const worldYBefore = (mouseY - this.dragOffset.y) / CONFIG.TILE_SIZE;
+
+        // Apply zoom
+        const oldScale = CONFIG.renderScale;
+        if (zoomIn) {
+            CONFIG.renderScale = Math.min(CONFIG.renderScale * CONFIG.ZOOM_MULTIPLIER, CONFIG.MAX_ZOOM);
+        } else {
+            CONFIG.renderScale = Math.max(CONFIG.renderScale / CONFIG.ZOOM_MULTIPLIER, CONFIG.MIN_ZOOM);
+        }
+
+        // Only adjust if scale actually changed
+        if (oldScale !== CONFIG.renderScale) {
+            // Recalculate tile size
+            this.renderer.setupCanvasSize(this.dragOffset);
+
+            // Calculate world position under mouse after zoom
+            const worldXAfter = (mouseX - this.dragOffset.x) / CONFIG.TILE_SIZE;
+            const worldYAfter = (mouseY - this.dragOffset.y) / CONFIG.TILE_SIZE;
+
+            // Adjust drag offset to keep the same world position under cursor
+            this.dragOffset.x += (worldXAfter - worldXBefore) * CONFIG.TILE_SIZE;
+            this.dragOffset.y += (worldYAfter - worldYBefore) * CONFIG.TILE_SIZE;
+            this.targetOffset.x = this.dragOffset.x;
+            this.targetOffset.y = this.dragOffset.y;
+
+            this.updateZoomDisplay();
+
+            // Trigger re-render
+            if (this.onRender) {
+                this.onRender();
+            }
+        }
+    }
+
+    /**
+     * Handle keyboard key down for panning and zoom controls
+     * @param {KeyboardEvent} e - Keyboard event
+     */
+    handleKeyDown(e) {
+        // Ignore if user is typing in an input field
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        const key = e.key.toLowerCase();
+
+        // Pan keys: WASD and Arrow keys
+        if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+            e.preventDefault();
+            this.keysPressed.add(key);
+        }
+
+        // Zoom keys: + and -
+        if (key === '+' || key === '=' || key === 'numpadadd') {
+            e.preventDefault();
+            this.zoomIn();
+        } else if (key === '-' || key === '_' || key === 'numpadsubtract') {
+            e.preventDefault();
+            this.zoomOut();
+        }
+
+        // Reset key: R
+        if (key === 'r') {
+            e.preventDefault();
+            this.resetView();
+        }
+    }
+
+    /**
+     * Handle keyboard key up
+     * @param {KeyboardEvent} e - Keyboard event
+     */
+    handleKeyUp(e) {
+        const key = e.key.toLowerCase();
+        this.keysPressed.delete(key);
     }
 
     handleResize() {
@@ -370,6 +490,8 @@ this.setupEventListeners();
     resetView() {
         CONFIG.renderScale = 1.0;
         this.dragOffset = { x: 0, y: 0 };
+        this.targetOffset = { x: 0, y: 0 };
+        this.inertiaVelocity = { x: 0, y: 0 };
         this.renderer.setupCanvasSize(this.dragOffset);
         this.updateZoomDisplay();
         // Trigger re-render via the main app
@@ -379,17 +501,104 @@ this.setupEventListeners();
     }
 
     /**
+     * Center the view on a specific world tile position
+     * @param {number} tileX - X coordinate of the tile in world space
+     * @param {number} tileY - Y coordinate of the tile in world space
+     */
+    centerOnEntity(tileX, tileY) {
+        // Get canvas dimensions
+        const canvasWidth = this.canvas.width;
+        const canvasHeight = this.canvas.height;
+
+        // The renderer uses this formula for entity screen position:
+        // screenX = (entityWorldX - cameraOffsetX + VIEW_SIZE_X/2) * TILE_SIZE + TILE_SIZE/2
+        // Where cameraOffsetX = floor(-dragOffset.x / TILE_SIZE)
+        //
+        // After simplification, the actual screen position is:
+        // actualScreenX = tileX * TILE_SIZE + dragOffset.x + (VIEW_SIZE_X/2) * TILE_SIZE + TILE_SIZE/2
+        //
+        // To center the entity (actualScreenX = canvasWidth/2):
+        // dragOffset.x = canvasWidth/2 - tileX * TILE_SIZE - (VIEW_SIZE_X/2) * TILE_SIZE - TILE_SIZE/2
+        const viewCenterOffsetX = Math.floor(CONFIG.VIEW_SIZE_X / 2) * CONFIG.TILE_SIZE;
+        const viewCenterOffsetY = Math.floor(CONFIG.VIEW_SIZE_Y / 2) * CONFIG.TILE_SIZE;
+        const tileCenterOffset = CONFIG.TILE_SIZE / 2;
+
+        const targetOffsetX = (canvasWidth / 2) - (tileX * CONFIG.TILE_SIZE) - viewCenterOffsetX - tileCenterOffset;
+        const targetOffsetY = (canvasHeight / 2) - (tileY * CONFIG.TILE_SIZE) - viewCenterOffsetY - tileCenterOffset;
+
+        // Set both current and target offset for immediate centering
+        this.targetOffset.x = targetOffsetX;
+        this.targetOffset.y = targetOffsetY;
+        this.dragOffset.x = targetOffsetX;
+        this.dragOffset.y = targetOffsetY;
+
+        // Stop any inertia
+        this.inertiaVelocity = { x: 0, y: 0 };
+
+        // Force immediate chunk loading for the new position (not debounced)
+        // Reset last loaded center to ensure chunks are loaded even if we haven't moved far
+        if (this.worldData && this.chunkManager) {
+            // Reset to force chunk reload
+            this.chunkManager.lastLoadedCenter = { x: -9999, y: -9999 };
+            // Load all visible chunks (now properly calculates rectangular visible area)
+            this.chunkManager.loadVisibleChunks(this.dragOffset, this.worldData).then(() => {
+                if (this.onRender) {
+                    this.onRender();
+                }
+            });
+        }
+
+        // Trigger immediate re-render (chunks will re-render when loaded)
+        if (this.onRender) {
+            this.onRender();
+        }
+
+        console.log(`📍 Centered view on tile (${tileX}, ${tileY})`);
+    }
+
+    /**
      * Smooth camera update called each animation frame
      * Applies easing to camera movement while dragging and inertia when released
+     * Also handles keyboard panning
      * Uses CONFIG constants for smooth pan speed and inertia decay
      */
     update() {
+        // Handle keyboard panning
+        let keyboardPanX = 0;
+        let keyboardPanY = 0;
+
+        if (this.keysPressed.has('w') || this.keysPressed.has('arrowup')) {
+            keyboardPanY += this.keyPanSpeed;
+        }
+        if (this.keysPressed.has('s') || this.keysPressed.has('arrowdown')) {
+            keyboardPanY -= this.keyPanSpeed;
+        }
+        if (this.keysPressed.has('a') || this.keysPressed.has('arrowleft')) {
+            keyboardPanX += this.keyPanSpeed;
+        }
+        if (this.keysPressed.has('d') || this.keysPressed.has('arrowright')) {
+            keyboardPanX -= this.keyPanSpeed;
+        }
+
+        // Apply keyboard panning directly
+        if (keyboardPanX !== 0 || keyboardPanY !== 0) {
+            this.dragOffset.x += keyboardPanX;
+            this.dragOffset.y += keyboardPanY;
+            this.targetOffset.x = this.dragOffset.x;
+            this.targetOffset.y = this.dragOffset.y;
+
+            // Load chunks for the new position
+            if (this.worldData && this.onRender) {
+                this.chunkManager.loadVisibleChunksDebounced(this.dragOffset, this.worldData, this.onRender);
+            }
+        }
+
         // Smoothly move current offset toward target while dragging
         if (this.isDragging) {
             this.dragOffset.x += (this.targetOffset.x - this.dragOffset.x) * CONFIG.PAN_SMOOTHING_FACTOR;
             this.dragOffset.y += (this.targetOffset.y - this.dragOffset.y) * CONFIG.PAN_SMOOTHING_FACTOR;
-        } else {
-            // Apply inertia when not dragging
+        } else if (keyboardPanX === 0 && keyboardPanY === 0) {
+            // Apply inertia when not dragging and not keyboard panning
             if (Math.abs(this.inertiaVelocity.x) > CONFIG.MIN_INERTIA_SPEED || Math.abs(this.inertiaVelocity.y) > CONFIG.MIN_INERTIA_SPEED) {
                 this.dragOffset.x += this.inertiaVelocity.x;
                 this.dragOffset.y += this.inertiaVelocity.y;
@@ -486,9 +695,12 @@ this.setupEventListeners();
         this.canvas.removeEventListener('mousemove', this.boundHandlers.drag);
         this.canvas.removeEventListener('mouseup', this.boundHandlers.mouseUp);
         this.canvas.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
+        this.canvas.removeEventListener('wheel', this.boundHandlers.wheel);
 
         // Remove window event listeners
         window.removeEventListener('resize', this.boundHandlers.resize);
+        window.removeEventListener('keydown', this.boundHandlers.keyDown);
+        window.removeEventListener('keyup', this.boundHandlers.keyUp);
 
         // Remove button event listeners
         const zoomInBtn = document.getElementById('zoom-in');

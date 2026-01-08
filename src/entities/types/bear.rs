@@ -3,6 +3,7 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
+use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -17,41 +18,42 @@ use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
+use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Bear behaviour preset with omnivore+scavenger leaning parameters.
 pub struct BearBehavior;
 
 impl BearBehavior {
-    /// Reproduction parameters derived from black bear life history notes.
+    /// Fast reproduction parameters for bears (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 18_000,            // ~30 minutes at 10 TPS
-            gestation_ticks: 6_000,            // ~10 minutes
-            mating_cooldown_ticks: 8_000,      // males get long cooldowns
-            postpartum_cooldown_ticks: 12_000, // females rest longer
-            litter_size_range: (1, 3),
-            mating_search_radius: 90,
-            well_fed_hunger_norm: 0.45,
-            well_fed_thirst_norm: 0.45,
-            well_fed_required_ticks: 600,
-            matching_interval_ticks: 120, // Check every 12s (optimized)
-            mating_duration_ticks: 60,
-            min_energy_norm: 0.55,
-            min_health_norm: 0.55,
+            maturity_ticks: 180,             // ~18 seconds (fast for testing)
+            gestation_ticks: 100,            // ~10 seconds
+            mating_cooldown_ticks: 70,       // ~7 seconds
+            postpartum_cooldown_ticks: 120,  // ~12 seconds
+            litter_size_range: (1, 2),       // Cubs
+            mating_search_radius: 50,        // Reduced from 80: Prevents pathfinding failures (150 tile limit)
+            well_fed_hunger_norm: 0.60,
+            well_fed_thirst_norm: 0.60,
+            well_fed_required_ticks: 30,  // ~3 seconds
+            matching_interval_ticks: 15,  // check every 1.5s
+            mating_duration_ticks: 25,
+            min_energy_norm: 0.45,
+            min_health_norm: 0.45,
         }
     }
 
     /// Core behavioural thresholds for bears.
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.4,     // drink when 40% thirsty
-            0.4,     // seek meals when 40% hungry
+            0.15,    // thirst_threshold: Drink when >= 15% thirsty
+            0.15,    // hunger_threshold: Forage/hunt when >= 15% hungry (lower for testing)
             0.3,     // rest when energy below 30%
             (6, 18), // forage radius when sampling plants
             150,     // water search radius
             150,     // food search radius (shared with scavenging grid)
-            80,      // roaming radius (large territory)
+            10,      // wander_radius: Reduced from 80 to prevent pathfinding failures
             super::ForagingStrategy::Sampled { sample_size: 6 },
         )
     }
@@ -73,15 +75,17 @@ impl BearBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.05)),
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.03)),
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.05)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
         }
     }
 
-    /// Evaluate bear actions via the predator toolkit (filled in later steps).
+    /// Evaluate bear actions via the predator toolkit.
+    ///
+    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -95,6 +99,9 @@ impl BearBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         deer: &Query<(Entity, &TilePosition, Option<&Age>), With<Deer>>,
         vegetation: &ResourceGrid,
+        spatial_grid: &VegetationSpatialGrid,
+        water_grid: &crate::resources::WaterSpatialGrid,
+        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_bear_actions(
             entity,
@@ -108,6 +115,9 @@ impl BearBehavior {
             carcasses,
             deer,
             vegetation,
+            spatial_grid,
+            water_grid,
+            region_map,
         )
     }
 }
@@ -127,6 +137,7 @@ pub fn plan_bear_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
+            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -142,6 +153,7 @@ pub fn plan_bear_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
+    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_bear_actions");
 
     plan_species_actions(
@@ -162,10 +174,21 @@ pub fn plan_bear_actions(
                 &carcasses,
                 &deer_query,
                 vegetation,
+                spatial_grid,
+                &resources.water_spatial_grid,
+                &resources.region_map,
             )
         },
-        None,
-        None,
+        Some(MateActionParams {
+            utility: 0.45,
+            priority: 350,
+            threshold_margin: 0.05,
+            energy_margin: 0.05,
+        }),
+        Some(FollowConfig {
+            stop_distance: 2,
+            max_distance: 35,
+        }),
         "🐻",
         "Bear",
         resources.current_tick(),
@@ -173,7 +196,7 @@ pub fn plan_bear_actions(
 }
 
 /// Bear mate-matching uses the generic reproduction helper.
-/// Change detection: Only processes bears that moved or changed reproductive state
+/// Runs at matching_interval_ticks frequency (configured in ReproductionConfig).
 pub fn bear_mate_matching_system(
     mut commands: Commands,
     animals: Query<
@@ -190,7 +213,7 @@ pub fn bear_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        (With<Bear>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
+        With<Bear>,
     >,
     tick: Res<SimulationTick>,
 ) {
@@ -209,7 +232,7 @@ pub fn bear_birth_system(
     birth_common::<Bear>(
         &mut commands,
         &mut mothers,
-        |cmds, name, pos| crate::entities::entity_types::spawn_bear(cmds, name, pos),
+        crate::entities::entity_types::spawn_bear,
         "🐻🍼",
         "Cub",
     );

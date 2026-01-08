@@ -1,4 +1,4 @@
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{stats::Thirst, TilePosition};
 use crate::tilemap::TerrainType;
@@ -86,7 +86,7 @@ fn find_nearest_water(from: IVec2, max_radius: i32, world_loader: &WorldLoader) 
                 // Check if this tile is shallow water
                 if let Some(terrain_str) = world_loader.get_terrain_at(check_pos.x, check_pos.y) {
                     if let Some(terrain) = TerrainType::from_str(&terrain_str) {
-                        if matches!(terrain, TerrainType::ShallowWater) {
+                        if matches!(terrain, TerrainType::ShallowWater | TerrainType::Water) {
                             // Found water! Now find an adjacent walkable tile
                             if let Some(adjacent_tile) =
                                 find_adjacent_walkable_to_water(check_pos, world_loader)
@@ -113,9 +113,9 @@ fn find_nearest_water(from: IVec2, max_radius: i32, world_loader: &WorldLoader) 
         }
     }
 
-    // Return the water tile itself (not the adjacent tile)
-    // The action handler will stop at an adjacent tile
-    nearest.map(|(water_pos, _, _)| water_pos)
+    // Return the adjacent walkable tile (not the water tile itself)
+    // The entity will pathfind to this adjacent tile to drink
+    nearest.map(|(_, adjacent_tile, _)| adjacent_tile)
 }
 
 /// Find a walkable tile adjacent to water
@@ -144,7 +144,15 @@ fn find_adjacent_walkable_to_water(water_pos: IVec2, world_loader: &WorldLoader)
                         TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water
                     )
                 {
-                    return Some(check_pos);
+                    // CRITICAL: Only Trees and Rocks block movement (not bushes, flowers, shrubs)
+                    let has_blocking_resource = world_loader
+                        .get_resource_at(check_pos.x, check_pos.y)
+                        .map(|r| crate::resources::is_blocking_resource(&r))
+                        .unwrap_or(false);
+
+                    if !has_blocking_resource {
+                        return Some(check_pos);
+                    }
                 }
             }
         }

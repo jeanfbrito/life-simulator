@@ -95,7 +95,7 @@ export class Renderer {
         const stats = this.renderTerrain(worldData, resourcesToRender, cameraOffsetX, cameraOffsetY);
 
         // Second pass: Y-sorted rendering of entities and resources for proper depth
-        this.renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY);
+        this.renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY, worldData);
 
         this.ctx.restore(); // Restore the translation and clipping
 
@@ -187,8 +187,9 @@ export class Renderer {
      * @param {Array} resourcesToRender - Array of resources with x, y coordinates
      * @param {number} cameraOffsetX - Camera X offset in tiles
      * @param {number} cameraOffsetY - Camera Y offset in tiles
+     * @param {Object} worldData - World data containing loaded chunks
      */
-    renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY) {
+    renderEntitiesAndResourcesSorted(entities, resourcesToRender, cameraOffsetX, cameraOffsetY, worldData) {
         // Create a combined list of entities and resources with Y-coordinates for sorting
         const renderList = [];
 
@@ -207,6 +208,14 @@ export class Renderer {
 
             const entityWorldX = entity.position.x;
             const entityWorldY = entity.position.y;
+
+            // Check if entity's chunk is loaded - don't render on unloaded chunks
+            const chunk = CoordinateConverter.worldToChunk(entityWorldX, entityWorldY);
+            const chunkKey = CoordinateConverter.chunkKey(chunk.chunkX, chunk.chunkY);
+            if (!worldData?.chunks?.[chunkKey]) {
+                // Skip entities on unloaded chunks to prevent them appearing on water background
+                continue;
+            }
 
             // Convert world coordinates to screen pixel coordinates
             const screenCoords = CoordinateConverter.worldToScreenPixels(entityWorldX, entityWorldY, cameraOffsetX, cameraOffsetY);

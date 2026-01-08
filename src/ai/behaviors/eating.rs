@@ -1,4 +1,4 @@
-use crate::ai::action::ActionType;
+use crate::ai::actions::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{stats::Hunger, TilePosition};
 use crate::tilemap::TerrainType;
@@ -487,11 +487,11 @@ fn supports_vegetation_at(pos: IVec2, world_loader: &WorldLoader) -> bool {
     false
 }
 
-/// Check if a cell is accessible (no blocking resources)
+/// Check if a cell is accessible (no blocking resources like Trees or Rocks)
 fn is_cell_accessible(pos: IVec2, world_loader: &WorldLoader) -> bool {
     !world_loader
         .get_resource_at(pos.x, pos.y)
-        .map(|r| !r.is_empty())
+        .map(|r| crate::resources::is_blocking_resource(&r))
         .unwrap_or(false)
 }
 

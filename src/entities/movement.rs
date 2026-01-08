@@ -199,7 +199,7 @@ pub fn initiate_pathfinding(
                 origin: position.tile,
                 destination: order.destination,
                 allow_diagonal: order.allow_diagonal,
-                max_steps: Some(5000), // Prevent infinite search (needs to be high for fragmented world terrain)
+                max_steps: Some(1500), // Reduced from 5000 - with smaller wander radius, paths should be shorter
             });
 
         info!(
@@ -299,7 +299,7 @@ pub fn initialize_movement_state(
 pub fn issue_move_order(commands: &mut Commands, entity: Entity, destination: IVec2) {
     commands.entity(entity).insert(MoveOrder {
         destination,
-        allow_diagonal: false,
+        allow_diagonal: true, // Enable diagonal movement with corner-cutting prevention (matches RegionMap's 8-directional flood-fill)
     });
 }
 

@@ -326,7 +326,8 @@ pub fn action_completion_system(
 ) {
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "trigger_actions");
     // Get entities that just completed/failed actions from the queue
-    let recently_completed = action_queue.get_recently_completed(tick.0 - 1);
+    // Use saturating_sub to prevent underflow on tick 0
+    let recently_completed = action_queue.get_recently_completed(tick.0.saturating_sub(1));
 
     for entity in recently_completed {
         // Always trigger replanning for completed/failed actions

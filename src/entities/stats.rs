@@ -404,6 +404,36 @@ pub fn movement_energy_system(
     }
 }
 
+/// Reduce hunger while grazing (continuous consumption like resting restores energy)
+/// MUST run BEFORE tick_stats_system so hunger reduction is applied
+///
+/// This makes grazing work like resting:
+/// - Resting: Energy regenerates continuously until full, then action completes
+/// - Grazing: Hunger reduces continuously until satisfied, then action completes
+pub fn grazing_hunger_system(
+    mut query: Query<(
+        Entity,
+        &mut Hunger,
+        Option<&CurrentAction>,
+        Option<&crate::entities::types::SpeciesNeeds>,
+    )>,
+) {
+    for (_entity, mut hunger, current_action, species_needs) in query.iter_mut() {
+        // Only reduce hunger when actively grazing
+        if let Some(action) = current_action {
+            if action.action_name == "Graze" {
+                // Reduce hunger per tick based on species eat_amount
+                // Spread eat_amount over ~20 ticks for gradual consumption
+                let eat_per_tick = species_needs
+                    .map(|needs| needs.eat_amount / 20.0)
+                    .unwrap_or(1.5);
+
+                hunger.0.change(-eat_per_tick);
+            }
+        }
+    }
+}
+
 /// Update all stats by their tick rates
 /// MUST run in Update schedule with `run_if(should_run_tick_systems)` guard (tick-synced at 10 TPS)
 /// Only processes entities with changed stats (using Changed<T> filters)
