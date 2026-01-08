@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 /// Tick-Queued Utility AI (TQUAI) System
 ///
 /// A deterministic, tick-synchronized AI system where:

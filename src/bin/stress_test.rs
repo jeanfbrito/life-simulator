@@ -1,3 +1,4 @@
+#![allow(unused_imports, deprecated, static_mut_refs)]
 /// Entity Count Stress Test
 ///
 /// This binary runs performance benchmarks with high entity counts (100-700+) to identify
@@ -301,7 +302,7 @@ fn check_completion_system(
         if completed && !metrics.tick_times.is_empty() {
             println!("\n");
             print_stress_test_results(&metrics, elapsed_secs, &stress_config);
-            app_exit_events.send(bevy::app::AppExit::Success);
+            app_exit_events.write(bevy::app::AppExit::Success);
         }
     }
 }

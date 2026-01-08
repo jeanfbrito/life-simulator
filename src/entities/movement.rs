@@ -123,8 +123,6 @@ fn on_tile_position_add(
         None => return, // Cell doesn't exist (out of bounds)
     };
 
-    drop(grid); // Release resource borrow
-
     // Queue deferred commands to reparent entity to cell
     let mut commands = world.commands();
     commands.entity(cell_entity).add_child(entity);
@@ -176,8 +174,6 @@ fn on_tile_position_insert(
         Some(cell) => cell,
         None => return, // Cell doesn't exist (out of bounds)
     };
-
-    drop(grid); // Release resource borrow
 
     // Queue deferred command to reparent to new cell
     let mut commands = world.commands();

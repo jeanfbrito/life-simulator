@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Consideration system for Utility AI
 ///
 /// Considerations evaluate context to produce utility scores (0.0 to 1.0).

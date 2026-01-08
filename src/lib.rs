@@ -1,3 +1,4 @@
+#![allow(deprecated, dead_code, static_mut_refs, unused_imports, unused_variables)]
 pub mod ai;
 pub mod cached_world;
 pub mod debug;

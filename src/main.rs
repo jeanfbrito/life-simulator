@@ -1,3 +1,4 @@
+#![allow(deprecated, dead_code, static_mut_refs, unused_imports)]
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use std::time::Duration;
@@ -225,7 +226,7 @@ fn save_load_system(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     world_loader: Res<WorldLoader>,
-    world_config: Res<WorldConfig>,
+    _world_config: Res<WorldConfig>,
 ) {
     // Save system - Press key 1 to save
     if keyboard.just_pressed(KeyCode::Digit1) {

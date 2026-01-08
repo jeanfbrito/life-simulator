@@ -1,3 +1,4 @@
+#![allow(static_mut_refs)]
 /// Minimal test to verify ScheduleRunnerPlugin + MinimalPlugins runs Update schedule
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;

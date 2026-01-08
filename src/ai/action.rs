@@ -1385,7 +1385,7 @@ impl Action for HarvestAction {
             if let Some(resource_at_tile) = world_loader.get_resource_at(self.target_tile.x, self.target_tile.y) {
                 if let Some(actual_resource) = ResourceType::from_str(&resource_at_tile) {
                     if actual_resource == self.resource_type && actual_resource.is_gatherable() {
-                        if let Some(harvest_profile) = actual_resource.get_harvest_profile() {
+                        if let Some(_harvest_profile) = actual_resource.get_harvest_profile() {
                             if let Some(resource_grid) = world.get_resource::<crate::vegetation::resource_grid::ResourceGrid>() {
                                 if let Some(cell) = resource_grid.get_cell(self.target_tile) {
                                     // Check if ready for harvest

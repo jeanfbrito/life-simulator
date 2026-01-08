@@ -819,18 +819,13 @@ impl ActionQueue {
     /// NOTE: Active actions are now stored as components and clean up automatically
     /// when entities despawn - no manual cleanup needed!
     pub fn cleanup_dead_entities(&mut self, world: &World) {
-        let mut recently_completed_removed = 0;
         let mut pending_removed = 0;
-        let mut pending_cancellations_removed = 0;
-
-        // Active actions are now components - they auto-cleanup on entity despawn!
-        // No manual cleanup needed for active actions anymore.
 
         // Remove dead entities from recently_completed
         let original_len = self.recently_completed.len();
         self.recently_completed
             .retain(|(entity, _)| world.get_entity(*entity).is_ok());
-        recently_completed_removed = original_len - self.recently_completed.len();
+        let recently_completed_removed = original_len - self.recently_completed.len();
 
         // Remove dead entities from pending (requires collecting and rebuilding heap)
         let valid_pending: Vec<_> = self
@@ -850,7 +845,7 @@ impl ActionQueue {
         let original_len = self.pending_cancellations.len();
         self.pending_cancellations
             .retain(|entity| world.get_entity(*entity).is_ok());
-        pending_cancellations_removed = original_len - self.pending_cancellations.len();
+        let pending_cancellations_removed = original_len - self.pending_cancellations.len();
 
         if pending_removed > 0 || recently_completed_removed > 0 {
             debug!(
