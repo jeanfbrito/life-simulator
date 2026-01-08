@@ -29,19 +29,20 @@ impl DeerBehavior {
     /// Fast reproduction parameters for deer (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 150,             // ~15 seconds (fast for testing)
-            gestation_ticks: 80,             // ~8 seconds
-            mating_cooldown_ticks: 50,       // ~5 seconds
-            postpartum_cooldown_ticks: 100,  // ~10 seconds
-            litter_size_range: (1, 2),       // Fawns
-            mating_search_radius: 40,        // Reduced from 60: Prevents pathfinding failures (150 tile limit)
-            well_fed_hunger_norm: 0.65,
-            well_fed_thirst_norm: 0.65,
-            well_fed_required_ticks: 25,  // ~2.5 seconds
-            matching_interval_ticks: 15,  // check every 1.5s
-            mating_duration_ticks: 20,    // ~2s together
-            min_energy_norm: 0.35,
-            min_health_norm: 0.35,
+            // Deer take noticeably longer to mature and recover between litters than rabbits.
+            maturity_ticks: 12_000,           // ~20 minutes at 10 TPS
+            gestation_ticks: 6_000,           // ~10 minutes pregnant
+            mating_cooldown_ticks: 2_000,     // ~3.3 minutes before males can mate again
+            postpartum_cooldown_ticks: 9_000, // ~15 minutes recovery for females
+            litter_size_range: (1, 2),        // Single fawn common, twins possible
+            mating_search_radius: 60,         // Seek partners within a broad clearing
+            well_fed_hunger_norm: 0.55,       // Require healthier condition than rabbits
+            well_fed_thirst_norm: 0.55,
+            well_fed_required_ticks: 600, // Must stay well fed for ~60s
+            matching_interval_ticks: 100, // Check every 10s for partners (optimized)
+            mating_duration_ticks: 50,    // ~5s spent together
+            min_energy_norm: 0.35,        // Need reasonable energy reserves
+            min_health_norm: 0.4,         // Avoid mating when injured
         }
     }
 
@@ -50,13 +51,13 @@ impl DeerBehavior {
     pub fn config() -> BehaviorConfig {
         use super::HabitatPreference;
         BehaviorConfig::new(
-            0.20,    // thirst_threshold: Drink when >= 20% thirsty
+            0.65,    // thirst_threshold (wait longer before drinking)
             0.45,    // hunger_threshold (eat less frequently)
             0.30,    // energy_threshold
             (5, 15), // graze_range
             150,     // water_search_radius
             150,     // food_search_radius
-            10,      // wander_radius: Reduced from 20 to prevent pathfinding failures on fragmented terrain
+            50,      // wander_radius (Phase 3: aligned with mating search)
         )
         .with_satisfaction(40.0) // Deer are selective - search for quality patches
         .with_habitat(HabitatPreference::deer()) // Prefer forest edges, meadows
@@ -92,9 +93,6 @@ impl DeerBehavior {
 
     /// Evaluate Deer actions
     /// Note: Follow-mother behavior is handled by the planner using maybe_add_follow_mother
-    ///
-    /// PERFORMANCE: Uses spatial grids for O(k) lookups instead of O(radius²)
-    /// - RegionMap for O(1) reachability filtering (eliminates pathfinding failures)
     pub fn evaluate_actions(
         position: &crate::entities::TilePosition,
         thirst: &crate::entities::stats::Thirst,
@@ -103,9 +101,6 @@ impl DeerBehavior {
         behavior_config: &BehaviorConfig,
         world_loader: &crate::world_loader::WorldLoader,
         vegetation_grid: &crate::vegetation::resource_grid::ResourceGrid,
-        spatial_grid: &crate::vegetation::VegetationSpatialGrid,
-        water_grid: &crate::resources::WaterSpatialGrid,
-        region_map: &crate::pathfinding::RegionMap,
         fear_state: Option<&crate::entities::FearState>,
     ) -> Vec<crate::ai::UtilityScore> {
         // Use deer-specific diet preferences
@@ -119,9 +114,6 @@ impl DeerBehavior {
             behavior_config,
             world_loader,
             vegetation_grid,
-            spatial_grid,
-            water_grid,
-            region_map,
             fear_state,
             &diet,
         )
@@ -142,7 +134,6 @@ pub fn plan_deer_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
-            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -178,9 +169,6 @@ pub fn plan_deer_actions(
                 behavior,
                 loader,
                 &resources.vegetation_grid,
-                &resources.vegetation_spatial_grid,
-                &resources.water_spatial_grid,
-                &resources.region_map,
                 fear_state,
             );
 
@@ -231,7 +219,7 @@ pub fn deer_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        With<Deer>,
+        (With<Deer>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
     tick: Res<SimulationTick>,
 ) {
@@ -249,7 +237,7 @@ pub fn deer_birth_system(
     birth_common::<Deer>(
         &mut commands,
         &mut mothers,
-        entity_types::spawn_deer,
+        |cmds, name, pos| entity_types::spawn_deer(cmds, name, pos),
         "🦌🍼",
         "Fawn",
     );

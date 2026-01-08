@@ -7,6 +7,8 @@ use std::{
     sync::Arc,
 };
 
+use crate::tilemap::terrain::TerrainType;
+
 // ============================================================================
 // CORE DATA STRUCTURES
 // ============================================================================
@@ -31,6 +33,11 @@ impl PathNode {
             h_cost: manhattan_distance(dest, index),
             cost_to_pass,
         }
+    }
+
+    #[inline(always)]
+    pub fn weight(&self) -> u32 {
+        self.g_cost + self.h_cost // A* evaluation: f = g + h
     }
 }
 
@@ -332,8 +339,7 @@ pub fn find_path_with_cache(
     Some(path)
 }
 
-/// Find a path using JPS or A* algorithm
-/// JPS is automatically used when diagonal movement is allowed (15-20x speedup)
+/// Find a path using A* algorithm
 /// Returns waypoints from origin to destination (in order)
 pub fn find_path(
     origin: IVec2,
@@ -360,23 +366,6 @@ pub fn find_path(
             grid.get_cost(destination)
         );
         return None;
-    }
-
-    // Use JPS for diagonal movement (15-20x speedup)
-    if allow_diagonal {
-        if let Some(jps_waypoints) =
-            crate::pathfinding::jps::jps_find_path(origin, destination, grid, allow_diagonal, max_steps)
-        {
-            debug!(
-                "JPS pathfinding: {:?} → {:?}, {} waypoints",
-                origin,
-                destination,
-                jps_waypoints.len()
-            );
-            return Some(Path::new(jps_waypoints));
-        }
-        // JPS failed, fall back to A*
-        debug!("JPS failed, falling back to A*");
     }
 
     let mut to_explore: BinaryHeap<PathNode> = BinaryHeap::new();
@@ -423,8 +412,8 @@ pub fn find_path(
         }
         explored.insert(current.index);
 
-        // Check all neighbors (with corner-cutting prevention for diagonals)
-        let neighbors = get_neighbors(current.index, allow_diagonal, grid);
+        // Check all neighbors
+        let neighbors = get_neighbors(current.index, allow_diagonal);
         for neighbor_pos in neighbors {
             if explored.contains(&neighbor_pos) {
                 continue;
@@ -537,53 +526,43 @@ fn manhattan_distance(a: IVec2, b: IVec2) -> u32 {
     (d.x + d.y) as u32
 }
 
-/// Get neighbor tiles (4-directional or 8-directional with corner-cutting prevention)
-///
-/// For diagonal movement, only allows diagonal if BOTH adjacent cardinals are walkable.
-/// This prevents "corner cutting" through obstacles (Red Blob Games / Dwarf Fortress pattern).
-fn get_neighbors(pos: IVec2, allow_diagonal: bool, grid: &PathfindingGrid) -> Vec<IVec2> {
-    let mut neighbors = Vec::with_capacity(8);
-
-    // Cardinal directions (always included if walkable)
-    let north = pos + IVec2::new(0, 1);
-    let east = pos + IVec2::new(1, 0);
-    let south = pos + IVec2::new(0, -1);
-    let west = pos + IVec2::new(-1, 0);
-
-    // Always add cardinals (walkability checked by caller)
-    neighbors.push(north);
-    neighbors.push(east);
-    neighbors.push(south);
-    neighbors.push(west);
+/// Get neighbor tiles (4-directional or 8-directional)
+fn get_neighbors(pos: IVec2, allow_diagonal: bool) -> Vec<IVec2> {
+    let orthogonal = vec![
+        pos + IVec2::new(0, 1),  // North
+        pos + IVec2::new(1, 0),  // East
+        pos + IVec2::new(0, -1), // South
+        pos + IVec2::new(-1, 0), // West
+    ];
 
     if !allow_diagonal {
-        return neighbors;
+        return orthogonal;
     }
 
-    // Diagonal neighbors with corner-cutting prevention
-    // Only allow diagonal if BOTH adjacent cardinals are walkable
-
-    // NE: requires North AND East to be walkable
-    if grid.is_walkable(north) && grid.is_walkable(east) {
-        neighbors.push(pos + IVec2::new(1, 1));
-    }
-
-    // SE: requires South AND East to be walkable
-    if grid.is_walkable(south) && grid.is_walkable(east) {
-        neighbors.push(pos + IVec2::new(1, -1));
-    }
-
-    // SW: requires South AND West to be walkable
-    if grid.is_walkable(south) && grid.is_walkable(west) {
-        neighbors.push(pos + IVec2::new(-1, -1));
-    }
-
-    // NW: requires North AND West to be walkable
-    if grid.is_walkable(north) && grid.is_walkable(west) {
-        neighbors.push(pos + IVec2::new(-1, 1));
-    }
-
+    // Add diagonal neighbors
+    let mut neighbors = orthogonal;
+    neighbors.extend_from_slice(&[
+        pos + IVec2::new(1, 1),   // NE
+        pos + IVec2::new(1, -1),  // SE
+        pos + IVec2::new(-1, -1), // SW
+        pos + IVec2::new(-1, 1),  // NW
+    ]);
     neighbors
+}
+
+// ============================================================================
+// TERRAIN COST MAPPING
+// ============================================================================
+
+/// Convert terrain to pathfinding cost (uses existing TerrainType::movement_cost)
+pub fn terrain_to_pathfinding_cost(terrain: &TerrainType) -> u32 {
+    // Convert f32 to u32, and treat very high costs as impassable
+    let cost = terrain.movement_cost();
+    if cost >= 1000.0 {
+        u32::MAX // Impassable
+    } else {
+        cost as u32
+    }
 }
 
 // ============================================================================
@@ -666,6 +645,50 @@ pub fn process_pathfinding_requests(
         // Remove request (processed)
         commands.entity(entity).remove::<GridPathRequest>();
     }
+}
+
+// ============================================================================
+// INTEGRATION HELPERS
+// ============================================================================
+
+/// Build PathfindingGrid from loaded world chunks
+pub fn build_pathfinding_grid_from_world(
+    world_loader: &crate::world_loader::WorldLoader,
+) -> PathfindingGrid {
+    let mut grid = PathfindingGrid::new();
+
+    // Iterate through all chunks in the world using the new iterator
+    for chunk_iter in world_loader.iter_chunks() {
+        // For now, we can't access terrain data from WorldLoader
+        // This would need to be extended to expose terrain data
+        // For now, create a basic walkable grid
+        let chunk_x = chunk_iter.chunk_x;
+        let chunk_y = chunk_iter.chunk_y;
+
+        // Set basic costs for the chunk area
+        for local_x in 0..16 {
+            for local_y in 0..16 {
+                let world_x = chunk_x * 16 + local_x;
+                let world_y = chunk_y * 16 + local_y;
+                let pos = IVec2::new(world_x, world_y);
+
+                // For now, assume all tiles are walkable with cost 1
+                // This would need terrain data for proper pathfinding
+                grid.set_cost(pos, 1);
+            }
+        }
+    }
+
+    grid
+}
+
+/// Update pathfinding grid when terrain changes
+pub fn update_pathfinding_grid_for_tile(
+    grid: &mut PathfindingGrid,
+    tile_pos: IVec2,
+    new_terrain: TerrainType,
+) {
+    grid.set_cost(tile_pos, terrain_to_pathfinding_cost(&new_terrain));
 }
 
 // ============================================================================

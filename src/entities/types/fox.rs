@@ -3,7 +3,6 @@
 use super::BehaviorConfig;
 use bevy::prelude::*;
 
-use crate::ai::herbivore_toolkit::{FollowConfig, MateActionParams};
 use crate::ai::planner::plan_species_actions;
 use crate::ai::queue::ActionQueue;
 use crate::ai::system_params::PlanningResources;
@@ -18,41 +17,39 @@ use crate::entities::TilePosition;
 use crate::entities::{Carcass, FearState};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
-use crate::vegetation::VegetationSpatialGrid;
 use crate::world_loader::WorldLoader;
 
 /// Fox behaviour preset (applies to red fox or coyote analogue).
 pub struct FoxBehavior;
 
 impl FoxBehavior {
-    /// Fast reproduction parameters for foxes (for testing)
     pub fn reproduction_config() -> ReproductionConfig {
         ReproductionConfig {
-            maturity_ticks: 130,             // ~13 seconds (fast for testing)
-            gestation_ticks: 70,             // ~7 seconds
-            mating_cooldown_ticks: 50,       // ~5 seconds
-            postpartum_cooldown_ticks: 90,   // ~9 seconds
-            litter_size_range: (2, 4),       // Kits
-            mating_search_radius: 50,        // Reduced from 80: Prevents pathfinding failures (150 tile limit)
-            well_fed_hunger_norm: 0.60,
-            well_fed_thirst_norm: 0.60,
-            well_fed_required_ticks: 25,  // ~2.5 seconds
-            matching_interval_ticks: 12,  // check every 1.2s
-            mating_duration_ticks: 20,
-            min_energy_norm: 0.40,
-            min_health_norm: 0.40,
+            maturity_ticks: 10_500, // ~17.5 minutes
+            gestation_ticks: 4_500, // 7.5 minutes
+            mating_cooldown_ticks: 4_000,
+            postpartum_cooldown_ticks: 6_000,
+            litter_size_range: (3, 5),
+            mating_search_radius: 120,
+            well_fed_hunger_norm: 0.5,
+            well_fed_thirst_norm: 0.5,
+            well_fed_required_ticks: 600,
+            matching_interval_ticks: 120, // Check every 12s (optimized)
+            mating_duration_ticks: 50,
+            min_energy_norm: 0.5,
+            min_health_norm: 0.50,
         }
     }
 
     pub fn config() -> BehaviorConfig {
         BehaviorConfig::new_with_foraging(
-            0.15, // thirst_threshold: Drink when >= 15% thirsty
-            0.15, // hunger_threshold: Hunt when >= 15% hungry (lower for testing)
+            0.5, // prefer to hydrate more often than bears
+            0.5, // aggressive hunters when half hungry
             0.3,
             (5, 14),
             150,
             160,
-            10,  // wander_radius: Reduced from 40 to prevent pathfinding failures
+            40,
             super::ForagingStrategy::Exhaustive,
         )
     }
@@ -72,17 +69,14 @@ impl FoxBehavior {
         let needs = Self::needs();
 
         EntityStatsBundle {
-            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.08)), // Moderate hunger
-            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.06)), // Moderate thirst
+            hunger: Hunger(Stat::new(0.0, 0.0, needs.hunger_max, 0.06)),
+            thirst: Thirst(Stat::new(0.0, 0.0, needs.thirst_max, 0.04)),
             energy: Energy(Stat::new(100.0, 0.0, 100.0, -0.06)),
             health: Health(Stat::new(100.0, 0.0, 100.0, 0.015)),
             cached_state: CachedEntityState::default(),
         }
     }
 
-    /// Evaluate fox actions via predator toolkit.
-    ///
-    /// PERFORMANCE: Uses RegionMap for O(1) reachability filtering
     #[allow(clippy::too_many_arguments)]
     pub fn evaluate_actions(
         entity: Entity,
@@ -96,9 +90,6 @@ impl FoxBehavior {
         carcasses: &Query<(Entity, &TilePosition, &Carcass)>,
         rabbits: &Query<(Entity, &TilePosition, Option<&Age>), With<Rabbit>>,
         vegetation: &ResourceGrid,
-        spatial_grid: &VegetationSpatialGrid,
-        water_grid: &crate::resources::WaterSpatialGrid,
-        region_map: &crate::pathfinding::RegionMap,
     ) -> Vec<crate::ai::UtilityScore> {
         crate::ai::predator_toolkit::evaluate_fox_actions(
             entity,
@@ -112,9 +103,6 @@ impl FoxBehavior {
             carcasses,
             rabbits,
             vegetation,
-            spatial_grid,
-            water_grid,
-            region_map,
         )
     }
 }
@@ -133,7 +121,6 @@ pub fn plan_fox_actions(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
-            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -149,7 +136,6 @@ pub fn plan_fox_actions(
 ) {
     let loader = resources.world_loader.as_ref();
     let vegetation = resources.vegetation_grid.as_ref();
-    let spatial_grid = resources.vegetation_spatial_grid.as_ref();
     let _timer = crate::simulation::profiler::ScopedTimer::new(&mut profiler, "plan_fox_actions");
 
     plan_species_actions(
@@ -160,19 +146,11 @@ pub fn plan_fox_actions(
         |entity, position, thirst, hunger, energy, behavior, fear_state| {
             FoxBehavior::evaluate_actions(
                 entity, position, thirst, hunger, energy, behavior, loader, fear_state, &carcasses,
-                &rabbits, vegetation, spatial_grid, &resources.water_spatial_grid, &resources.region_map,
+                &rabbits, vegetation,
             )
         },
-        Some(MateActionParams {
-            utility: 0.45,
-            priority: 350,
-            threshold_margin: 0.05,
-            energy_margin: 0.05,
-        }),
-        Some(FollowConfig {
-            stop_distance: 2,
-            max_distance: 25,
-        }),
+        None,
+        None,
         "🦊",
         "Fox",
         resources.current_tick(),
@@ -195,7 +173,7 @@ pub fn fox_mate_matching_system(
             Option<&ActiveMate>,
             &ReproductionConfig,
         ),
-        With<Fox>,
+        (With<Fox>, Or<(Changed<TilePosition>, Changed<ReproductionCooldown>, Changed<Pregnancy>, Changed<WellFedStreak>)>),
     >,
     tick: Res<SimulationTick>,
 ) {
@@ -213,7 +191,7 @@ pub fn fox_birth_system(
     birth_common::<Fox>(
         &mut commands,
         &mut mothers,
-        crate::entities::entity_types::spawn_fox,
+        |cmds, name, pos| crate::entities::entity_types::spawn_fox(cmds, name, pos),
         "🦊🍼",
         "Kit",
     );

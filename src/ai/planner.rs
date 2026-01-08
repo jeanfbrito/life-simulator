@@ -1,11 +1,11 @@
-use super::actions::ActionType;
+use super::action::ActionType;
 use super::queue::ActionQueue;
 use crate::ai::herbivore_toolkit::{
     maybe_add_follow_mother, maybe_add_mate_action, FollowConfig, MateActionParams,
 };
 use crate::entities::reproduction::{Age, Mother, ReproductionConfig};
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{ActiveMate, MatingTarget, BehaviorConfig, TilePosition};
+use crate::entities::{ActiveMate, BehaviorConfig, TilePosition};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -29,39 +29,6 @@ const EMERGENCY_ENERGY_THRESHOLD: f32 = 0.15; // 15% or less energy = emergency
 
 /// Priority value assigned to survival actions during emergencies
 const EMERGENCY_SURVIVAL_PRIORITY: i32 = 500;
-
-/// Maximum wander utility for juveniles with mothers (keeps them near mom)
-const JUVENILE_MAX_WANDER_UTILITY: f32 = 0.02;
-
-/// Reduce wander utility for juveniles with mothers to keep them close.
-///
-/// When a juvenile has a mother, wandering should be heavily penalized so they prefer
-/// to follow mom instead of exploring on their own (which leads to kits on beaches).
-fn apply_juvenile_wander_penalty(
-    actions: &mut [UtilityScore],
-    age: Option<&Age>,
-    mother: Option<&Mother>,
-) {
-    // Only apply to juveniles with mothers
-    let is_juvenile_with_mother = age.is_some_and(|a| !a.is_adult()) && mother.is_some();
-    if !is_juvenile_with_mother {
-        return;
-    }
-
-    for action in actions.iter_mut() {
-        if matches!(action.action_type, ActionType::Wander { .. }) {
-            // Heavily penalize wandering for juveniles - they should follow mom
-            action.utility = action.utility.min(JUVENILE_MAX_WANDER_UTILITY);
-            // Also reduce priority to ensure Follow (120) always wins over Wander
-            action.priority = 0;
-
-            debug!(
-                "🍼 Juvenile wander penalty applied: utility capped to {:.3}, priority to 0",
-                action.utility
-            );
-        }
-    }
-}
 
 /// Apply emergency priority overrides to survival actions when entity is critically deprived.
 ///
@@ -139,7 +106,6 @@ pub fn plan_species_actions<M: Component>(
             Option<&Age>,
             Option<&Mother>,
             Option<&ActiveMate>,
-            Option<&MatingTarget>,
             Option<&ReproductionConfig>,
             Option<&crate::entities::FearState>,
             Option<&crate::ai::event_driven_planner::NeedsReplanning>,
@@ -180,8 +146,7 @@ pub fn plan_species_actions<M: Component>(
         behavior_config,
         age,
         mother,
-        active_mate,
-        mating_target,
+        mating_intent,
         repro_cfg,
         fear_state,
         needs_replan,
@@ -211,8 +176,7 @@ pub fn plan_species_actions<M: Component>(
         if let Some(params) = mate_params {
             let mate_added = maybe_add_mate_action(
                 &mut actions,
-                active_mate,
-                mating_target,
+                mating_intent,
                 repro_cfg,
                 thirst,
                 hunger,
@@ -220,8 +184,7 @@ pub fn plan_species_actions<M: Component>(
                 params,
                 tick,
             );
-            let has_mating_relationship = active_mate.is_some() || mating_target.is_some();
-            if has_mating_relationship && repro_cfg.is_some() && !mate_added {
+            if mating_intent.is_some() && repro_cfg.is_some() && !mate_added {
                 debug!(
                     "{}⏸️ {} {:?} delaying mating (thirst {:.2}, hunger {:.2}, energy {:.2})",
                     emoji,
@@ -278,9 +241,6 @@ pub fn plan_species_actions<M: Component>(
         }
 
         let has_actions = !actions.is_empty();
-
-        // Apply juvenile wander penalty to keep kits near mothers
-        apply_juvenile_wander_penalty(&mut actions, age, mother);
 
         // Apply emergency priority overrides BEFORE selecting best action
         apply_emergency_priority_override(&mut actions, hunger, thirst, energy);

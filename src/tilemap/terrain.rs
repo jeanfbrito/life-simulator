@@ -39,7 +39,7 @@ impl TerrainType {
     pub fn is_walkable(&self) -> bool {
         !matches!(
             self,
-            TerrainType::Water | TerrainType::DeepWater | TerrainType::ShallowWater | TerrainType::Mountain
+            TerrainType::Water | TerrainType::DeepWater | TerrainType::Mountain
         )
     }
 
@@ -49,9 +49,9 @@ impl TerrainType {
             TerrainType::Stone => 1.2,
             TerrainType::Snow => 1.5,
             TerrainType::Forest => 1.8,
-            TerrainType::Swamp => 2.0,
-            TerrainType::ShallowWater | TerrainType::Water | TerrainType::DeepWater | TerrainType::Mountain => f32::INFINITY,
+            TerrainType::ShallowWater | TerrainType::Swamp => 2.0,
             TerrainType::Desert => 1.3,
+            TerrainType::Water | TerrainType::DeepWater | TerrainType::Mountain => f32::INFINITY,
         }
     }
 

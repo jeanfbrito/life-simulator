@@ -9,7 +9,7 @@
 /// - ActiveAction: Execution state (trait object, started_at_tick)
 /// - CurrentAction: Visualization state (action name string for web API)
 use bevy::prelude::*;
-use crate::ai::actions::Action;
+use crate::ai::action::Action;
 
 /// Component that stores an active multi-tick action
 #[derive(Component)]
