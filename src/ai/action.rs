@@ -1,6 +1,9 @@
+// Allow deprecated clear_navigation_state calls - kept for refactoring in progress
+#![allow(deprecated)]
+
 use crate::entities::stats::{Energy, Hunger, Thirst};
-use crate::entities::{Carcass, Creature, MoveOrder, SpeciesNeeds, TilePosition};
-use crate::pathfinding::{GridPathRequest, Path, PathfindingFailed};
+use crate::entities::{Carcass, SpeciesNeeds, TilePosition};
+use crate::pathfinding::{Path, PathfindingFailed};
 use crate::resources::ResourceType;
 use crate::tilemap::TerrainType;
 use crate::world_loader::WorldLoader;
@@ -10,7 +13,6 @@ use crate::types::newtypes::Utility;
 /// Actions are discrete behaviors that can be queued and executed on ticks.
 /// They can be instant (complete in one tick) or multi-tick (span multiple ticks).
 use bevy::prelude::*;
-use rand::Rng;
 
 use crate::simulation::tick::SimulationTick;
 
@@ -96,7 +98,7 @@ pub trait Action: Send + Sync {
 
     /// Cancel the action (called when a higher priority action needs to interrupt)
     /// Default implementation does nothing - override for actions that need cleanup
-    fn cancel(&mut self, world: &World, entity: Entity) {
+    fn cancel(&mut self, _world: &World, _entity: Entity) {
         // Default: no cleanup needed
     }
 
@@ -787,7 +789,7 @@ impl Action for RestAction {
         ActionResult::InProgress
     }
 
-    fn cancel(&mut self, world: &World, entity: Entity) {
+    fn cancel(&mut self, _world: &World, entity: Entity) {
         // NOTE: Energy state changes will be handled by system layer
         debug!(
             "🚫 Entity {:?} resting interrupted, system will reset energy to active",
@@ -1186,7 +1188,7 @@ impl Action for MateAction {
     }
 
     fn execute(&mut self, world: &World, entity: Entity) -> ActionResult {
-        use crate::entities::reproduction::{Pregnancy, ReproductionConfig, ReproductionCooldown, Sex};
+        use crate::entities::reproduction::Sex;
 
         // NOTE: This action has been simplified to read-only World access.
         // All component mutations (removing ActiveMate/MatingTarget, PathfindingFailed, inserting Pregnancy, etc.)
@@ -1383,7 +1385,7 @@ impl Action for HarvestAction {
             if let Some(resource_at_tile) = world_loader.get_resource_at(self.target_tile.x, self.target_tile.y) {
                 if let Some(actual_resource) = ResourceType::from_str(&resource_at_tile) {
                     if actual_resource == self.resource_type && actual_resource.is_gatherable() {
-                        if let Some(harvest_profile) = actual_resource.get_harvest_profile() {
+                        if let Some(_harvest_profile) = actual_resource.get_harvest_profile() {
                             if let Some(resource_grid) = world.get_resource::<crate::vegetation::resource_grid::ResourceGrid>() {
                                 if let Some(cell) = resource_grid.get_cell(self.target_tile) {
                                     // Check if ready for harvest

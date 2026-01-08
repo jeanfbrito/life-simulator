@@ -11,25 +11,12 @@
 /// data structures (active, pending, recently_completed, pending_cancellations).
 use bevy::prelude::*;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashSet};
 
-use super::actions::{create_action, Action, ActionResult, ActionType};
-use crate::entities::{ActiveAction, Carcass, Creature, CurrentAction, SpeciesNeeds, TilePosition};
-use crate::entities::reproduction::{Pregnancy, ReproductionCooldown, ReproductionConfig, Sex};
-use crate::entities::{ActiveMate, MatingTarget};
+use super::action::{create_action, Action, ActionResult, ActionType};
+use crate::entities::{ActiveAction, CurrentAction};
 use crate::simulation::SimulationTick;
 use crate::types::newtypes::Utility;
-use rand::Rng;
-
-const DEFAULT_CARCASS_DECAY: u32 = 6_000;
-const MIN_CARCASS_NUTRITION: f32 = 5.0;
-
-/// Temporary component to store hunt result data for processing
-/// This is inserted by extract_hunt_data_system and consumed by handle_action_results
-#[derive(Component)]
-pub struct HuntResultData {
-    pub prey_entity: Entity,
-}
 
 // ============================================================================
 // DWARF FORTRESS STYLE: "Failed = Replan" System Invariant
@@ -386,27 +373,6 @@ pub fn execute_active_actions_read_only(world: &mut World) {
     }
 }
 
-/// System 1.5: Extract hunt data before handling results
-///
-/// This system runs before handle_action_results to extract prey entity info
-/// from successful Hunt actions and store it in a temporary component.
-pub fn extract_hunt_data_system(
-    mut commands: Commands,
-    mut query: Query<(Entity, &ActionExecutionResult, &mut ActiveAction)>,
-) {
-    for (entity, result_data, mut active_action) in &mut query {
-        // Only process successful Hunt actions
-        if result_data.result == ActionResult::Success && result_data.action_name == "Hunt" {
-            // Downcast to HuntAction to get prey entity
-            if let Some(hunt_action) = active_action.action.as_any_mut().downcast_ref::<crate::ai::actions::HuntAction>() {
-                commands.entity(entity).insert(HuntResultData {
-                    prey_entity: hunt_action.prey,
-                });
-            }
-        }
-    }
-}
-
 /// System 2: Handle action results with Commands
 ///
 /// This system processes the results from execute_active_actions_read_only
@@ -427,22 +393,14 @@ pub fn handle_action_results(
         Option<&mut crate::entities::Thirst>,
         Option<&mut crate::entities::Energy>,
         Option<&crate::entities::TilePosition>,
-        Option<&Sex>,
-        Option<&ReproductionConfig>,
-        Option<&ActiveMate>,
-        Option<&MatingTarget>,  // Added: females have MatingTarget, not ActiveMate
-        Option<&HuntResultData>,
-        Option<&SpeciesNeeds>,
     )>,
-    // Separate query for prey entities (needed for Hunt action)
-    prey_query: Query<(&TilePosition, Option<&SpeciesNeeds>, &Creature)>,
     tick: Res<SimulationTick>,
     mut queue: ResMut<ActionQueue>,
     mut resource_grid: ResMut<crate::vegetation::resource_grid::ResourceGrid>,
 ) {
     let current_tick = tick.0;
 
-    for (entity, result_data, hunger_opt, thirst_opt, energy_opt, position_opt, sex_opt, config_opt, active_mate_opt, mating_target_opt, hunt_data_opt, species_needs_opt) in &mut query {
+    for (entity, result_data, hunger_opt, thirst_opt, energy_opt, position_opt) in &mut query {
         let action_name = &result_data.action_name;
         let started_at_tick = result_data.started_at_tick;
 
@@ -452,42 +410,34 @@ pub fn handle_action_results(
                 // BEFORE removing action, apply stat updates based on action type
                 match action_name.as_str() {
                     "Graze" => {
-                        // NOTE: Hunger reduction is now CONTINUOUS via grazing_hunger_system
-                        // (like energy regenerates continuously during Rest)
-                        // Here we only log completion and consume biomass
+                        if let Some(mut hunger) = hunger_opt {
+                            // Reduce hunger when grazing completes
+                            let amount = 25.0; // Standard herbivore eating amount
+                            hunger.0.change(-amount);
 
-                        let hunger_pct = hunger_opt
-                            .as_ref()
-                            .map(|h| h.0.percentage())
-                            .unwrap_or(0.0);
+                            info!(
+                                "🌾 Entity {:?} completed grazing! Hunger reduced by {:.1} (now: {:.1}%)",
+                                entity, amount, hunger.0.percentage()
+                            );
 
-                        info!(
-                            "🌾 Entity {:?} completed grazing! (hunger now: {:.1}%)",
-                            entity, hunger_pct
-                        );
-
-                        // Consume biomass from ResourceGrid based on how much was eaten
-                        let amount = species_needs_opt
-                            .map(|needs| needs.eat_amount)
-                            .unwrap_or(25.0);
-                        if let Some(pos) = position_opt {
-                            if let Some(cell) = resource_grid.get_cell_mut(pos.tile) {
-                                let consumed = (amount * 0.4).min(cell.total_biomass);
-                                cell.total_biomass -= consumed;
-                                debug!(
-                                    "🌱 Consumed {:.1} biomass from tile {:?} (remaining: {:.1})",
-                                    consumed, pos.tile, cell.total_biomass
-                                );
+                            // Consume biomass from ResourceGrid
+                            if let Some(pos) = position_opt {
+                                if let Some(cell) = resource_grid.get_cell_mut(pos.tile) {
+                                    let consumed = 10.0f32.min(cell.total_biomass);
+                                    cell.total_biomass -= consumed;
+                                    debug!(
+                                        "🌱 Consumed {:.1} biomass from tile {:?} (remaining: {:.1})",
+                                        consumed, pos.tile, cell.total_biomass
+                                    );
+                                }
                             }
                         }
                     }
 
                     "DrinkWater" => {
                         if let Some(mut thirst) = thirst_opt {
-                            // Use species-specific drink amount, fallback to 50.0
-                            let amount = species_needs_opt
-                                .map(|needs| needs.drink_amount)
-                                .unwrap_or(50.0);
+                            // Reduce thirst when drinking completes
+                            let amount = 30.0; // Standard drink amount
                             thirst.0.change(-amount);
 
                             info!(
@@ -521,65 +471,6 @@ pub fn handle_action_results(
                                 entity, amount, hunger.0.percentage()
                             );
                         }
-
-                        // Handle prey despawning and carcass spawning using extracted hunt data
-                        if let Some(hunt_data) = hunt_data_opt {
-                            let prey_entity = hunt_data.prey_entity;
-
-                            // Get prey information before despawning
-                            if let Ok((prey_pos, prey_needs_opt, prey_creature)) = prey_query.get(prey_entity) {
-                                let available_meat = prey_needs_opt
-                                    .map(|n| n.eat_amount * 3.0)
-                                    .unwrap_or(80.0);
-                                let species_name = &prey_creature.species;
-
-                                // Calculate how much was consumed vs how much remains
-                                let bite_size = 40.0; // Same as hunger reduction amount
-                                let consumed = if available_meat <= bite_size * 2.0 {
-                                    available_meat // Fully consumed small prey
-                                } else {
-                                    bite_size // Partial consumption of large prey
-                                };
-                                let remaining_nutrition = available_meat - consumed;
-
-                                info!(
-                                    "🐺 Entity {:?} hunted prey {:?} ({}) - consumed {:.1}, remaining {:.1}",
-                                    entity, prey_entity, species_name, consumed, remaining_nutrition
-                                );
-
-                                // Despawn prey entity
-                                commands.entity(prey_entity).despawn();
-
-                                // Spawn carcass if significant nutrition remains
-                                if remaining_nutrition >= MIN_CARCASS_NUTRITION {
-                                    let carcass_entity = commands.spawn((
-                                        Carcass::new(species_name, remaining_nutrition, DEFAULT_CARCASS_DECAY),
-                                        *prey_pos,
-                                        Creature {
-                                            name: format!("{} Carcass", species_name),
-                                            species: species_name.to_string(),
-                                        },
-                                    )).id();
-
-                                    info!(
-                                        "🦴 Spawned carcass {:?} of {} at {:?} with {:.1} nutrition",
-                                        carcass_entity, species_name, prey_pos.tile, remaining_nutrition
-                                    );
-                                } else {
-                                    debug!(
-                                        "🦴 No carcass spawned for {} - insufficient remaining nutrition ({:.1})",
-                                        species_name, remaining_nutrition
-                                    );
-                                }
-                            } else {
-                                warn!("🐺 Hunt completed but prey {:?} already despawned", prey_entity);
-                            }
-
-                            // Clean up the temporary component
-                            commands.entity(entity).remove::<HuntResultData>();
-                        } else {
-                            warn!("🐺 Hunt completed but HuntResultData component missing - prey won't be despawned!");
-                        }
                     }
 
                     "Rest" => {
@@ -591,68 +482,6 @@ pub fn handle_action_results(
                             info!(
                                 "😴 Entity {:?} completed resting! Completion bonus +{:.1} (now: {:.1}%)",
                                 entity, bonus, energy.0.percentage()
-                            );
-                        }
-                    }
-
-                    "Mate" => {
-                        // Handle mating completion - create pregnancy on female
-                        // FIX: Check for EITHER ActiveMate (male pursuer) OR MatingTarget (female pursued)
-                        let partner_entity = active_mate_opt.map(|m| m.partner)
-                            .or_else(|| mating_target_opt.map(|t| t.suitor));
-
-                        if let (Some(sex), Some(config)) = (sex_opt, config_opt) {
-                            if matches!(sex, Sex::Female) {
-                                // Calculate litter size
-                                let mut rng = rand::thread_rng();
-                                let (min, max) = config.litter_size_range;
-                                let litter_size = if min == max { min } else { rng.gen_range(min..=max) };
-
-                                // Insert pregnancy component
-                                commands.entity(entity).insert(Pregnancy {
-                                    remaining_ticks: config.gestation_ticks,
-                                    litter_size,
-                                    father: partner_entity,
-                                });
-
-                                info!(
-                                    "🤰 Entity {:?} is now pregnant! Gestation: {} ticks, Litter size: {}",
-                                    entity, config.gestation_ticks, litter_size
-                                );
-                            }
-
-                            // Add cooldown to this entity
-                            // Females get longer postpartum cooldown, males get standard mating cooldown
-                            let cooldown_ticks = if matches!(sex, Sex::Female) {
-                                config.postpartum_cooldown_ticks
-                            } else {
-                                config.mating_cooldown_ticks
-                            };
-                            commands.entity(entity).insert(ReproductionCooldown {
-                                remaining_ticks: cooldown_ticks,
-                            });
-
-                            // Add cooldown to partner (if relationship exists)
-                            if let Some(partner) = partner_entity {
-                                let partner_cooldown = if matches!(sex, Sex::Female) {
-                                    config.mating_cooldown_ticks  // Partner is male
-                                } else {
-                                    config.postpartum_cooldown_ticks  // Partner is female
-                                };
-                                commands.entity(partner).insert(ReproductionCooldown {
-                                    remaining_ticks: partner_cooldown,
-                                });
-                            }
-
-                            // Clear mating relationship components
-                            commands.entity(entity).remove::<ActiveMate>();
-                            commands.entity(entity).remove::<MatingTarget>();
-
-                            info!("💕 Entity {:?} completed mating successfully!", entity);
-                        } else {
-                            debug!(
-                                "⚠️ Entity {:?} completed Mate but missing Sex/ReproductionConfig",
-                                entity
                             );
                         }
                     }
@@ -990,18 +819,13 @@ impl ActionQueue {
     /// NOTE: Active actions are now stored as components and clean up automatically
     /// when entities despawn - no manual cleanup needed!
     pub fn cleanup_dead_entities(&mut self, world: &World) {
-        let mut recently_completed_removed = 0;
         let mut pending_removed = 0;
-        let mut pending_cancellations_removed = 0;
-
-        // Active actions are now components - they auto-cleanup on entity despawn!
-        // No manual cleanup needed for active actions anymore.
 
         // Remove dead entities from recently_completed
         let original_len = self.recently_completed.len();
         self.recently_completed
             .retain(|(entity, _)| world.get_entity(*entity).is_ok());
-        recently_completed_removed = original_len - self.recently_completed.len();
+        let recently_completed_removed = original_len - self.recently_completed.len();
 
         // Remove dead entities from pending (requires collecting and rebuilding heap)
         let valid_pending: Vec<_> = self
@@ -1021,7 +845,7 @@ impl ActionQueue {
         let original_len = self.pending_cancellations.len();
         self.pending_cancellations
             .retain(|entity| world.get_entity(*entity).is_ok());
-        pending_cancellations_removed = original_len - self.pending_cancellations.len();
+        let pending_cancellations_removed = original_len - self.pending_cancellations.len();
 
         if pending_removed > 0 || recently_completed_removed > 0 {
             debug!(

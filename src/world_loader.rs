@@ -146,7 +146,7 @@ impl WorldLoader {
     }
 
     /// Iterate over all chunks in the world
-    pub fn iter_chunks(&self) -> impl Iterator<Item = ChunkIterator> {
+    pub fn iter_chunks(&self) -> impl Iterator<Item = ChunkIterator<'_>> {
         self.world.chunks.iter().map(|(key, chunk_data)| {
             let (chunk_x, chunk_y) = parse_chunk_key(key);
             ChunkIterator {

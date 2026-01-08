@@ -1,4 +1,4 @@
-use crate::ai::actions::ActionType;
+use crate::ai::action::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{FearState, TilePosition};
 use crate::tilemap::TerrainType;
@@ -65,46 +65,13 @@ pub fn evaluate_fleeing_behavior(
 
     // Handle edge case: prey is on same tile as predator
     if flee_vector == IVec2::ZERO {
+        // Pick a random direction to flee
         use rand::Rng;
         let mut rng = rand::thread_rng();
-
-        // If multiple predators nearby, try to find the best escape direction
-        // by sampling several random directions and picking the one that maximizes
-        // distance from the predator's current position
-        let best_direction = if fear_state.nearby_predators > 1 {
-            // Sample 8 directions and pick the best one
-            let mut best_angle = 0.0;
-            let mut best_score = f32::MIN;
-
-            for i in 0..8 {
-                let angle = (i as f32 / 8.0) * std::f32::consts::TAU;
-                let test_flee = IVec2::new(
-                    (angle.cos() * FLEE_DISTANCE as f32) as i32,
-                    (angle.sin() * FLEE_DISTANCE as f32) as i32,
-                );
-                let test_target = position.tile + test_flee;
-
-                // Score this direction by distance from predator position
-                // Even though we're on the same tile, the predator likely approached
-                // from some direction, so moving away maximizes safety
-                let distance_from_predator =
-                    ((test_target.x - predator_position.x).pow(2) +
-                     (test_target.y - predator_position.y).pow(2)) as f32;
-
-                if distance_from_predator > best_score {
-                    best_score = distance_from_predator;
-                    best_angle = angle;
-                }
-            }
-            best_angle
-        } else {
-            // Single predator: any random direction is acceptable
-            rng.gen::<f32>() * std::f32::consts::TAU
-        };
-
+        let angle = rng.gen::<f32>() * std::f32::consts::TAU;
         let flee_vector = IVec2::new(
-            (best_direction.cos() * FLEE_DISTANCE as f32) as i32,
-            (best_direction.sin() * FLEE_DISTANCE as f32) as i32,
+            (angle.cos() * FLEE_DISTANCE as f32) as i32,
+            (angle.sin() * FLEE_DISTANCE as f32) as i32,
         );
         let target = position.tile + flee_vector;
 
@@ -115,7 +82,7 @@ pub fn evaluate_fleeing_behavior(
             world_loader,
         ) {
             return Some(UtilityScore {
-                action_type: ActionType::Wander {
+                action_type: ActionType::Graze {
                     target_tile: walkable_target,
                 },
                 utility: FLEE_UTILITY,
@@ -149,7 +116,7 @@ pub fn evaluate_fleeing_behavior(
     let utility = FLEE_UTILITY * fear_state.fear_level;
 
     Some(UtilityScore {
-        action_type: ActionType::Wander {
+        action_type: ActionType::Graze {
             target_tile: walkable_target,
         },
         utility,
@@ -235,23 +202,15 @@ fn find_nearest_walkable_in_cone(
     None
 }
 
-/// Check if a tile is walkable (not water, not blocked by Trees/Rocks)
+/// Check if a tile is walkable (not water, not blocked)
 fn is_walkable_terrain(pos: IVec2, world_loader: &WorldLoader) -> bool {
     if let Some(terrain_str) = world_loader.get_terrain_at(pos.x, pos.y) {
         if let Some(terrain) = TerrainType::from_str(&terrain_str) {
-            // Check terrain is walkable (not water, mountain, etc.)
-            if !terrain.is_walkable() || matches!(
-                terrain,
-                TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water
-            ) {
-                return false;
-            }
-            // CRITICAL: Also check for blocking resources (Trees, Rocks)
-            let has_blocking_resource = world_loader
-                .get_resource_at(pos.x, pos.y)
-                .map(|r| crate::resources::is_blocking_resource(&r))
-                .unwrap_or(false);
-            return !has_blocking_resource;
+            return terrain.is_walkable()
+                && !matches!(
+                    terrain,
+                    TerrainType::ShallowWater | TerrainType::DeepWater | TerrainType::Water
+                );
         }
     }
     false
@@ -275,7 +234,6 @@ mod tests {
             ticks_since_danger: 0,
             peak_fear: 0.2,
             last_logged_fear: 0.0,
-            nearest_predator_pos: Some(predator_pos),
         };
 
         // Note: This will return None without a real WorldLoader
@@ -294,7 +252,6 @@ mod tests {
             ticks_since_danger: 0,
             peak_fear: 0.8,
             last_logged_fear: 0.0,
-            nearest_predator_pos: Some(predator_pos),
         };
 
         assert!(

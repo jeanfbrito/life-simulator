@@ -1,3 +1,4 @@
+#![allow(unused_imports, unused_mut)]
 use bevy::math::IVec2;
 use life_simulator::vegetation::{constants, ResourceGrid};
 use tracing_subscriber::EnvFilter;

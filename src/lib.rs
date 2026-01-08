@@ -1,3 +1,4 @@
+#![allow(deprecated, dead_code, static_mut_refs, unused_imports, unused_variables)]
 pub mod ai;
 pub mod cached_world;
 pub mod debug;
@@ -17,12 +18,12 @@ pub mod world_loader;
 pub use tilemap::{
     BiomeType, Chunk, ChunkCoordinate, ChunkManager, PositionComponent, TerrainProperties,
     TerrainQuery, TerrainQuerySystem, TerrainType, TilemapPlugin, WorldConfig, WorldGenerator,
-    WorldMetadata, WorldStatistics,
+    WorldMetadata, WorldStatistics, CHUNK_SIZE,
 };
 
 pub use serialization::{
-    SerializedChunk, SerializedWorld, WorldLoadRequest, WorldSaveRequest, WorldSerializationPlugin,
-    WorldSerializer,
+    BiomeConfig, SerializedChunk, SerializedWorld, WorldLoadRequest, WorldSaveRequest,
+    WorldSerializationPlugin, WorldSerializer,
 };
 
 pub use cached_world::{CachedWorld, CachedWorldPlugin, UpdateCachedWorld};

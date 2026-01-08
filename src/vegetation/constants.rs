@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Vegetation system constants and parameters
 ///
 /// This module consolidates all vegetation-related parameters for the plant system,

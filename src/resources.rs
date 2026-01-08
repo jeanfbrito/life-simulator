@@ -1,7 +1,7 @@
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::collections::HashMap;
-use crate::tilemap::biome::BiomeType;
+use crate::tilemap::biome::{BiomeGenerator, BiomeType};
 
 /// Resource categories for behavior differentiation
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -398,8 +398,21 @@ impl ResourceGenerator {
         chunk_y: i32,
         world_seed: u64,
     ) -> Vec<Vec<String>> {
-        // Generate biome for this chunk
-        let biome = BiomeType::from_climate(0.5, 0.5, 0.5); // Default biome for backward compatibility
+        // Use BiomeGenerator to determine the actual biome for this chunk
+        let biome_generator = BiomeGenerator::new(world_seed);
+
+        // Calculate chunk center in world coordinates (16x16 chunk size)
+        let chunk_center_x = chunk_x * 16 + 8;
+        let chunk_center_y = chunk_y * 16 + 8;
+
+        // Get climate data from BiomeGenerator
+        let moisture = biome_generator.get_moisture(chunk_center_x, chunk_center_y);
+        let temperature = biome_generator.get_temperature(chunk_center_x, chunk_center_y);
+        let elevation = biome_generator.get_elevation(chunk_center_x, chunk_center_y);
+
+        // Determine biome from climate factors
+        let biome = BiomeType::from_climate(temperature, moisture, elevation);
+
         self.generate_resource_layer_with_biome(terrain_layer, chunk_x, chunk_y, world_seed, biome)
     }
 
@@ -607,7 +620,24 @@ impl ResourceGenerator {
     ) -> Vec<Vec<String>> {
         let config = ResourceConfig::default();
         let generator = ResourceGenerator::new(config);
-        generator.generate_resource_layer(terrain_layer, chunk_x, chunk_y, world_seed)
+
+        // Use BiomeGenerator to determine the actual biome for this chunk
+        let biome_generator = BiomeGenerator::new(world_seed);
+
+        // Calculate chunk center in world coordinates (16x16 chunk size)
+        let chunk_center_x = chunk_x * 16 + 8;
+        let chunk_center_y = chunk_y * 16 + 8;
+
+        // Get climate data from BiomeGenerator
+        let moisture = biome_generator.get_moisture(chunk_center_x, chunk_center_y);
+        let temperature = biome_generator.get_temperature(chunk_center_x, chunk_center_y);
+        let elevation = biome_generator.get_elevation(chunk_center_x, chunk_center_y);
+
+        // Determine biome from climate factors
+        let biome = BiomeType::from_climate(temperature, moisture, elevation);
+
+        // Generate resources with biome-aware placement
+        generator.generate_resource_layer_with_biome(terrain_layer, chunk_x, chunk_y, world_seed, biome)
     }
 }
 

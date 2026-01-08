@@ -60,51 +60,6 @@ export class ChunkManager {
         return allLoadedData;
     }
 
-    /**
-     * Request all chunks in a rectangular area (more efficient for screen-aligned views)
-     * @param {number} startX - Start chunk X coordinate
-     * @param {number} startY - Start chunk Y coordinate
-     * @param {number} endX - End chunk X coordinate (inclusive)
-     * @param {number} endY - End chunk Y coordinate (inclusive)
-     */
-    async requestChunksInRect(startX, startY, endX, endY) {
-        const neededChunks = new Set();
-        const allLoadedData = { chunks: {}, resources: {} };
-
-        // Calculate which chunks we need in the rectangular area
-        for (let chunkX = startX; chunkX <= endX; chunkX++) {
-            for (let chunkY = startY; chunkY <= endY; chunkY++) {
-                const chunkKey = CoordinateConverter.chunkKey(chunkX, chunkY);
-
-                if (!this.loadedChunks.has(chunkKey) && !this.loadingChunks.has(chunkKey)) {
-                    neededChunks.add(chunkKey);
-                }
-            }
-        }
-
-        if (neededChunks.size === 0) {
-            return allLoadedData; // No new chunks to load
-        }
-
-        // Mark chunks as being loaded
-        neededChunks.forEach(chunkKey => this.loadingChunks.add(chunkKey));
-
-        // Split requests into smaller batches to avoid URL length issues
-        const chunkArray = Array.from(neededChunks);
-
-        for (let i = 0; i < chunkArray.length; i += CONFIG.CHUNKS_PER_REQUEST) {
-            const batch = chunkArray.slice(i, i + CONFIG.CHUNKS_PER_REQUEST);
-            const batchData = await this.loadChunkBatch(batch);
-            if (batchData) {
-                // Merge batch data with accumulated data
-                Object.assign(allLoadedData.chunks, batchData.chunks);
-                Object.assign(allLoadedData.resources, batchData.resources);
-            }
-        }
-
-        return allLoadedData;
-    }
-
     async loadChunkBatch(batch) {
         const coordsQuery = batch.map(c => `coords=${c}`).join('&');
 
@@ -201,20 +156,9 @@ export class ChunkManager {
 
     // Function to load chunks around the visible area
     async loadVisibleChunks(dragOffset, worldData) {
-        // Calculate camera offset (matches renderer's coordinate system)
-        const cameraOffsetX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE);
-        const cameraOffsetY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE);
-
-        // Calculate the actual visible area in world coordinates
-        // This matches the renderer's formula: worldX = screenX + cameraOffsetX - floor(VIEW_SIZE_X/2)
-        const viewStartWorldX = cameraOffsetX - Math.floor(CONFIG.VIEW_SIZE_X / 2);
-        const viewStartWorldY = cameraOffsetY - Math.floor(CONFIG.VIEW_SIZE_Y / 2);
-        const viewEndWorldX = cameraOffsetX + Math.ceil(CONFIG.VIEW_SIZE_X / 2);
-        const viewEndWorldY = cameraOffsetY + Math.ceil(CONFIG.VIEW_SIZE_Y / 2);
-
         // Calculate the center of the current view in world coordinates
-        const viewCenterWorldX = Math.floor((viewStartWorldX + viewEndWorldX) / 2);
-        const viewCenterWorldY = Math.floor((viewStartWorldY + viewEndWorldY) / 2);
+        const viewCenterWorldX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_X / 2);
+        const viewCenterWorldY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE) + Math.floor(CONFIG.VIEW_SIZE_Y / 2);
 
         // Convert to chunk coordinates
         const centerChunk = CoordinateConverter.worldToChunk(viewCenterWorldX, viewCenterWorldY);
@@ -231,7 +175,13 @@ export class ChunkManager {
 
         this.lastLoadedCenter = { x: centerChunkX, y: centerChunkY };
 
-        // Convert visible bounds to chunk coordinates and add buffer
+        // Calculate the actual visible area in world coordinates
+        const viewStartWorldX = Math.floor(-dragOffset.x / CONFIG.TILE_SIZE);
+        const viewStartWorldY = Math.floor(-dragOffset.y / CONFIG.TILE_SIZE);
+        const viewEndWorldX = viewStartWorldX + CONFIG.VIEW_SIZE_X;
+        const viewEndWorldY = viewStartWorldY + CONFIG.VIEW_SIZE_Y;
+
+        // Convert to chunk coordinates and add buffer
         const startChunk = CoordinateConverter.worldToChunk(viewStartWorldX, viewStartWorldY);
         const endChunk = CoordinateConverter.worldToChunk(viewEndWorldX, viewEndWorldY);
         const startChunkX = startChunk.chunkX - 1; // Add 1 chunk buffer
@@ -239,10 +189,13 @@ export class ChunkManager {
         const endChunkX = endChunk.chunkX + 1; // Add 1 chunk buffer
         const endChunkY = endChunk.chunkY + 1;
 
-        // Load all chunks in the rectangular visible area (not just circular radius)
-        const newData = await this.requestChunksInRect(startChunkX, startChunkY, endChunkX, endChunkY);
+        // Calculate radius from the bounds
+        const radiusX = Math.abs(centerChunkX - startChunkX);
+        const radiusY = Math.abs(centerChunkY - startChunkY);
+        const visibleRadius = Math.max(radiusX, radiusY, 3); // Minimum radius of 3
 
-        console.log(`📦 Loading chunks in rect (${startChunkX},${startChunkY}) to (${endChunkX},${endChunkY})`);
+        console.log(`📦 Loading chunks around (${centerChunkX}, ${centerChunkY}) with radius ${visibleRadius}`);
+        const newData = await this.requestChunksInArea(centerChunkX, centerChunkY, visibleRadius);
         
         // Merge newly loaded chunks into worldData if provided
         if (newData && worldData) {

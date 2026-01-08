@@ -5,9 +5,8 @@
 //! pack hunts more attractive than solo hunting.
 
 use bevy::prelude::*;
-use crate::ai::{UtilityScore, is_in_pack};
-use crate::ai::actions::ActionType;
-use crate::entities::TilePosition;
+use crate::ai::UtilityScore;
+use crate::ai::action::ActionType;
 
 /// Bonus utility for pack hunting (makes pack hunts more attractive than solo)
 const PACK_HUNT_UTILITY_BONUS: f32 = 0.15;
@@ -32,7 +31,7 @@ fn distance(a: IVec2, b: IVec2) -> f32 {
 /// * `leader` - The pack leader entity
 /// * `members` - List of all pack member entities
 pub fn apply_pack_hunting_bonus(
-    entity: Entity,
+    _entity: Entity,
     actions: &mut Vec<UtilityScore>,
     _leader: Entity,
     members: Vec<Entity>,

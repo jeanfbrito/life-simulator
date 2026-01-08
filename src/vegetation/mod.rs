@@ -1442,65 +1442,60 @@ fn setup_vegetation_system(
 ) {
     info!("🌱 Phase 6: Initializing vegetation system with ResourceGrid...");
 
-    // Get world bounds from the world loader
-    let world_info = world_loader.get_world_info();
-    let world_size_chunks = world_info.config.world_size_chunks;
-
-    // Calculate world bounds in tile coordinates (assuming centered at 0,0)
+    // Get actual loaded chunks from the world loader (not theoretical world size)
+    let loaded_chunks = world_loader.get_chunk_coordinates();
     let chunk_size = CHUNK_SIZE; // Size of chunk in tiles
-    let world_radius_tiles = (world_size_chunks as i32 / 2) * chunk_size as i32;
 
     info!(
-        "🗺️  Phase 6: World bounds: center=(0,0) radius={} tiles",
-        world_radius_tiles
+        "🗺️  Phase 6: Initializing {} actual loaded chunks (chunk_size={})",
+        loaded_chunks.len(),
+        chunk_size
     );
 
     // Phase 6: Initialize chunks with vegetation in ResourceGrid
-    let chunk_radius = world_size_chunks / 2;
+    // Only iterate over chunks that actually exist in the loaded world
     let mut initialized_cells = 0;
 
-    for chunk_x in -chunk_radius..=chunk_radius {
-        for chunk_y in -chunk_radius..=chunk_radius {
-            let mut chunk_has_vegetation = false;
+    for (chunk_x, chunk_y) in loaded_chunks {
+        let mut chunk_has_vegetation = false;
 
-            for local_x in 0..chunk_size {
-                for local_y in 0..chunk_size {
-                    let world_x = chunk_x * chunk_size as i32 + local_x as i32;
-                    let world_y = chunk_y * chunk_size as i32 + local_y as i32;
+        for local_x in 0..chunk_size {
+            for local_y in 0..chunk_size {
+                let world_x = chunk_x * chunk_size as i32 + local_x as i32;
+                let world_y = chunk_y * chunk_size as i32 + local_y as i32;
 
-                    if let Some(terrain_str) = world_loader.get_terrain_at(world_x, world_y) {
-                        let terrain_multiplier =
-                            constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
-                        if terrain_multiplier > 0.0 {
-                            chunk_has_vegetation = true;
-                            // Phase 6: SPARSE initialization with test vegetation near spawn points
-                            // Create initial vegetation in spawn area for testing
-                            let tile = IVec2::new(world_x, world_y);
+                if let Some(terrain_str) = world_loader.get_terrain_at(world_x, world_y) {
+                    let terrain_multiplier =
+                        constants::terrain_modifiers::max_biomass_multiplier(&terrain_str);
+                    if terrain_multiplier > 0.0 {
+                        chunk_has_vegetation = true;
+                        // Phase 6: SPARSE initialization with test vegetation near spawn points
+                        // Create initial vegetation in spawn area for testing
+                        let tile = IVec2::new(world_x, world_y);
 
-                            // Create vegetation in a small area around origin for testing
-                            let distance_from_origin = tile.as_vec2().length();
-                            if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
-                                let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
-                                if let Ok(cell) = resource_grid
-                                    .get_or_create_cell(
-                                        tile,
-                                        100.0 * terrain_multiplier,
-                                        terrain_multiplier,
-                                    ) {
-                                    cell.total_biomass = initial_biomass;
-                                }
-                                initialized_cells += 1;
+                        // Create vegetation in a small area around origin for testing
+                        let distance_from_origin = tile.as_vec2().length();
+                        if distance_from_origin <= 20.0 && terrain_multiplier > 0.5 {
+                            let initial_biomass = 50.0 + rand::random::<f32>() * 30.0;
+                            if let Ok(cell) = resource_grid
+                                .get_or_create_cell(
+                                    tile,
+                                    100.0 * terrain_multiplier,
+                                    terrain_multiplier,
+                                ) {
+                                cell.total_biomass = initial_biomass;
                             }
+                            initialized_cells += 1;
                         }
                     }
                 }
             }
+        }
 
-            if chunk_has_vegetation {
-                let chunk_coord = crate::tilemap::ChunkCoordinate::new(chunk_x, chunk_y);
-                // Phase 6: Initialize ChunkLODManager instead of legacy chunk states
-                let _chunk_metadata = lod_manager.get_or_create_chunk(chunk_coord);
-            }
+        if chunk_has_vegetation {
+            let chunk_coord = crate::tilemap::ChunkCoordinate::new(chunk_x, chunk_y);
+            // Phase 6: Initialize ChunkLODManager instead of legacy chunk states
+            let _chunk_metadata = lod_manager.get_or_create_chunk(chunk_coord);
         }
     }
 
@@ -1953,7 +1948,7 @@ fn generate_resource_grid_heatmap(
     let mut heatmap = vec![vec![0.0; grid_h]; grid_w];
     let mut max_biomass: f32 = 0.0;
     let mut total_chunks_processed = 0;
-    let mut active_cells_count = 0;
+    let mut _active_cells_count = 0;
 
     // Process each chunk coordinate
     for chunk_x in 0..grid_w {
@@ -2005,7 +2000,7 @@ fn generate_resource_grid_heatmap(
                     crate::vegetation::chunk_lod::ChunkTemperature::Cold => {
                         // Cold chunks: use impostor data
                         if let Some(impostor) = &chunk_metadata.impostor_data {
-                            active_cells_count += 1;
+                            _active_cells_count += 1;
                             impostor.density * MAX_BIOMASS
                         } else {
                             0.0

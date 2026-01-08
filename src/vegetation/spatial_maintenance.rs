@@ -94,7 +94,7 @@ pub fn maintain_vegetation_spatial_grid(
         return;
     }
 
-    let mut cells_added = 0;
+    let cells_added = 0;
     let mut cells_removed = 0;
 
     // Get metrics from resource grid
@@ -162,15 +162,15 @@ pub fn maintain_vegetation_spatial_grid(
 /// It completely reconstructs the spatial grid from the current ResourceGrid state.
 pub fn rebuild_vegetation_spatial_grid(
     mut spatial_grid: ResMut<VegetationSpatialGrid>,
-    resource_grid: Res<ResourceGrid>,
+    _resource_grid: Res<ResourceGrid>,
     mut sync_state: ResMut<VegetationGridSync>,
-    config: Res<VegetationGridConfig>,
+    _config: Res<VegetationGridConfig>,
 ) {
     // Clear existing spatial grid
     spatial_grid.clear();
     sync_state.tracked_cells.clear();
 
-    let mut cells_added = 0;
+    let cells_added = 0;
 
     // Iterate through all cells in ResourceGrid
     // This is a placeholder - actual implementation depends on ResourceGrid API

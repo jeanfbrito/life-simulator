@@ -1,3 +1,4 @@
+#![allow(static_mut_refs)]
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use std::time::Duration;

@@ -96,7 +96,7 @@ impl MemoryAnalysis {
     pub fn analyze_current(
         tile_count: usize,
         active_tiles: usize,
-        performance_metrics: &crate::vegetation::PerformanceMetrics,
+        _performance_metrics: &crate::vegetation::PerformanceMetrics,
     ) -> Self {
         // Current implementation uses:
         // - f32 for biomass (4 bytes)

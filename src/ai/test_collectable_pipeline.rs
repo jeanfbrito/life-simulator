@@ -7,8 +7,7 @@
 /// 4. Verifying regrowth delays
 
 use crate::ai::collectables::*;
-use crate::ai::actions::{HarvestAction, ActionResult, Action};
-use crate::resources::ResourceType;
+use crate::ai::action::{HarvestAction, ActionResult, Action};
 use crate::simulation::SimulationTick;
 use crate::vegetation::resource_grid::ResourceGrid;
 use crate::world_loader::WorldLoader;

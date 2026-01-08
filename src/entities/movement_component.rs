@@ -30,7 +30,6 @@
 use bevy::prelude::*;
 use crate::pathfinding::PathRequestId;
 use std::sync::Arc;
-use super::TilePosition;  // For #[require] attribute
 
 /// Movement state component - tracks entity movement independently from actions
 /// Uses Arc<Vec<IVec2>> for path to enable cheap cloning (Phase 3: Clone Reduction)

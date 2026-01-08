@@ -11,8 +11,6 @@ export class EntityStatsManager {
         // Stable ordering across updates
         this.entityOrder = new Map(); // id -> index
         this.nextOrderIndex = 0;
-        // Track if click handler is already attached
-        this.clickHandlerAttached = false;
     }
 
     // Sanitize HTML to prevent XSS attacks
@@ -73,52 +71,17 @@ export class EntityStatsManager {
         });
 
         container.innerHTML = sorted.map(entity => this.renderEntityCard(entity)).join('');
-
-        // Setup click handlers using event delegation (only once)
-        if (!this.clickHandlerAttached) {
-            container.addEventListener('click', (e) => this.handleEntityClick(e));
-            this.clickHandlerAttached = true;
-        }
-    }
-
-    /**
-     * Handle click events on entity names using event delegation
-     * @param {MouseEvent} e - Click event
-     */
-    handleEntityClick(e) {
-        const nameElement = e.target.closest('.entity-name-clickable');
-        if (!nameElement) return;
-
-        const posX = parseInt(nameElement.dataset.posX, 10);
-        const posY = parseInt(nameElement.dataset.posY, 10);
-
-        if (isNaN(posX) || isNaN(posY)) {
-            console.warn('Invalid entity position data');
-            return;
-        }
-
-        // Access the global app instance to center the view
-        if (window.lifeSimulatorApp && window.lifeSimulatorApp.controls) {
-            window.lifeSimulatorApp.controls.centerOnEntity(posX, posY);
-        } else {
-            console.warn('LifeSimulatorApp not available');
-        }
     }
 
     renderEntityCard(entity) {
         const emoji = this.getEntityEmoji(entity.entity_type);
         const actionLabel = entity.current_action ? this.renderCurrentAction(entity.current_action) : '';
         const safeName = this.sanitizeHTML(entity.name); // Sanitize entity name to prevent XSS
-        const posX = entity.position?.x ?? 0;
-        const posY = entity.position?.y ?? 0;
 
         return `
-            <div class="entity-card" data-entity-id="${entity.id}">
+            <div class="entity-card">
                 <div class="entity-header">
-                    <div class="entity-name entity-name-clickable"
-                         data-pos-x="${posX}"
-                         data-pos-y="${posY}"
-                         title="Click to center view on this entity">${safeName} ${this.renderSex(entity)}</div>
+                    <div class="entity-name">${safeName} ${this.renderSex(entity)}</div>
                     <div class="entity-type">${emoji}</div>
                 </div>
                 ${actionLabel}

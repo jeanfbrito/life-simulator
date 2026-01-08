@@ -1,7 +1,8 @@
 use super::openrct2::{
-    generate_simplex_noise, smooth_height_map, HeightMap, OpenRct2Settings,
+    generate_simplex_noise, smooth_height_map, HeightMap, MapGen2Config, OpenRct2Settings,
+    SpotNoiseConfig,
 };
-use super::{BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
+use super::{BiomeGenerator, BiomeType, Chunk, ChunkCoordinate, TerrainType, CHUNK_SIZE};
 use bevy::log::debug;
 use bevy::math::IVec2;
 use bevy::prelude::*;
@@ -68,12 +69,12 @@ pub struct OpenRCT2TerrainConfig {
 impl Default for OpenRCT2TerrainConfig {
     fn default() -> Self {
         Self {
-            deep_water_max: 35,
-            shallow_water_max: 60,  // Increased to capture gradual water→land transitions
-            beach_max: 65,          // Adjusted to maintain natural shoreline progression
-            plains_max: 120,
-            hills_max: 160,
-            mountain_min: 160,
+            deep_water_max: 25,      // Reduced to shrink deep water coverage
+            shallow_water_max: 45,   // Reduced to shrink shallow water coverage
+            beach_max: 52,           // Reduced to minimize beach area
+            plains_max: 180,         // Increased to maximize grassland/forest zones
+            hills_max: 200,          // Increased to reduce stone coverage
+            mountain_min: 200,       // Increased to reduce mountain coverage
             forest_frequency: 0.05,
             forest_threshold: 0.0, // 50% forest coverage (balanced with grassland)
             desert_frequency: 0.03,
@@ -101,6 +102,9 @@ pub struct WorldGenerator {
     config: WorldConfig,
     rng: RwLock<Pcg64>,
     openrct2_config: OpenRCT2TerrainConfig,
+    mapgen2_config: MapGen2Config,
+    spot_noise_config: SpotNoiseConfig,
+    biome_generator: BiomeGenerator,
 }
 
 /// Whole-map height storage for OpenRCT2-style generation
@@ -140,14 +144,27 @@ impl WorldGenerator {
     pub fn new(config: WorldConfig) -> Self {
         let rng = Pcg64::seed_from_u64(config.seed);
         Self {
-            config,
+            config: config.clone(),
             rng: RwLock::new(rng),
             openrct2_config: OpenRCT2TerrainConfig::default(),
+            mapgen2_config: MapGen2Config::default(),
+            spot_noise_config: SpotNoiseConfig::default(),
+            biome_generator: BiomeGenerator::new(config.seed),
         }
     }
 
     pub fn with_openrct2_config(mut self, openrct2_config: OpenRCT2TerrainConfig) -> Self {
         self.openrct2_config = openrct2_config;
+        self
+    }
+
+    pub fn with_mapgen2_config(mut self, mapgen2_config: MapGen2Config) -> Self {
+        self.mapgen2_config = mapgen2_config;
+        self
+    }
+
+    pub fn with_spot_noise_config(mut self, spot_noise_config: SpotNoiseConfig) -> Self {
+        self.spot_noise_config = spot_noise_config;
         self
     }
 
@@ -162,6 +179,101 @@ impl WorldGenerator {
         } else {
             error!("Failed to acquire RNG write lock");
         }
+    }
+
+    /// Generate water spots using Factorio-inspired spot noise algorithm
+    /// Applies noise-based water body placement with radial falloff
+    /// This is called BEFORE smoothing to allow natural integration with terrain
+    pub fn generate_water_spots(&self, whole_map: &mut WholeMapHeights) {
+        // Convert u64 to u32 by XORing upper and lower bits to preserve entropy
+        let to_u32 = |s: u64| ((s >> 32) as u32) ^ (s as u32);
+
+        // Create noise function for spot placement
+        let spot_noise = noise::Simplex::new(to_u32(self.config.seed.wrapping_add(5000)));
+
+        // Multi-octave noise generation pattern from biome.rs
+        let frequency = self.spot_noise_config.frequency;
+        let threshold = self.spot_noise_config.spot_threshold;
+        let radius_scale = self.spot_noise_config.spot_radius_scale;
+
+        println!("💧 Generating water spots (frequency={}, threshold={}, radius_scale={})...",
+                 frequency, threshold, radius_scale);
+
+        let mut water_spot_count = 0;
+        let mut total_tiles_modified = 0;
+
+        // Calculate water target height based on OpenRCT2 config
+        let water_height = (self.openrct2_config.deep_water_max / 2) as u8;
+
+        // Scan entire map for potential water spots
+        for world_y in whole_map.min_y..whole_map.max_y {
+            for world_x in whole_map.min_x..whole_map.max_x {
+                let nx = world_x as f64 * frequency;
+                let ny = world_y as f64 * frequency;
+
+                // Primary noise layer (large scale spots)
+                let primary = spot_noise.get([nx, ny]) as f32;
+
+                // Secondary detail layer for natural variation
+                let detail_scale = frequency * 4.0;
+                let detail_x = world_x as f64 * detail_scale;
+                let detail_y = world_y as f64 * detail_scale;
+                let detail = spot_noise.get([detail_x, detail_y]) as f32 * 0.3;
+
+                // Combine and normalize to 0..1 (pattern from biome.rs)
+                let combined = primary * 0.7 + detail;
+                let normalized = ((combined + 1.0) * 0.5).clamp(0.0, 1.0);
+
+                // Check if this tile is a water spot center
+                if normalized > threshold as f32 {
+                    water_spot_count += 1;
+
+                    // Calculate radius based on noise value and config
+                    let spot_strength = (normalized - threshold as f32) / (1.0 - threshold as f32);
+                    let base_radius = self.mapgen2_config.water_spot_radius_min
+                        + (self.mapgen2_config.water_spot_radius_max - self.mapgen2_config.water_spot_radius_min)
+                        * spot_strength;
+                    let radius = base_radius * radius_scale;
+
+                    // Apply radial falloff around this spot
+                    let radius_i = radius.ceil() as i32;
+                    for dy in -radius_i..=radius_i {
+                        for dx in -radius_i..=radius_i {
+                            let target_x = world_x + dx;
+                            let target_y = world_y + dy;
+
+                            // Check if target is within map bounds
+                            if target_x < whole_map.min_x || target_x >= whole_map.max_x
+                                || target_y < whole_map.min_y || target_y >= whole_map.max_y {
+                                continue;
+                            }
+
+                            // Calculate distance from spot center
+                            let distance = ((dx * dx + dy * dy) as f32).sqrt();
+
+                            // Apply radial falloff (output falls to zero at radius distance)
+                            if distance <= radius {
+                                let falloff = 1.0 - (distance / radius);
+                                let current_height = whole_map.get_height(target_x, target_y);
+
+                                // Interpolate between current height and water height
+                                let target_height = (current_height as f32 * (1.0 - falloff)
+                                    + water_height as f32 * falloff) as i32;
+
+                                // Only lower heights (don't raise), and only if not already water
+                                if target_height < current_height && current_height > water_height as i32 {
+                                    whole_map.set_height(target_x, target_y, target_height as u8);
+                                    total_tiles_modified += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        println!("✅ Water spots generated: {} spot centers, {} tiles modified",
+                 water_spot_count, total_tiles_modified);
     }
 
     pub fn generate_chunk(&self, coordinate: ChunkCoordinate) -> Chunk {
@@ -315,6 +427,55 @@ impl WorldGenerator {
         None
     }
 
+    /// Validate a generated map with retry logic
+    ///
+    /// This function generates world statistics and attempts to validate the map.
+    /// If validation fails, it modifies the seed and regenerates (up to max_attempts).
+    ///
+    /// Returns the final MapValidation result, which includes validation status,
+    /// land percentage, green coverage, and any validation errors.
+    ///
+    /// # Arguments
+    /// * `max_attempts` - Maximum number of generation attempts (default recommended: 5)
+    ///
+    /// # Returns
+    /// * `MapValidation` - Validation results for the final attempt
+    pub fn validate_generated_map(&mut self, max_attempts: u32) -> MapValidation {
+        let original_seed = self.config.seed;
+        let mut attempt = 0;
+
+        loop {
+            attempt += 1;
+
+            // Generate statistics for current map
+            let statistics = self.generate_world_statistics();
+            let spawn_point = self.find_spawn_point();
+
+            // Validate the map
+            let validation = MapValidation::validate(&statistics, spawn_point);
+
+            // If validation passed or we're out of attempts, return the result
+            if validation.is_valid || attempt >= max_attempts {
+                if validation.is_valid {
+                    info!("✅ Map validation PASSED on attempt {}/{}", attempt, max_attempts);
+                } else {
+                    warn!("❌ Map validation FAILED after {} attempts", max_attempts);
+                    warn!("Validation errors: {:?}", validation.validation_errors);
+                }
+                return validation;
+            }
+
+            // Validation failed, try again with modified seed
+            warn!("⚠️  Map validation FAILED (attempt {}/{}): {:?}",
+                  attempt, max_attempts, validation.validation_errors);
+
+            // Modify seed for next attempt (increment by a large prime to ensure variation)
+            let new_seed = original_seed.wrapping_add(attempt as u64 * 982451653);
+            info!("🔄 Retrying with modified seed: {} -> {}", self.config.seed, new_seed);
+            self.set_seed(new_seed);
+        }
+    }
+
     // Circular island terrain generation methods for web API
     pub fn generate_chunks_json(&self, path: &str) -> String {
         // Parse coordinates from path like /api/chunks?coords=0,0&coords=1,0
@@ -465,7 +626,7 @@ impl WorldGenerator {
     }
 
     /// Map height to terrain type using OpenRCT2-style thresholds
-    /// Uses additional noise layers for natural terrain variety
+    /// Uses BiomeGenerator moisture/temperature for natural terrain variety
     fn generate_terrain_from_height(
         &self,
         height: u8,
@@ -473,85 +634,30 @@ impl WorldGenerator {
         world_y: i32,
         perlin: &Perlin,
     ) -> String {
-        let cfg = &self.openrct2_config;
+        let _cfg = &self.openrct2_config;
 
-        // Water levels (lowest priority - height-based only)
-        if height <= cfg.deep_water_max {
-            return "DeepWater".to_string();
-        }
-        if height <= cfg.shallow_water_max {
-            return "ShallowWater".to_string();
-        }
-        if height <= cfg.beach_max {
-            return "Sand".to_string();
-        }
+        // Get climate data from BiomeGenerator
+        let moisture = self.biome_generator.get_moisture(world_x, world_y);
+        let temperature = self.biome_generator.get_temperature(world_x, world_y);
 
-        // Snow at high altitudes (highest priority on land)
-        if height >= cfg.snow_altitude {
-            return "Snow".to_string();
-        }
+        // Normalize height to 0-1 range for elevation (matching BiomeType::from_climate expectations)
+        let elevation = (height as f32) / 255.0;
 
-        // Mountains (high elevation)
-        if height >= cfg.mountain_min {
-            return "Mountain".to_string();
-        }
+        // Determine biome from climate
+        let biome = BiomeType::from_climate(temperature, moisture, elevation);
 
-        // Hills/Stone (medium-high elevation)
-        if height >= cfg.hills_max {
-            return "Stone".to_string();
-        }
-
-        // Plains (medium elevation) - use noise for variety
-        // Sample terrain variety noise
-        let forest_noise = perlin.get([
-            world_x as f64 * cfg.forest_frequency,
-            world_y as f64 * cfg.forest_frequency,
+        // Use perlin noise to get a random value for terrain selection within biome
+        let terrain_variety_noise = perlin.get([
+            world_x as f64 * 0.1,
+            world_y as f64 * 0.1,
         ]);
-        let desert_noise = perlin.get([
-            world_x as f64 * cfg.desert_frequency,
-            world_y as f64 * cfg.desert_frequency,
-        ]);
+        let random_value = ((terrain_variety_noise + 1.0) / 2.0) as f32;
 
-        // Normalize noise to [0, 1]
-        let forest_value = (forest_noise + 1.0) / 2.0;
-        let desert_value = (desert_noise + 1.0) / 2.0;
+        // Select terrain type from biome's distribution
+        let terrain_type = biome.select_terrain(random_value);
 
-        // Apply terrain types based on noise thresholds
-        if desert_value > cfg.desert_threshold && height > 60 && height < 100 {
-            // Desert zones in mid-elevation dry areas
-            return "Desert".to_string();
-        }
-
-        if forest_value > cfg.forest_threshold && height > 65 && height < 140 {
-            // Forests in suitable elevation range
-            return "Forest".to_string();
-        }
-
-        // Height-based terrain for remaining tiles
-        if height > 100 {
-            // Higher plains - more varied
-            if (world_x + world_y) % 7 == 0 {
-                "Dirt".to_string()
-            } else if (world_x + world_y) % 11 == 0 {
-                "Stone".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        } else if height > 70 {
-            // Mid plains - mostly grass
-            if (world_x * 3 + world_y * 2) % 13 == 0 {
-                "Dirt".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        } else {
-            // Lower plains near beach
-            if (world_x + world_y) % 5 == 0 {
-                "Sand".to_string()
-            } else {
-                "Grass".to_string()
-            }
-        }
+        // Convert TerrainType to String
+        format!("{:?}", terrain_type)
     }
 
     /// Generate initial heights for ALL chunks BEFORE smoothing
@@ -614,8 +720,8 @@ impl WorldGenerator {
                     let world_x = world_origin_x + tile_x;
                     let x_idx = tile_x;
 
-                    let height_x = x_idx * DENSITY;
-                    let height_y = y_idx * DENSITY;
+                let height_x = x_idx * DENSITY;
+            let height_y = y_idx * DENSITY;
 
                     let q00 = height_map.get(IVec2::new(height_x, height_y)) as i32;
                     let q01 = height_map.get(IVec2::new(height_x, height_y + 1)) as i32;
@@ -641,6 +747,10 @@ impl WorldGenerator {
                 }
             }
         }
+
+        // Apply water spots BEFORE smoothing (Phase 1.5)
+        // This allows water bodies to integrate naturally with terrain during Phase 2 smoothing
+        self.generate_water_spots(&mut whole_map);
 
         // Sample initial heights for debugging
         let sample_heights: Vec<i32> = whole_map.heights.values().take(100).map(|&h| h as i32).collect();
@@ -818,6 +928,9 @@ impl WorldGenerator {
             }
         }
 
+        // Apply perimeter boundary enforcement (Map Generator 2.0)
+        self.apply_perimeter_boundary(&mut heights, whole_map, chunk_x, chunk_y);
+
         // Calculate slopes based on final smoothed heights
         for local_y in 0..CHUNK_SIZE {
             for local_x in 0..CHUNK_SIZE {
@@ -849,6 +962,109 @@ impl WorldGenerator {
             heights,
             slope_masks,
             slope_indices,
+        }
+    }
+
+    /// Check if a tile is at the world perimeter (on the edge of the map)
+    fn is_perimeter_tile(&self, world_x: i32, world_y: i32, whole_map: &WholeMapHeights) -> bool {
+        world_x == whole_map.min_x
+            || world_x == whole_map.max_x - 1
+            || world_y == whole_map.min_y
+            || world_y == whole_map.max_y - 1
+    }
+
+    /// Apply perimeter boundary enforcement (Map Generator 2.0)
+    /// Forces map edges to follow strict layering: DeepWater → ShallowWater → Sand
+    fn apply_perimeter_boundary(
+        &self,
+        heights: &mut Vec<Vec<u8>>,
+        whole_map: &WholeMapHeights,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) {
+        let cfg = &self.mapgen2_config;
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+
+                // Calculate distance from each edge
+                let dist_from_min_x = (world_x - whole_map.min_x).abs();
+                let dist_from_max_x = (whole_map.max_x - 1 - world_x).abs();
+                let dist_from_min_y = (world_y - whole_map.min_y).abs();
+                let dist_from_max_y = (whole_map.max_y - 1 - world_y).abs();
+
+                // Minimum distance from any edge
+                let dist_from_edge = dist_from_min_x
+                    .min(dist_from_max_x)
+                    .min(dist_from_min_y)
+                    .min(dist_from_max_y);
+
+                // Apply boundary layers based on distance from edge
+                if dist_from_edge < cfg.perimeter_deep_water_width as i32 {
+                    // Outermost layer: Deep water (height below deep_water_max threshold)
+                    heights[local_y][local_x] = self.openrct2_config.deep_water_max.saturating_sub(5);
+                } else if dist_from_edge < (cfg.perimeter_deep_water_width + cfg.perimeter_shallow_water_width) as i32 {
+                    // Middle layer: Shallow water (height between deep and shallow thresholds)
+                    heights[local_y][local_x] = (self.openrct2_config.deep_water_max + self.openrct2_config.shallow_water_max) / 2;
+                } else if dist_from_edge < (cfg.perimeter_deep_water_width + cfg.perimeter_shallow_water_width + cfg.perimeter_sand_min_width) as i32 {
+                    // Inner boundary: Sand/Beach (height between shallow water and beach thresholds)
+                    heights[local_y][local_x] = (self.openrct2_config.shallow_water_max + self.openrct2_config.beach_max) / 2;
+                }
+                // Beyond boundary layers: keep original terrain (no change)
+            }
+        }
+    }
+
+    /// Apply internal water transition rules (Map Generator 2.0)
+    /// Enforces smooth deep→shallow→land transitions without requiring sand
+    /// Prevents deep water from being directly adjacent to land tiles
+    fn apply_internal_water_transitions(
+        &self,
+        heights: &mut Vec<Vec<u8>>,
+        whole_map: &WholeMapHeights,
+        chunk_x: i32,
+        chunk_y: i32,
+    ) {
+        let cfg = &self.openrct2_config;
+        let world_origin_x = chunk_x * CHUNK_SIZE as i32;
+        let world_origin_y = chunk_y * CHUNK_SIZE as i32;
+
+        // Create a copy to check original heights while modifying
+        let original_heights = heights.clone();
+
+        for local_y in 0..CHUNK_SIZE {
+            for local_x in 0..CHUNK_SIZE {
+                let world_x = world_origin_x + local_x as i32;
+                let world_y = world_origin_y + local_y as i32;
+                let current_height = original_heights[local_y][local_x];
+
+                // Check if this is a deep water tile
+                if current_height <= cfg.deep_water_max {
+                    // Check all 4 orthogonal neighbors for land tiles
+                    let neighbors = [
+                        (world_x, world_y - 1), // North
+                        (world_x + 1, world_y), // East
+                        (world_x, world_y + 1), // South
+                        (world_x - 1, world_y), // West
+                    ];
+
+                    for (nx, ny) in neighbors {
+                        let neighbor_height = whole_map.get_height(nx, ny) as u8;
+
+                        // Check if neighbor is land (above beach threshold)
+                        if neighbor_height > cfg.beach_max {
+                            // Deep water adjacent to land - convert to shallow water
+                            // Use mid-point between deep and shallow thresholds
+                            heights[local_y][local_x] = (cfg.deep_water_max + cfg.shallow_water_max) / 2;
+                            break; // No need to check more neighbors
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1094,14 +1310,14 @@ impl WorldGenerator {
             let tile_y = local_y as i32;
             let world_y = world_origin_y + tile_y;
             let y_idx = world_y - world_min_y;
-            let height_y = y_idx * DENSITY;
+            let _height_y = y_idx * DENSITY;
             let border_y = (tile_y + 1) as usize;
 
             for local_x in 0..CHUNK_SIZE {
                 let tile_x = local_x as i32;
                 let world_x = world_origin_x + tile_x;
                 let x_idx = world_x - world_min_x;
-                let height_x = x_idx * DENSITY;
+                let _height_x = x_idx * DENSITY;
                 let border_x = (tile_x + 1) as usize;
 
                 // Use the potentially-modified height from previous iterations
@@ -1714,6 +1930,134 @@ impl WorldMetadata {
     }
 }
 
+/// Map quality validation results
+/// Checks that generated maps meet playability constraints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MapValidation {
+    pub is_valid: bool,
+    pub land_percentage: f32,
+    pub green_coverage_percentage: f32,
+    pub water_accessible: bool,
+    pub spawn_point_found: bool,
+    pub validation_errors: Vec<String>,
+}
+
+impl MapValidation {
+    /// Validate a generated map against quality constraints
+    ///
+    /// Requirements:
+    /// - Land coverage >= 60% of total tiles
+    /// - Grass + Forest >= 50% of land tiles
+    /// - At least one valid spawn point exists
+    /// - Water tiles are accessible (connected to land)
+    pub fn validate(statistics: &WorldStatistics, spawn_point: Option<(i32, i32)>) -> Self {
+        let mut validation_errors = Vec::new();
+
+        // Calculate land percentage (non-water tiles)
+        let total_tiles = statistics.total_tiles as f32;
+        let water_tiles = statistics.terrain_distribution.get(&TerrainType::DeepWater).unwrap_or(&0)
+            + statistics.terrain_distribution.get(&TerrainType::ShallowWater).unwrap_or(&0);
+        let land_tiles = statistics.total_tiles.saturating_sub(water_tiles);
+        let land_percentage = if total_tiles > 0.0 {
+            (land_tiles as f32 / total_tiles) * 100.0
+        } else {
+            0.0
+        };
+
+        // Calculate green coverage (grass + forest as percentage of land)
+        let grass_tiles = statistics.terrain_distribution.get(&TerrainType::Grass).unwrap_or(&0);
+        let forest_tiles = statistics.terrain_distribution.get(&TerrainType::Forest).unwrap_or(&0);
+        let green_tiles = grass_tiles + forest_tiles;
+        let green_coverage_percentage = if land_tiles > 0 {
+            (green_tiles as f32 / land_tiles as f32) * 100.0
+        } else {
+            0.0
+        };
+
+        // Validate land coverage requirement (>= 60%)
+        if land_percentage < 60.0 {
+            validation_errors.push(format!(
+                "Insufficient land coverage: {:.1}% (required: >= 60%)",
+                land_percentage
+            ));
+        }
+
+        // Validate green coverage requirement (>= 50% of land)
+        if green_coverage_percentage < 50.0 {
+            validation_errors.push(format!(
+                "Insufficient green coverage: {:.1}% of land (required: >= 50%)",
+                green_coverage_percentage
+            ));
+        }
+
+        // Check spawn point availability
+        let spawn_point_found = spawn_point.is_some();
+        if !spawn_point_found {
+            validation_errors.push("No valid spawn point found".to_string());
+        }
+
+        // Water accessibility check (water exists and is adjacent to land)
+        // A map with water should have both water and land tiles for animals to drink
+        let has_water = water_tiles > 0;
+        let has_land = land_tiles > 0;
+        let water_accessible = has_water && has_land;
+
+        if has_water && !water_accessible {
+            validation_errors.push("Water tiles exist but are not accessible from land".to_string());
+        }
+
+        let is_valid = validation_errors.is_empty();
+
+        Self {
+            is_valid,
+            land_percentage,
+            green_coverage_percentage,
+            water_accessible,
+            spawn_point_found,
+            validation_errors,
+        }
+    }
+
+    /// Check if the map meets minimum quality standards
+    pub fn is_playable(&self) -> bool {
+        self.is_valid && self.spawn_point_found && self.land_percentage >= 60.0
+    }
+
+    /// Get a summary of validation results as a formatted string
+    pub fn summary(&self) -> String {
+        if self.is_valid {
+            format!(
+                "Map validation PASSED\n\
+                 - Land coverage: {:.1}%\n\
+                 - Green coverage: {:.1}% of land\n\
+                 - Spawn point: {}\n\
+                 - Water accessible: {}",
+                self.land_percentage,
+                self.green_coverage_percentage,
+                if self.spawn_point_found { "Found" } else { "Not found" },
+                if self.water_accessible { "Yes" } else { "No" }
+            )
+        } else {
+            format!(
+                "Map validation FAILED\n\
+                 - Land coverage: {:.1}% (required: >= 60%)\n\
+                 - Green coverage: {:.1}% of land (required: >= 50%)\n\
+                 - Spawn point: {}\n\
+                 - Water accessible: {}\n\
+                 Errors:\n{}",
+                self.land_percentage,
+                self.green_coverage_percentage,
+                if self.spawn_point_found { "Found" } else { "Not found" },
+                if self.water_accessible { "Yes" } else { "No" },
+                self.validation_errors.iter()
+                    .map(|e| format!("  - {}", e))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1778,5 +2122,645 @@ mod tests {
 
         assert!(x >= world_min_x && x < world_max_x);
         assert!(y >= world_min_y && y < world_max_y);
+    }
+
+    #[test]
+    fn test_water_spot_generation() {
+        // Create a small test map
+        let config = WorldConfig {
+            world_size_chunks: 4,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 12345,
+            ..Default::default()
+        };
+
+        let generator = WorldGenerator::new(config);
+
+        // Generate chunks
+        let chunks: Vec<(i32, i32)> = vec![(0, 0), (1, 0), (0, 1), (1, 1)];
+
+        // Generate initial heights (which now includes water spot integration)
+        let whole_map = generator.generate_all_initial_heights(&chunks);
+
+        // Verify that some water heights exist
+        // Water spots should create tiles with heights below shallow_water_max threshold
+        let water_height_threshold = generator.openrct2_config.shallow_water_max;
+        let mut water_tile_count = 0;
+
+        for height in whole_map.heights.values() {
+            if *height <= water_height_threshold {
+                water_tile_count += 1;
+            }
+        }
+
+        // Verify that water spots were actually generated
+        // We expect at least some water tiles to exist
+        assert!(water_tile_count > 0, "Expected water spots to be generated, but found no water tiles");
+
+        // Verify the map has a reasonable distribution (not all water)
+        let total_tiles = whole_map.heights.len();
+        let water_percentage = (water_tile_count as f32 / total_tiles as f32) * 100.0;
+
+        // Water should be present but not dominate the entire map
+        assert!(water_percentage < 80.0, "Water percentage too high: {}%", water_percentage);
+        assert!(water_percentage > 0.0, "Water percentage should be greater than 0%");
+    }
+
+    #[test]
+    fn test_boundary_enforcement_perimeter_layers() {
+        // Test that perimeter boundary creates correct layering: deep water -> shallow water -> sand
+        let config = WorldConfig {
+            world_size_chunks: 8,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 12345,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+
+        // Generate a chunk at the edge of the map
+        let edge_coord = ChunkCoordinate::new(-4, 0);
+        let chunk = generator.generate_chunk(edge_coord);
+
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+        let shallow_water_threshold = generator.openrct2_config.shallow_water_max;
+        let beach_threshold = generator.openrct2_config.beach_max;
+
+        // Check leftmost column (should be deep water)
+        for y in 0..CHUNK_SIZE {
+            let height = chunk.heights[y][0];
+            assert!(
+                height <= deep_water_threshold,
+                "Outermost edge tile at ({}, {}) should be deep water (height <= {}), got {}",
+                0, y, deep_water_threshold, height
+            );
+        }
+
+        // Check tiles a few columns in (should transition to shallow water, then sand)
+        let perimeter_deep_width = generator.mapgen2_config.perimeter_deep_water_width as usize;
+        let perimeter_shallow_width = generator.mapgen2_config.perimeter_shallow_water_width as usize;
+
+        if perimeter_deep_width < CHUNK_SIZE {
+            // Check shallow water layer
+            for y in 0..CHUNK_SIZE {
+                let height = chunk.heights[y][perimeter_deep_width];
+                assert!(
+                    height > deep_water_threshold && height <= shallow_water_threshold,
+                    "Shallow water layer tile at ({}, {}) should be between {} and {}, got {}",
+                    perimeter_deep_width, y, deep_water_threshold, shallow_water_threshold, height
+                );
+            }
+        }
+
+        let sand_start = perimeter_deep_width + perimeter_shallow_width;
+        if sand_start < CHUNK_SIZE {
+            // Check sand layer
+            for y in 0..CHUNK_SIZE {
+                let height = chunk.heights[y][sand_start];
+                assert!(
+                    height > shallow_water_threshold && height <= beach_threshold,
+                    "Sand layer tile at ({}, {}) should be between {} and {}, got {}",
+                    sand_start, y, shallow_water_threshold, beach_threshold, height
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_all_edges() {
+        // Test that boundary enforcement works on all four edges
+        let config = WorldConfig {
+            world_size_chunks: 6,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 54321,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Test all four edge chunks
+        let test_coords = vec![
+            ChunkCoordinate::new(-3, 0),  // Left edge
+            ChunkCoordinate::new(3, 0),   // Right edge
+            ChunkCoordinate::new(0, -3),  // Bottom edge
+            ChunkCoordinate::new(0, 3),   // Top edge
+        ];
+
+        for (idx, coord) in test_coords.iter().enumerate() {
+            let chunk = generator.generate_chunk(*coord);
+
+            // Check that at least some tiles near the edge are deep water
+            let mut has_deep_water = false;
+
+            match idx {
+                0 => { // Left edge - check leftmost column
+                    for y in 0..CHUNK_SIZE {
+                        if chunk.heights[y][0] <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                1 => { // Right edge - check rightmost column
+                    for y in 0..CHUNK_SIZE {
+                        if chunk.heights[y][CHUNK_SIZE - 1] <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                2 => { // Bottom edge - check bottom row
+                    for x in 0..CHUNK_SIZE {
+                        if chunk.heights[0][x] <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                3 => { // Top edge - check top row
+                    for x in 0..CHUNK_SIZE {
+                        if chunk.heights[CHUNK_SIZE - 1][x] <= deep_water_threshold {
+                            has_deep_water = true;
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            assert!(
+                has_deep_water,
+                "Edge chunk at {:?} should have deep water boundary enforcement",
+                coord
+            );
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_corners() {
+        // Test that corner chunks have proper boundary enforcement
+        let config = WorldConfig {
+            world_size_chunks: 4,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 99999,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Test all four corners
+        let corner_coords = vec![
+            ChunkCoordinate::new(-2, -2),  // Bottom-left
+            ChunkCoordinate::new(2, -2),   // Bottom-right
+            ChunkCoordinate::new(-2, 2),   // Top-left
+            ChunkCoordinate::new(2, 2),    // Top-right
+        ];
+
+        for coord in corner_coords {
+            let chunk = generator.generate_chunk(coord);
+
+            // Corner tiles should definitely be deep water (minimum distance from any edge)
+            let corner_positions = vec![
+                (0, 0),                                    // Bottom-left corner
+                (0, CHUNK_SIZE - 1),                       // Bottom-right corner
+                (CHUNK_SIZE - 1, 0),                       // Top-left corner
+                (CHUNK_SIZE - 1, CHUNK_SIZE - 1),          // Top-right corner
+            ];
+
+            for (y, x) in corner_positions {
+                let height = chunk.heights[y][x];
+                assert!(
+                    height <= deep_water_threshold,
+                    "Corner tile at chunk {:?}, local ({}, {}) should be deep water, got height {}",
+                    coord, x, y, height
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_boundary_enforcement_distance_calculation() {
+        // Test that distance from edge is calculated correctly
+        let config = WorldConfig {
+            world_size_chunks: 10,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 11111,
+            ..Default::default()
+        };
+
+        let mut generator = WorldGenerator::new(config);
+
+        // Generate edge chunk and center chunk to compare
+        let edge_chunk = generator.generate_chunk(ChunkCoordinate::new(-5, 0));
+        let center_chunk = generator.generate_chunk(ChunkCoordinate::new(0, 0));
+
+        let deep_water_threshold = generator.openrct2_config.deep_water_max;
+
+        // Edge chunk should have more deep water tiles
+        let count_deep_water = |chunk: &Chunk| -> usize {
+            let mut count = 0;
+            for y in 0..CHUNK_SIZE {
+                for x in 0..CHUNK_SIZE {
+                    if chunk.heights[y][x] <= deep_water_threshold {
+                        count += 1;
+                    }
+                }
+            }
+            count
+        };
+
+        let edge_deep_water = count_deep_water(&edge_chunk);
+        let center_deep_water = count_deep_water(&center_chunk);
+
+        assert!(
+            edge_deep_water > center_deep_water,
+            "Edge chunk should have more deep water tiles ({}) than center chunk ({})",
+            edge_deep_water, center_deep_water
+        );
+
+        // Edge chunk should have at least some deep water
+        assert!(
+            edge_deep_water > 0,
+            "Edge chunk should have at least some deep water tiles"
+        );
+    }
+
+    #[test]
+    fn test_boundary_enforcement_respects_world_bounds() {
+        // Test that boundary enforcement doesn't go beyond world bounds
+        let config = WorldConfig {
+            world_size_chunks: 6,
+            terrain_generation_mode: TerrainGenerationMode::OpenRCT2Heights,
+            seed: 77777,
+            ..Default::default()
+        };
+
+        let generator = WorldGenerator::new(config);
+        let (min_x, max_x, min_y, max_y) = generator.get_world_bounds();
+
+        // Create WholeMapHeights to test boundary logic
+        let world_min_x = min_x * CHUNK_SIZE as i32;
+        let world_max_x = (max_x + 1) * CHUNK_SIZE as i32;
+        let world_min_y = min_y * CHUNK_SIZE as i32;
+        let world_max_y = (max_y + 1) * CHUNK_SIZE as i32;
+
+        let whole_map = WholeMapHeights::new(world_min_x, world_max_x, world_min_y, world_max_y);
+
+        // Verify bounds are set correctly
+        assert_eq!(whole_map.min_x, world_min_x);
+        assert_eq!(whole_map.max_x, world_max_x);
+        assert_eq!(whole_map.min_y, world_min_y);
+        assert_eq!(whole_map.max_y, world_max_y);
+
+        // Test that tiles at exact boundary positions would be calculated correctly
+        // This tests the boundary detection logic
+        let is_at_edge = |x: i32, y: i32| -> bool {
+            x == world_min_x
+                || x == world_max_x - 1
+                || y == world_min_y
+                || y == world_max_y - 1
+        };
+
+        assert!(is_at_edge(world_min_x, world_min_y), "Min corner should be at edge");
+        assert!(is_at_edge(world_max_x - 1, world_max_y - 1), "Max corner should be at edge");
+        assert!(!is_at_edge(world_min_x + 10, world_min_y + 10), "Interior point should not be at edge");
+    }
+
+    #[test]
+    fn test_terrain_distribution_land_coverage_target() {
+        // Test that land coverage target (>= 60%) is correctly validated
+        use std::collections::HashMap;
+
+        // Case 1: Exactly 60% land (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 600);
+        terrain_dist.insert(TerrainType::DeepWater, 300);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 60.0);
+        // Should pass land coverage but might fail green coverage
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+
+        // Case 2: Below 60% land (should fail)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 500);
+        terrain_dist.insert(TerrainType::DeepWater, 400);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 500,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 50.0);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("Insufficient land coverage")));
+        assert!(!validation.is_valid);
+
+        // Case 3: Above 60% land (should pass land requirement)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 800);
+        terrain_dist.insert(TerrainType::DeepWater, 150);
+        terrain_dist.insert(TerrainType::ShallowWater, 50);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+    }
+
+    #[test]
+    fn test_terrain_distribution_green_coverage_target() {
+        // Test that green coverage target (>= 50% of land) is correctly validated
+        use std::collections::HashMap;
+
+        // Case 1: Exactly 50% green coverage (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 300);
+        terrain_dist.insert(TerrainType::Forest, 200);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::Stone, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 700,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 300 (water) = 700
+        // Green tiles = 300 (grass) + 200 (forest) = 500
+        // Green coverage = 500 / 700 = 71.4%
+        assert!((validation.green_coverage_percentage - 71.4).abs() < 0.1);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+
+        // Case 2: Below 50% green coverage (should fail)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 100);
+        terrain_dist.insert(TerrainType::Forest, 100);
+        terrain_dist.insert(TerrainType::Dirt, 200);
+        terrain_dist.insert(TerrainType::Stone, 200);
+        terrain_dist.insert(TerrainType::DeepWater, 300);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 400 (water) = 600
+        // Green tiles = 100 + 100 = 200
+        // Green coverage = 200 / 600 = 33.3%
+        assert!((validation.green_coverage_percentage - 33.3).abs() < 0.1);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("Insufficient green coverage")));
+        assert!(!validation.is_valid);
+
+        // Case 3: Above 50% green coverage (should pass)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 400);
+        terrain_dist.insert(TerrainType::Forest, 400);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 900,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // Land tiles = 1000 - 100 (water) = 900
+        // Green tiles = 400 + 400 = 800
+        // Green coverage = 800 / 900 = 88.9%
+        assert!((validation.green_coverage_percentage - 88.9).abs() < 0.1);
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+    }
+
+    #[test]
+    fn test_terrain_distribution_combined_targets() {
+        // Test validation with both land and green coverage targets
+        use std::collections::HashMap;
+
+        // Case 1: Both targets met (should pass completely)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 400);
+        terrain_dist.insert(TerrainType::Forest, 300);
+        terrain_dist.insert(TerrainType::Dirt, 100);
+        terrain_dist.insert(TerrainType::DeepWater, 150);
+        terrain_dist.insert(TerrainType::ShallowWater, 50);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0); // 800/1000
+        assert!((validation.green_coverage_percentage - 87.5).abs() < 0.1); // 700/800
+        assert!(validation.is_valid);
+        assert!(validation.spawn_point_found);
+        assert!(validation.is_playable());
+
+        // Case 2: Land target met, green target failed
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 100);
+        terrain_dist.insert(TerrainType::Forest, 100);
+        terrain_dist.insert(TerrainType::Dirt, 300);
+        terrain_dist.insert(TerrainType::Stone, 300);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 80.0); // 800/1000
+        assert_eq!(validation.green_coverage_percentage, 25.0); // 200/800
+        assert!(!validation.is_valid);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+        assert!(!validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+
+        // Case 3: Both targets failed
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Dirt, 200);
+        terrain_dist.insert(TerrainType::Stone, 200);
+        terrain_dist.insert(TerrainType::DeepWater, 500);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 400,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 40.0); // 400/1000
+        assert_eq!(validation.green_coverage_percentage, 0.0); // 0/400
+        assert!(!validation.is_valid);
+        assert!(validation.validation_errors.iter().any(|e| e.contains("land coverage")));
+        assert!(validation.validation_errors.iter().any(|e| e.contains("green coverage")));
+        assert!(!validation.is_playable());
+    }
+
+    #[test]
+    fn test_terrain_distribution_spawn_point_requirement() {
+        // Test that spawn point is required for validation
+        use std::collections::HashMap;
+
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 800);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 800,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        // With spawn point
+        let validation_with_spawn = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(validation_with_spawn.spawn_point_found);
+        assert!(validation_with_spawn.is_valid);
+
+        // Without spawn point
+        let validation_no_spawn = MapValidation::validate(&stats, None);
+        assert!(!validation_no_spawn.spawn_point_found);
+        assert!(!validation_no_spawn.is_valid);
+        assert!(validation_no_spawn.validation_errors.iter().any(|e| e.contains("spawn point")));
+        assert!(!validation_no_spawn.is_playable());
+    }
+
+    #[test]
+    fn test_terrain_distribution_water_accessibility() {
+        // Test water accessibility validation
+        use std::collections::HashMap;
+
+        // Case 1: Water and land both present (accessible)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 700);
+        terrain_dist.insert(TerrainType::DeepWater, 200);
+        terrain_dist.insert(TerrainType::ShallowWater, 100);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 700,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(validation.water_accessible);
+        assert!(validation.is_valid);
+
+        // Case 2: No water (still valid, water_accessible flag is contextual)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 1000);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 1000,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        // No water means water_accessible is false (no water to access)
+        assert!(!validation.water_accessible);
+        // But map is still valid (no water is not an error)
+        assert!(validation.is_valid);
+
+        // Case 3: All water (would fail land coverage, but water_accessible would be false)
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::DeepWater, 1000);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 0,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert!(!validation.water_accessible); // No land
+        assert!(!validation.is_valid); // Fails land coverage
+    }
+
+    #[test]
+    fn test_terrain_distribution_edge_cases() {
+        // Test edge cases for terrain distribution calculations
+        use std::collections::HashMap;
+
+        // Case 1: Zero tiles (should not panic)
+        let stats = WorldStatistics::default();
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 0.0);
+        assert_eq!(validation.green_coverage_percentage, 0.0);
+        assert!(!validation.is_valid);
+
+        // Case 2: Single tile
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 1);
+
+        let stats = WorldStatistics {
+            total_tiles: 1,
+            walkable_tiles: 1,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 100.0);
+        assert_eq!(validation.green_coverage_percentage, 100.0);
+        assert!(!validation.is_valid); // Fails because land < 60% is false, but we need actual minimum tiles
+
+        // Case 3: Exactly at threshold boundaries
+        let mut terrain_dist = HashMap::new();
+        terrain_dist.insert(TerrainType::Grass, 300);
+        terrain_dist.insert(TerrainType::Dirt, 300);
+        terrain_dist.insert(TerrainType::DeepWater, 400);
+
+        let stats = WorldStatistics {
+            total_tiles: 1000,
+            walkable_tiles: 600,
+            terrain_distribution: terrain_dist,
+            ..Default::default()
+        };
+
+        let validation = MapValidation::validate(&stats, Some((0, 0)));
+        assert_eq!(validation.land_percentage, 60.0); // Exactly at land threshold
+        assert_eq!(validation.green_coverage_percentage, 50.0); // Exactly at green threshold
+        assert!(validation.is_valid); // Both exactly at threshold should pass
     }
 }

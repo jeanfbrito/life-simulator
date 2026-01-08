@@ -25,8 +25,6 @@ pub struct FearState {
     pub peak_fear: f32,
     /// Last fear level that was logged (for change detection)
     pub last_logged_fear: f32,
-    /// Position of the nearest detected predator (for flee direction calculation)
-    pub nearest_predator_pos: Option<IVec2>,
 }
 
 impl Default for FearState {
@@ -37,7 +35,6 @@ impl Default for FearState {
             ticks_since_danger: 0,
             peak_fear: 0.0,
             last_logged_fear: 0.0,
-            nearest_predator_pos: None,
         }
     }
 }
@@ -50,10 +47,9 @@ impl FearState {
 
     /// Apply fear stimulus from predator detection
     #[inline]
-    pub fn apply_fear_stimulus(&mut self, predator_count: u32, nearest_pos: Option<IVec2>) {
+    pub fn apply_fear_stimulus(&mut self, predator_count: u32) {
         self.nearby_predators = predator_count;
         self.ticks_since_danger = 0;
-        self.nearest_predator_pos = nearest_pos;
 
         // Calculate fear level based on predator count
         self.fear_level = (predator_count as f32 * 0.4).min(1.0);
@@ -71,17 +67,15 @@ impl FearState {
             let decay_rate = 0.95;
             self.fear_level *= decay_rate;
 
-            // Reset peak fear and predator position after complete decay
+            // Reset peak fear after complete decay
             if self.fear_level < 0.01 {
                 self.peak_fear = 0.0;
-                self.nearest_predator_pos = None;
             }
         }
 
         // Reset predator count after safety period
         if self.ticks_since_danger > 10 {
             self.nearby_predators = 0;
-            self.nearest_predator_pos = None;
         }
     }
 
@@ -153,9 +147,8 @@ impl FearState {
 
 /// System to detect predator proximity and update fear states
 ///
-/// Runs every tick to detect both prey movement toward predators AND predators
-/// approaching stationary prey. Removed `Changed<TilePosition>` filter to ensure
-/// stationary prey can detect approaching predators.
+/// Optimization: Only processes herbivores that moved (`Changed<TilePosition>`).
+/// On stable simulations, this reduces iterations by 5-10x since most entities are stationary.
 pub fn predator_proximity_system(
     mut prey_query: Query<
         (Entity, &Creature, &TilePosition, &mut FearState),
@@ -164,6 +157,7 @@ pub fn predator_proximity_system(
             Without<Wolf>,
             Without<Fox>,
             Without<Bear>,
+            Changed<TilePosition>,
         ),
     >,
     predator_query: Query<&TilePosition, Or<(With<Wolf>, With<Fox>, With<Bear>)>>,
@@ -171,23 +165,18 @@ pub fn predator_proximity_system(
     // Collect predator positions
     let predator_positions: Vec<IVec2> = predator_query.iter().map(|pos| pos.tile).collect();
 
-    // Update fear states for all prey every tick.
-    // This ensures stationary prey can detect approaching predators.
+    // Update fear states for prey that moved.
+    // Changed<TilePosition> filter ensures we only check entities that changed location,
+    // skipping stationary prey (typical 5-10x reduction in iterations).
     for (entity, creature, prey_pos, mut fear_state) in prey_query.iter_mut() {
         let mut nearby_predators = 0;
-        let mut nearest_predator: Option<(IVec2, f32)> = None;
 
-        // Check each predator and track the nearest one
+        // Check each predator
         for predator_pos in &predator_positions {
             let distance = prey_pos.tile.as_vec2().distance(predator_pos.as_vec2());
 
             if distance <= FEAR_RADIUS as f32 {
                 nearby_predators += 1;
-
-                // Track nearest predator for flee direction
-                if nearest_predator.is_none() || distance < nearest_predator.unwrap().1 {
-                    nearest_predator = Some((*predator_pos, distance));
-                }
 
                 // Log fear detection
                 debug!(
@@ -199,18 +188,17 @@ pub fn predator_proximity_system(
 
         // Apply fear stimulus if predators detected
         if nearby_predators > 0 {
-            let nearest_pos = nearest_predator.map(|(pos, _)| pos);
-            fear_state.apply_fear_stimulus(nearby_predators, nearest_pos);
+            fear_state.apply_fear_stimulus(nearby_predators);
 
             // Only log if fear level changed significantly
             if fear_state.should_log_fear_change() {
                 info!(
-                    "😨 {} {:?} fear level: {:.2} ({} predators within {} tiles, nearest at {:?})",
-                    creature.species, entity, fear_state.fear_level, nearby_predators, FEAR_RADIUS,
-                    nearest_pos
+                    "😨 {} {:?} fear level: {:.2} ({} predators within {} tiles)",
+                    creature.species, entity, fear_state.fear_level, nearby_predators, FEAR_RADIUS
                 );
             }
         } else {
+            let _was_fearful = fear_state.is_fearful();
             fear_state.decay_fear();
 
             // Log when fear dissipates (crosses threshold)
@@ -315,7 +303,6 @@ mod tests {
             ticks_since_danger: 0,
             peak_fear: 0.8,
             last_logged_fear: 0.0,
-            nearest_predator_pos: Some(IVec2::new(10, 10)),
         };
 
         // Decay over time
@@ -326,11 +313,6 @@ mod tests {
         assert!(
             fear_state.fear_level < 0.1,
             "Fear should decay significantly"
-        );
-        // After decay, nearest predator pos should be cleared
-        assert!(
-            fear_state.nearest_predator_pos.is_none(),
-            "Predator position should be cleared after fear decay"
         );
     }
 

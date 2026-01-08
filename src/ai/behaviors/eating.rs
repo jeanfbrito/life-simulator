@@ -1,4 +1,4 @@
-use crate::ai::actions::ActionType;
+use crate::ai::action::ActionType;
 use crate::ai::planner::UtilityScore;
 use crate::entities::{stats::Hunger, TilePosition};
 use crate::tilemap::TerrainType;
@@ -140,7 +140,7 @@ pub fn evaluate_eating_behavior(
     resource_grid: &ResourceGrid,
     hunger_threshold: f32,
     search_radius: i32,
-    foraging_strategy: crate::entities::types::ForagingStrategy,
+    _foraging_strategy: crate::entities::types::ForagingStrategy,
     diet: &HerbivoreDiet,
 ) -> Option<UtilityScore> {
     // Only seek food when hunger is above threshold
@@ -388,7 +388,7 @@ fn find_best_forage_cell_sampled(
 /// Evaluate the score of a forage cell based on diet preferences and biomass
 fn evaluate_forage_cell_score(
     cell: IVec2,
-    from: IVec2,
+    _from: IVec2,
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
     diet: &HerbivoreDiet,
@@ -453,7 +453,7 @@ impl From<crate::entities::types::ForagingStrategy> for ForageSearchStrategy {
 /// Check if a cell is suitable for foraging using ResourceGrid
 fn is_cell_suitable_for_foraging(
     cell: IVec2,
-    from: IVec2,
+    _from: IVec2,
     world_loader: &WorldLoader,
     resource_grid: &ResourceGrid,
 ) -> bool {
@@ -487,11 +487,11 @@ fn supports_vegetation_at(pos: IVec2, world_loader: &WorldLoader) -> bool {
     false
 }
 
-/// Check if a cell is accessible (no blocking resources like Trees or Rocks)
+/// Check if a cell is accessible (no blocking resources)
 fn is_cell_accessible(pos: IVec2, world_loader: &WorldLoader) -> bool {
     !world_loader
         .get_resource_at(pos.x, pos.y)
-        .map(|r| crate::resources::is_blocking_resource(&r))
+        .map(|r| !r.is_empty())
         .unwrap_or(false)
 }
 

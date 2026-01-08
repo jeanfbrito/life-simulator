@@ -9,7 +9,7 @@
 
 use bevy::prelude::*;
 
-use crate::ai::actions::{create_action, ActionType};
+use crate::ai::action::{create_action, ActionType};
 use crate::ai::queue::ActionQueue;
 use crate::ai::replan_queue::{ReplanPriority, ReplanQueue};
 use crate::ai::trigger_emitters::{IdleTracker, StatThresholdTracker};

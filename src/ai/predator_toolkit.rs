@@ -2,7 +2,7 @@
 //!
 //! Provides evaluation utilities for omnivores and carnivores.
 
-use crate::ai::actions::ActionType;
+use crate::ai::action::ActionType;
 use crate::ai::herbivore_toolkit;
 use crate::ai::planner::UtilityScore;
 use crate::ai::behaviors::eating::HerbivoreDiet;
@@ -49,7 +49,7 @@ fn best_carcass(
 ) -> Option<(Entity, f32, f32)> {
     let mut best: Option<(Entity, f32, f32, f32)> = None;
     for (entity, tile, carcass) in carcasses.iter() {
-        if carcass.nutrition < MIN_CARCASS_NUTRITION {
+        if carcass.nutrition <= MIN_CARCASS_NUTRITION {
             continue;
         }
         let dist = distance(here, tile.tile);
@@ -185,7 +185,7 @@ pub fn evaluate_bear_actions(
         }
     }
 
-    if hunger_value >= behavior_config.hunger_threshold && energy_norm(energy) > 0.35 {
+    if hunger_value >= 0.6 && energy_norm(energy) > 0.35 {
         if let Some((fawn_entity, dist)) = nearest_fawn(position.tile, BEAR_FAWN_RADIUS, deer) {
             let distance_factor = (BEAR_FAWN_RADIUS - dist) / BEAR_FAWN_RADIUS;
             if distance_factor > 0.0 {
@@ -303,7 +303,7 @@ pub fn evaluate_wolf_actions(
     filter_out_graze(&mut actions);
 
     let hunger_value = hunger_norm(hunger);
-    if hunger_value >= behavior_config.hunger_threshold && energy_norm(energy) > 0.4 {
+    if hunger_value >= 0.45 && energy_norm(energy) > 0.4 {
         if let Some((deer_entity, dist)) = nearest_any_deer(position.tile, WOLF_HUNT_RADIUS, deer)
         {
             let distance_factor = (WOLF_HUNT_RADIUS - dist) / WOLF_HUNT_RADIUS;

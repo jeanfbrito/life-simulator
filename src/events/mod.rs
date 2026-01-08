@@ -120,7 +120,7 @@ pub fn detect_entity_death(
                 EntityDied::Unknown
             };
 
-            events.send(EntityDiedEvent { entity, cause });
+            events.write(EntityDiedEvent { entity, cause });
 
             debug!(
                 "💀 EntityDied event: entity={:?}, cause={:?}",
@@ -140,7 +140,7 @@ pub fn detect_action_completion(
     mut commands: Commands,
 ) {
     for (entity, completed) in query.iter() {
-        events.send(ActionCompletedEvent {
+        events.write(ActionCompletedEvent {
             entity,
             action_type: completed.action_type.clone(),
             success: completed.success,
@@ -165,7 +165,7 @@ pub fn detect_path_completion(
     mut commands: Commands,
 ) {
     for (entity, completed) in query.iter() {
-        events.send(PathCompletedEvent {
+        events.write(PathCompletedEvent {
             entity,
             destination: completed.destination,
             success: completed.success,
@@ -195,7 +195,7 @@ pub fn detect_stat_critical(
     for (entity, hunger) in hunger_query.iter() {
         let hunger_norm = hunger.0.normalized();
         if hunger_norm >= 0.9 {
-            events.send(StatCriticalEvent {
+            events.write(StatCriticalEvent {
                 entity,
                 stat_type: StatCritical::Hunger,
                 value: hunger_norm,
@@ -212,7 +212,7 @@ pub fn detect_stat_critical(
     for (entity, thirst) in thirst_query.iter() {
         let thirst_norm = thirst.0.normalized();
         if thirst_norm >= 0.9 {
-            events.send(StatCriticalEvent {
+            events.write(StatCriticalEvent {
                 entity,
                 stat_type: StatCritical::Thirst,
                 value: thirst_norm,

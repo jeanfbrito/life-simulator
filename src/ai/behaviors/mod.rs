@@ -50,7 +50,7 @@ pub mod warren_defense;
 pub use drinking::evaluate_drinking_behavior;
 pub use eating::evaluate_eating_behavior;
 pub use fleeing::evaluate_fleeing_behavior;
-pub use follow::{evaluate_follow_behavior, evaluate_follow_behavior_with_priority};
+pub use follow::evaluate_follow_behavior;
 pub use grazing::evaluate_grazing_behavior;
 pub use resting::evaluate_resting_behavior;
 pub use wandering::evaluate_wandering_behavior;

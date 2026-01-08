@@ -109,7 +109,7 @@ fn run_simulation_ticks(
     mut metrics: ResMut<TickMetrics>,
     mut accumulator: ResMut<TickAccumulator>,
     mut profiler: ResMut<TickProfiler>,
-    state: Res<SimulationState>,
+    _state: Res<SimulationState>,
 ) {
     let ticks_to_run = accumulator.pending_ticks;
 

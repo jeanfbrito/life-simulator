@@ -16,7 +16,6 @@
 
 use bevy::prelude::*;
 use std::collections::HashMap;
-use super::TilePosition;  // For #[require] attribute
 
 /// Grid chunk size - matches existing SpatialEntityIndex constant
 pub const CHUNK_SIZE: i32 = 16;

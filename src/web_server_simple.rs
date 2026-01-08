@@ -155,7 +155,7 @@ fn kill_process_on_port(port: u16) {
 
 pub fn start_simple_web_server() -> u16 {
     let port = resolve_web_server_port();
-    let bind_address = format!("127.0.0.1:{}", port);
+    let bind_address = format!("0.0.0.0:{}", port);
 
     // Kill any existing process using this port
     println!(
@@ -174,11 +174,6 @@ pub fn start_simple_web_server() -> u16 {
                 loader.get_name(),
                 loader.get_seed()
             );
-
-            // DIAGNOSTIC: Log world loading details
-            eprintln!("🔍 WEB_SERVER: World has {} chunks", loader.get_chunk_count());
-            let world_info = loader.get_world_info();
-            eprintln!("🔍 WEB_SERVER: World config: {:?}", world_info.config);
 
             // Initialize CachedWorld with the loaded world data
             let mut cached_chunks = std::collections::HashMap::new();
@@ -201,9 +196,6 @@ pub fn start_simple_web_server() -> u16 {
                 "✅ WEB_SERVER: CachedWorld initialized with {} chunks",
                 loader.get_chunk_count()
             );
-            
-            // DIAGNOSTIC: Verify CachedWorld initialization
-            eprintln!("🔍 WEB_SERVER: CachedWorld global check: {}", CachedWorld::global_is_loaded());
 
             Arc::new(RwLock::new(loader))
         }
@@ -364,12 +356,7 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             }
         }
         "/api/entities" => {
-            // DIAGNOSTIC: Log entity request
-            eprintln!("🔍 WEB_SERVER: Entities requested");
-            
-            // Return all entity positions
             let json = crate::entities::get_entities_json();
-            eprintln!("🔍 WEB_SERVER: Entity response length: {} chars", json.len());
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/species" => {
@@ -411,12 +398,7 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/vegetation/biomass" => {
-            // DIAGNOSTIC: Log biomass request
-            eprintln!("🔍 WEB_SERVER: Biomass heatmap requested");
-            
-            // Return vegetation biomass heatmap data
             let json = crate::vegetation::get_biomass_heatmap_json();
-            eprintln!("🔍 WEB_SERVER: Biomass response length: {} chars", json.len());
             send_response(&mut stream, "200 OK", "application/json", &json);
         }
         "/api/vegetation/performance" => {
@@ -461,9 +443,6 @@ fn handle_connection(mut stream: TcpStream, world_loader: Arc<RwLock<WorldLoader
         }
         path if path.starts_with("/api/chunks") => {
             // DIAGNOSTIC: Log chunk request details
-            eprintln!("🔍 WEB_SERVER: Chunk request received: {}", path);
-            eprintln!("🔍 WEB_SERVER: CachedWorld loaded: {}", crate::cached_world::CachedWorld::global_is_loaded());
-            
             // Only use cached world data - no fallback to generator
             if crate::cached_world::CachedWorld::global_is_loaded() {
                 // Check if multi-layer format is requested

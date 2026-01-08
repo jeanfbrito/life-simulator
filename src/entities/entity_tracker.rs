@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
 
 use crate::entities::reproduction::{
     Age, Pregnancy, ReproductionConfig, ReproductionCooldown, Sex, WellFedStreak,
@@ -170,24 +169,11 @@ pub fn sync_entities_to_tracker(
         Option<&ReproductionConfig>,
     )>,
 ) {
-
     if let Some(tracker) = EntityTracker::global() {
         if let Ok(mut tracker) = tracker.write() {
-            // Track which entities we've seen in this sync
             use std::collections::HashSet;
             let mut seen_entities = HashSet::new();
 
-            // Periodic logging to verify sync is running
-            static mut SYNC_COUNT: u64 = 0;
-            unsafe {
-                SYNC_COUNT += 1;
-                if SYNC_COUNT == 1 || SYNC_COUNT % 600 == 0 {
-                    eprintln!("🔍 ENTITY_TRACKER: Sync #{} - tracking {} entities",
-                        SYNC_COUNT, tracker.entities.len());
-                }
-            }
-
-            // Update existing entities and add new ones
             for (
                 entity,
                 creature,
@@ -305,38 +291,21 @@ pub fn sync_entities_to_tracker(
     }
 }
 
-/// Startup system to initialize the tracker
 pub fn init_entity_tracker() {
     EntityTracker::init();
     info!("Entity tracker initialized");
-    // DIAGNOSTIC: Verify tracker initialization
-    eprintln!("🔍 ENTITY_TRACKER: Initialized - global check: {}", EntityTracker::global().is_some());
 }
 
 // ============================================================================
 // WEB API HELPER
 // ============================================================================
 
-/// Get entities as JSON string (for web server)
 pub fn get_entities_json() -> String {
-    // DIAGNOSTIC: Log entity JSON request
-    eprintln!("🔍 ENTITY_TRACKER: get_entities_json() called");
-    
     if let Some(tracker) = EntityTracker::global() {
-        eprintln!("🔍 ENTITY_TRACKER: Global tracker exists");
         if let Ok(tracker) = tracker.read() {
-            let entity_count = tracker.entities.len();
-            eprintln!("🔍 ENTITY_TRACKER: Successfully read tracker - {} entities", entity_count);
-            let json = tracker.to_json();
-            eprintln!("🔍 ENTITY_TRACKER: Generated JSON ({} chars)", json.len());
-            return json;
-        } else {
-            eprintln!("🔍 ENTITY_TRACKER: Failed to get read lock on tracker");
+            return tracker.to_json();
         }
-    } else {
-        eprintln!("🔍 ENTITY_TRACKER: No global tracker available");
     }
-    eprintln!("🔍 ENTITY_TRACKER: Returning empty entities response");
     r#"{"entities": []}"#.to_string()
 }
 

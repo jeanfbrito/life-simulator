@@ -1,3 +1,4 @@
+#![allow(deprecated, dead_code, static_mut_refs, unused_imports)]
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use std::time::Duration;
@@ -40,9 +41,7 @@ fn main() {
                 1.0 / 60.0,
             ))),
         )
-        .add_plugins(bevy::log::LogPlugin::default()) // Enable logging!
-        // TilemapPlugin removed - we're loading a world, not generating one
-        // WorldSerializationPlugin removed - not needed for running simulation
+        .add_plugins(bevy::log::LogPlugin::default())
         .add_plugins(CachedWorldPlugin)
         .add_plugins((
             SimulationPlugin,
@@ -52,7 +51,7 @@ fn main() {
             VegetationPlugin,
             HealthCheckPlugin,
             HealthCheckApiPlugin,
-        )) // Core plugins
+        ))
         .insert_resource(WorldConfig::default())
         .init_resource::<ButtonInput<KeyCode>>()
         .init_resource::<PathfindingGrid>()
@@ -64,8 +63,8 @@ fn main() {
         .add_systems(
             Update,
             (
-                process_pathfinding_requests, // Async pathfinding with cache
-                pathfinding_cache_cleanup_system, // Periodic cache cleanup
+                process_pathfinding_requests,
+                pathfinding_cache_cleanup_system,
                 simulation_system,
                 save_load_system.after(simulation_system),
             )
@@ -227,7 +226,7 @@ fn save_load_system(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     world_loader: Res<WorldLoader>,
-    world_config: Res<WorldConfig>,
+    _world_config: Res<WorldConfig>,
 ) {
     // Save system - Press key 1 to save
     if keyboard.just_pressed(KeyCode::Digit1) {

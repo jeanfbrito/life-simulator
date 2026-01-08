@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use bevy::prelude::*;
 use life_simulator::ai::{NeedsReplanning};
 use life_simulator::entities::{ActiveAction, Rabbit, TilePosition, Creature, Hunger};

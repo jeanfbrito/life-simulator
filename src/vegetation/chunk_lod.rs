@@ -293,7 +293,7 @@ impl ChunkLODManager {
 
         // Collect temperature updates first to avoid borrow checker issues
         let mut temperature_updates = Vec::new();
-        for (coord, metadata) in self.chunks.iter() {
+        for (coord, _metadata) in self.chunks.iter() {
             let new_temperature = self.calculate_chunk_temperature(*coord);
             temperature_updates.push((*coord, new_temperature));
         }
@@ -419,7 +419,7 @@ impl ChunkLODManager {
         &mut self,
         coordinate: ChunkCoordinate,
         grid: &mut ResourceGrid,
-        current_tick: u64,
+        _current_tick: u64,
     ) {
         if let Some(metadata) = self.chunks.get(&coordinate) {
             if metadata.temperature == ChunkTemperature::Warm

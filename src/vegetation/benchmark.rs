@@ -349,15 +349,13 @@ impl BenchmarkRunner {
         println!("   Warmup: {} ticks", self.config.warmup_ticks);
         println!();
 
-        let start_time = Instant::now();
-        let mut tick_count = 0;
+        let _start_time = Instant::now();
 
         // Warmup phase
         println!("🔥 Warming up...");
         for _ in 0..self.config.warmup_ticks {
             let (tick_time, growth_time) = self.simulate_tick();
             self.monitor.record_tick(tick_time, growth_time);
-            tick_count += 1;
 
             // Sleep to maintain tick interval
             std::thread::sleep(Duration::from_millis(self.config.tick_interval_ms));
@@ -365,10 +363,11 @@ impl BenchmarkRunner {
 
         // Reset monitor after warmup
         self.monitor.reset();
-        tick_count = 0;
 
         println!("📊 Running benchmark...");
         let benchmark_start = Instant::now();
+
+        let mut tick_count = 0;
 
         // Main benchmark loop
         while benchmark_start.elapsed() < Duration::from_secs(self.config.duration_seconds) {
@@ -380,7 +379,7 @@ impl BenchmarkRunner {
             std::thread::sleep(Duration::from_millis(self.config.tick_interval_ms));
         }
 
-        let actual_duration = start_time.elapsed();
+        let actual_duration = benchmark_start.elapsed();
         let (system_metrics, growth_metrics) = self.monitor.get_stats();
 
         // Calculate results
